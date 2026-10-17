@@ -3,7 +3,7 @@
     "files": [
       "sign-in"
     ],
-    "alt": "The Open MCP Portal sign-in page for Example Corp MCP Portal: the product mark, the instance name, and a Sign in card with \"Use your Example Corp account to continue.\" and the button \"Sign in with single sign-on\"."
+    "alt": "The Open MCP Portal sign-in page for Example Corp MCP Portal: the product mark, the instance name and tagline, a Sign in card with \"Use your Example Corp account to continue.\" and the button \"Sign in with single sign-on\", and a Help signing in link."
   },
   "home": {
     "files": [
@@ -15,97 +15,97 @@
     "files": [
       "my-gateways"
     ],
-    "alt": "My gateways listing three gateways: Support (team gateway, \"Member of Support Tools\"), Company tools (platform gateway, \"Granted to your team\") and Engineering tools (platform gateway, \"Granted to your SSO group engineering\", \"Records what you send\")."
+    "alt": "My gateways for Sam Ortiz: Company tools (platform gateway, \"Granted to your team\" and \"Granted to your SSO group engineering\"), Engineering tools (platform gateway, \"Granted to your SSO group engineering\", \"Records what you send\") and Support (team gateway, \"Member of Support Tools\"), with what each offers you."
   },
   "my-gateway-connect": {
     "files": [
       "my-gateway-connect"
     ],
-    "alt": "A gateway's page under My gateways: the Connect card with the endpoint URL https://mcp.example.com/mcp/support, the Claude Code tab showing \"claude mcp add --transport http support https://mcp.example.com/mcp/support\", and below it What it offers you with tools such as status__check_outage."
+    "alt": "A gateway's page under My gateways, Support: the Connect card with the endpoint URL https://mcp.example.com/mcp/support, the name in your client, \"Use an API key instead\" off, and the Claude Code tab showing \"claude mcp add --transport http support https://mcp.example.com/mcp/support\"; Accounts it needs starts below."
   },
   "catalog": {
     "files": [
       "catalog"
     ],
-    "alt": "The Catalog: published MCP servers Status (Support Tools), Mail (Support Tools, \"Needs Google\") and Code search (Data Platform, \"Sign-in per person\"), each with its capability counts and health."
+    "alt": "The Catalog: published MCP servers Code search (Data Platform, \"Sign-in per person\"), Mail and Status (Support Tools), each with its description, what it offers and its health."
   },
   "catalog-server": {
     "files": [
       "catalog-server"
     ],
-    "alt": "The catalog page of the Status server: its team, health, and its approved tools, resources, resource templates and prompt with descriptions."
+    "alt": "The catalog page of the Status server: its health, team and publication date, what it offers (3 tools, a resource, a resource template and a prompt), the untrusted-text note, and its approved tools check_outage, create_ticket (\"Says destructive\") and search_tickets with their definitions."
   },
   "server-overview": {
     "files": [
       "server-overview"
     ],
-    "alt": "Team › MCP servers › Status › Overview: the Connection card (URL, Streamable HTTP, None authentication, 30 s timeout, Healthy) with Test connection and Refresh capabilities, and the Company catalog card showing Published under Approval required."
+    "alt": "Team › MCP servers › Status › Overview: Published, its capability counts, and the Connection card (URL https://status.corp.example.com/mcp, Streamable HTTP, None authentication, 30 s timeout, Enabled, Healthy, last checked) with Test connection and Refresh capabilities."
   },
   "server-capabilities": {
     "files": [
       "server-capabilities"
     ],
-    "alt": "The Capabilities tab of the Status server: tools check_outage, search_tickets and create_ticket (\"Says destructive\"), one marked as changed since it was approved, with the untrusted-text notice."
+    "alt": "The Capabilities tab of the Status server: \"1 capability changed since it was approved\", the untrusted-text notice, the note that a platform admin approves changed capabilities, Kind and State filters, and check_outage marked Changed with its new description."
   },
   "server-sign-in-card": {
     "files": [
       "server-sign-in-card"
     ],
-    "alt": "The Overview of an OAuth-protected server, Code search: the Sign-in card with the authorization server, scopes, \"Resource indicator: Sent\", \"Capabilities read as Jordan Kim\", the number of people signed in, and Re-authorize as me."
+    "alt": "The Overview of an OAuth-protected server, Code search: the Sign-in card with the authorization server https://sourcehub.example (another host), dynamic client registration, scopes, \"Resource indicator: Sent\", the identity token not sent, \"Capabilities read as Jordan Kim\", 4 people signed in, and Re-authorize as me; the Company catalog card below with the Self-publish policy."
   },
   "add-server-detect": {
     "files": [
       "add-server-detect"
     ],
-    "alt": "Add MCP server with the URL entered and the Detect sign-in result: \"OAuth: each person signs in\", the authorization server, S256 supported, the scopes it supports, and the registration options, with \"Sign-in with OAuth, per person\" selected."
+    "alt": "Add MCP server after Detect sign-in against SourceHub's hosted MCP server: \"OAuth: each person signs in\", the authorization server on another host, S256 supported, the scopes it supports, automatic registration and the requests made, with \"Sign-in with OAuth, per person\" and \"Automatic: register a client\" selected and the scopes to ask for."
   },
   "server-user-authorization": {
     "files": [
       "server-user-authorization"
     ],
-    "alt": "The Settings tab of the Mail server, User authorization section: Requires a connection on, provider Google, scope https://www.googleapis.com/auth/gmail.readonly."
+    "alt": "The Settings tab of the Mail server, User authorization section: Requires a connection on, provider Google, scope https://www.googleapis.com/auth/gmail.readonly; Record call contents (off) below."
   },
   "server-health": {
     "files": [
       "server-health"
     ],
-    "alt": "The Health tab of the Code search server: recent checks, scheduled and manual, most \"Reachable — requires sign-in\", with latency and trigger."
+    "alt": "The Health tab of the Code search server: recent checks, the scheduled ones \"Reachable — requires sign-in\" and the manual ones Healthy (run with a signed-in person's token), with latency and trigger."
   },
   "publish-request": {
     "files": [
       "publish-request"
     ],
-    "alt": "The \"Request publishing Status\" dialog with a Note for the reviewer filled in, and the Request review button."
+    "alt": "The \"Request publishing Status\" dialog: what the server receives (no authentication, the portal's identity token, nothing on behalf of callers), a Note for the reviewer filled in, and Request review."
   },
   "gateway-capabilities-picker": {
     "files": [
       "gateway-capabilities-picker"
     ],
-    "alt": "The gateway's Choose capabilities picker: search, Server and Kind filters, capabilities grouped by server (own and catalog), several selected, one with \"Who may use: Editors and above\", and badges such as \"Needs Google (gmail.readonly)\"."
+    "alt": "The gateway's Choose capabilities picker: search, server and kind filters and Selected only, with capabilities grouped by server: the catalog's Code search (\"Needs sign-in to Code search\") and the team's own Mail, selected, with \"Needs Google\" scope badges and who may use each, then Status."
   },
   "gateway-overview": {
     "files": [
       "gateway-overview"
     ],
-    "alt": "A team gateway's Overview tab: the Endpoint card with https://mcp.example.com/mcp/support, the gateway at a glance (capabilities, unavailable now, status Enabled), and the Connect card."
+    "alt": "A team gateway's Overview tab: 8 capabilities, 0 unavailable now, status Enabled, and the Endpoint card with https://mcp.example.com/mcp/support, kind, team, slug, rate limit 1,500 per minute and call contents not recorded."
   },
   "gateway-settings": {
     "files": [
       "gateway-settings"
     ],
-    "alt": "A gateway's Settings tab: General (name, description, Enabled), Rate limit with \"This gateway's own limit\" set to 1,500 per minute and the value that applies, and Record call contents."
+    "alt": "A gateway's Settings tab: Rate limit with \"This gateway's own limit\" set to 1,500 per minute (the platform default 2,000, at most 5,000) and the value that applies, Record call contents off, and the Danger zone."
   },
   "gateway-access": {
     "files": [
       "gateway-access"
     ],
-    "alt": "A platform gateway's Access tab: grants to the team Support Tools, the person jordan.kim@example.com and the SSO group engineering, with Grant access."
+    "alt": "A platform gateway's Access tab, Company tools: grants to the team Support Tools, the person Jordan Kim (jordan.kim@example.com) and the SSO group engineering, with Add grant."
   },
   "service-account-overview": {
     "files": [
       "service-account-overview"
     ],
-    "alt": "A service account's Overview: role Member, keys 1 active, and the Access card listing the gateways its keys reach (Support, and the platform gateway Company tools granted to the team) with capability counts."
+    "alt": "A service account's Overview, ci-release-bot: Member, 1 of 2 active keys, used yesterday; the Role card; and the Access card listing the gateways its keys reach (Company tools, granted to the team, and Support) with what they reach and what needs a person's account."
   },
   "service-account-key-created": {
     "files": [
@@ -123,73 +123,73 @@
     "files": [
       "connected-apps"
     ],
-    "alt": "Account › Connected apps: Claude Code on the Support gateway (from claude.ai) and pi on Company tools (Unverified), with when each was connected and last used, and Disconnect."
+    "alt": "Account › Connected apps: pi on Company tools (Unverified, \"It registered itself and says it's from pi.dev\") and Claude Code on Support (claude.ai), with when each was connected and last used."
   },
   "oauth-consent": {
     "files": [
       "oauth-consent"
     ],
-    "alt": "The consent page: \"pi wants to use Support as you\", marked Unverified with \"It registered itself\", the gateway's name, owner and what it offers, what it will be able to do, and Deny and Allow."
+    "alt": "The consent page: \"pi wants to use Support as you\", marked Unverified with \"It registered itself and says it's from pi.dev\", where the answer goes (localhost:47821, the app's own redirect), the gateway's name, owner and what it offers, what it will be able to do, and Deny and Allow."
   },
   "connect-confirm": {
     "files": [
       "connect-confirm"
     ],
-    "alt": "The connect confirm page \"Connect your Google account\": signed in as sam.ortiz@example.com, asked by mail__search_messages, gateway Support, provider Google, connected now: none, and the scope gmail.readonly marked New, with Cancel and Continue to Google."
+    "alt": "The connect confirm page \"Connect your Google account\": signed in as sam.ortiz@example.com, asked by mail__search_messages, gateway Support, provider Google, connected now: no account, and the scope gmail.readonly marked New, with Cancel and Continue to Google."
   },
   "connect-done": {
     "files": [
       "connect-done"
     ],
-    "alt": "The connect result page: Google is connected, \"Go back to your AI client and run the tool again. You can close this page.\""
+    "alt": "The connect result page: \"Connected to Google\", \"Go back to your AI client and run the tool again. You can close this page.\", and a link to Account › My connections."
   },
   "my-connections": {
     "files": [
       "my-connections"
     ],
-    "alt": "Account › My connections: Google (account sam.ortiz@example.com, scope gmail.readonly, Active, last used, renewed automatically) and the MCP server Code search (\"MCP server\" badge, team Data Platform), with Reconnect and Disconnect."
+    "alt": "Account › My connections: the MCP server Code search (\"MCP server\" badge, team data-platform, scopes code:read, repo:read and user:read) and Google (account sam.ortiz@example.com, scopes gmail.readonly and gmail.compose), both Active, with when each was connected and last used."
   },
   "team-usage": {
     "files": [
       "team-usage"
     ],
-    "alt": "Team › Usage for Support Tools over the last 7 days: totals (calls, error rate, p50 and p95 latency, bytes), calls per day by outcome, latency, and the table grouped by gateway."
+    "alt": "Team › Usage for Support Tools over the last 7 days: totals (calls, error rate, p50 and p95 latency, bytes sent and received), calls per day by outcome (OK, tool error, denied, needed a connection, rate limited) and latency."
   },
   "call-detail-payload": {
     "files": [
       "call-detail-payload"
     ],
-    "alt": "A call's page: details (when, who, method tools/call, called status__search_tickets, gateway, server, outcome OK, time, size, client, request ID) and Contents with arguments and result, where a token in the result shows as [REDACTED]."
+    "alt": "A call's recorded contents (status__search_tickets by Sam Ortiz): recorded by the gateway, when, when they're deleted, 2 values redacted, the arguments, and the result, where an employee number and a pasted bearer token show as [REDACTED]."
   },
   "team-settings-members": {
     "files": [
       "team-settings-members"
     ],
-    "alt": "Team settings › Members for Support Tools: members with roles owner, admin, editor and member, Add member, and Open invites with one invited email."
+    "alt": "Team settings › Members for Support Tools: Priya Shah (owner), Alex Rivera (admin), Sam Ortiz (editor), Quinn Foster and Riley Chen (members), Add member, and Open invites with new.hire@example.com."
   },
   "admin-users": {
     "files": [
       "admin-users"
     ],
-    "alt": "Admin › Users: Example Corp people with platform roles (Platform admin, Auditor, none), one Suspended, and first and last sign-in."
+    "alt": "Admin › Users: Example Corp people with their platform role (Platform admin, Platform auditor or none), status (Casey Moore Suspended), number of teams and last sign-in, with filters."
   },
   "admin-user-detail": {
     "files": [
       "admin-user-detail"
     ],
-    "alt": "A person's admin page for Sam Ortiz: Profile and access with the platform role, Teams, Connected apps and Connections with Disconnect, and Activity."
+    "alt": "A person's admin page for Sam Ortiz: Profile and access with the platform role, email, first and last sign-in, Teams (Support Tools, editor), and the start of Connected apps."
   },
   "admin-servers-review": {
     "files": [
       "admin-servers-review"
     ],
-    "alt": "Admin › MCP servers: Waiting for approval with two servers, and every team's servers below with publish state, team, auth mode and pending changes."
+    "alt": "Admin › MCP servers: \"2 servers waiting for review\" with Show them, the filters, and every team's servers with team, host, health, catalog state (Published, Waiting for review, \"1 change waiting\" on Status) and what they offer."
   },
   "admin-server-review-dialog": {
     "files": [
       "admin-server-review-dialog"
     ],
-    "alt": "The \"Approve Wiki search for the catalog?\" dialog with the checks shown and the team's note, and Approve and publish."
+    "alt": "The \"Approve Wiki search for the catalog?\" dialog: what the server receives, the team's note, a note for the team, and Approve and publish."
   },
   "admin-publishing": {
     "files": [
@@ -201,60 +201,60 @@
     "files": [
       "admin-internal-networks"
     ],
-    "alt": "Admin › Internal networks: allowed networks and hosts (10.20.0.0/16 and *.corp.example.com with plain http allowed and notes), the read-only entries From deployment config, and Check a URL with a verdict."
+    "alt": "Admin › Internal networks: allowed networks and hosts (10.20.0.0/16, https only, and *.corp.example.com with plain http allowed, each with a note), the read-only *.svc.cluster.local From deployment config, and Check a URL with https://wiki.corp.example.com/mcp allowed."
   },
   "admin-trusted-clients": {
     "files": [
       "admin-trusted-clients"
     ],
-    "alt": "Admin › Trusted clients: Claude, Claude Code and VS Code with their metadata document URLs."
+    "alt": "Admin › Trusted clients, viewed as auditor (read-only): Claude, Claude Code and VS Code with their metadata document URLs and the hosts that vouch for them."
   },
   "admin-auth-providers": {
     "files": [
       "admin-auth-providers"
     ],
-    "alt": "Admin › Auth providers: Google and GitHub with their presets, enabled, the servers that require them and the number of connections."
+    "alt": "Admin › Auth providers: GitHub and Google with their presets, enabled, the servers that require them (Google: 1 server) and the number of connections."
   },
   "admin-auth-provider-create": {
     "files": [
       "admin-auth-provider-create"
     ],
-    "alt": "Add auth provider, Start from: the presets GitHub, Google, Microsoft Entra ID, Atlassian, Slack and GitLab, and Custom OAuth 2.0 provider, with the redirect URI to register."
+    "alt": "Add auth provider, Start from: the presets GitHub (selected), Google, Microsoft Entra ID, Atlassian, Slack and GitLab, each with its quirks, and Custom OAuth 2.0 provider."
   },
   "admin-limits": {
     "files": [
       "admin-limits"
     ],
-    "alt": "Admin › Limits: Requests per minute with defaults and ceilings for per person (600), per API key or connected app (300), per service account (1,200) and per gateway (2,000, ceiling 5,000)."
+    "alt": "Admin › Limits: Requests per minute with defaults and ceilings for per person (600), per API key or connected app (300), per service account (1,200) and per gateway (2,000, ceiling 5,000; built-in default unlimited)."
   },
   "admin-retention": {
     "files": [
       "admin-retention"
     ],
-    "alt": "Admin › Retention: periods for call records (90 days), recorded call contents (14), audit log (400) and usage rollups (400), and the Last run with what it deleted."
+    "alt": "Admin › Retention: periods for call records (90 days), recorded call contents (14), audit log (400) and usage totals (400), and the Last run: 6 call records and 31 recorded call contents deleted."
   },
   "admin-capture": {
     "files": [
       "admin-capture"
     ],
-    "alt": "Admin › Payload capture: the built-in rules, sensitive member names, one pattern EMP-[0-9]{6} with its note, and Test redaction showing a sample with [REDACTED] values."
+    "alt": "Admin › Payload capture: Your patterns with EMP-[0-9]{6} (\"Employee numbers (HR system)\"), and Test redaction with a sample and the result as recorded, 3 values redacted (a bearer token, the pattern and a sensitive member name)."
   },
   "admin-usage": {
     "files": [
       "admin-usage"
     ],
-    "alt": "Admin › Usage over the last 30 days grouped by team: totals, calls per day by outcome, latency, and the table."
+    "alt": "Admin › Usage over the last 30 days, grouped by team: totals (calls, error rate, p50 and p95 latency, bytes sent and received), calls per day by outcome, and latency."
   },
   "admin-calls": {
     "files": [
       "admin-calls"
     ],
-    "alt": "Admin › Calls: every call with time, caller (API key, \"via Claude Code\", service account with key), gateway, called name, outcome and a Recorded mark, with filters."
+    "alt": "Admin › Calls, viewed as auditor: filters, and every call with time, caller (\"via Claude Code\", or an API key by name), called name, gateway, server, outcome (with \"Account: Code search\" where a person's own sign-in was used), a Recorded mark and time."
   },
   "admin-audit": {
     "files": [
       "admin-audit"
     ],
-    "alt": "Admin › Audit log: recent changes such as gateway.capabilities_set, mcp_server.publish, settings.limits_update and mcp_call.payload_view, with Hide sign-ins on and Export CSV."
+    "alt": "Admin › Audit log, viewed as auditor: recent changes such as mcp_server.refresh, mcp_call.payload_view, service_account_key.create, team.member_remove, a suspended user, retention.purge and gateway changes, with Hide sign-ins on and Export CSV."
   }
 }

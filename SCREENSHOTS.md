@@ -1,6 +1,6 @@
 # Screenshot capture list
 
-Every image in these docs has a named slot in `lib/screenshot-slots.json` (its alt text and the file names it may have) and is placed with `<Screenshot slot="…" />`. Until an image is imported, the page shows a marked placeholder. This file is the capture list for the screenshot session. **None of the 43 slots has been captured yet**; captures go in `../omp-assets/screenshots/`.
+Every image in these docs has a named slot in `lib/screenshot-slots.json` (its alt text and the file names it may have) and is placed with `<Screenshot slot="…" />`. Until an image is imported, the page shows a marked placeholder. This file is the capture list for the screenshot session. **All 43 slots are captured** (2026-10-17, Open MCP Portal at commit `d039647`, from the Example Corp capture stack in `../omp-assets/capture/`); the files and what each shows are in `../omp-assets/screenshots/MANIFEST.md`. A retake follows `../omp-assets/capture/README.md`.
 
 ## Rules
 
@@ -12,12 +12,13 @@ Every image in these docs has a named slot in `lib/screenshot-slots.json` (its a
   - **Sam Ortiz**, `sam.ortiz@example.com`, editor of Support Tools, in the SSO group `engineering`
   - **Jordan Kim**, `jordan.kim@example.com`, owner of the team **Data Platform** (`data-platform`)
   - **Casey Moore**, `casey.moore@example.com`, suspended
+  - As captured, also Alex Rivera (Support Tools admin), Quinn Foster and Riley Chen (Support Tools members; Riley owns IT Operations), and Drew Park (Data Platform editor, in `engineering`).
 - **Configuration**:
   - MCP servers: **Status** (`status`, Support Tools; the repository's fake MCP server, `cmd/fakemcp`: tools `check_outage`, `search_tickets`, `create_ticket`, the resource `status://services`, the template `status://services/{service}`, the prompt `incident_summary`), **Mail** (`mail`, Support Tools; `examples/mail-mcp` with its fake Gmail, requiring the Google provider with `gmail.readonly`, `create_draft` overridden to `gmail.compose`), **Code search** (`code-search`, Data Platform; `cmd/fakemcp -protect` with `cmd/fakeoauth`, in Sign-in with OAuth mode), **Wiki search** (`wiki-search`, Data Platform; pending review).
   - Gateways: team gateway **Support** (`support`); platform gateways **Company tools** (`company`, granted to Support Tools, `jordan.kim@example.com` and the group `engineering`) and **Engineering tools** (`engineering-tools`, granted to `engineering`, recording call contents).
   - Service account **ci-release-bot** (Support Tools, member).
   - Auth providers **Google** (Google preset, slug `google`) and **GitHub** (GitHub preset, slug `github`); they may point at `cmd/fakeoauth`, but never show a real client ID or secret.
-- **No real third parties.** Use the fakes in the repository (`make fake-mcp`, `make fake-oauth`, `make example-mail-fake`), not GitHub or Google accounts.
+- **No real third parties.** Use the fakes in the repository (`make fake-mcp`, `make fake-oauth`, `make example-mail-fake`), not GitHub or Google accounts. As captured: `cmd/fakeoauth` stands in for Google and for SourceHub's authorization server, `examples/mail-mcp -fake-gmail` is Mail, and Status, Wiki search, On-call and Code search (SourceHub's hosted server, OAuth-protected like `cmd/fakemcp -protect`) are small capture servers with the same capabilities as `cmd/fakemcp` for Status and believable data (`../omp-assets/capture/stack/`).
 - **Size**: PNG, **1440×900** (device scale factor 1), light theme unless the state says otherwise.
 - **Version**: Open MCP Portal **v0.1.0** (the release image once tagged; until then the `main` build). Pin the clock in the seed so timestamps don't churn.
 - **Secrets**: any key or token shown must be a fake value (`omp_0000…`, `omp_sa_0000…`) before capture.
@@ -37,7 +38,7 @@ Every image in these docs has a named slot in `lib/screenshot-slots.json` (its a
 |---|---|---|---|---|---|---|
 | 1 | `sign-in.png` | 1440×900 | `/` | Signed out | `/docs/get-started/quick-tour` | Signed out, light theme, ORG_NAME=Example Corp, INSTANCE_NAME=Example Corp MCP Portal, OIDC on and development sign-in off (so no development accounts show). |
 | 2 | `home.png` | 1440×900 | `/` | Priya Shah | `/docs/get-started/quick-tour` | Priya is owner of Support Tools and member of Data Platform. Sidebar expanded. |
-| 3 | `my-gateways.png` | 1440×900 | `/gateways` | Priya Shah | `/docs/use/my-gateways` | Team gateway support (Support Tools), platform gateways company (granted to team Support Tools) and engineering-tools (granted to group engineering, with Record call contents on). |
+| 3 | `my-gateways.png` | 1440×900 | `/gateways` | Sam Ortiz (captured as Sam: he has exactly these three gateways) | `/docs/use/my-gateways` | Team gateway support (Support Tools), platform gateways company (granted to team Support Tools) and engineering-tools (granted to group engineering, with Record call contents on). |
 | 4 | `my-gateway-connect.png` | 1440×900 | `/gateways/<support>` | Priya Shah | `/docs/get-started`, `/docs/get-started/connect-your-client`, `/docs/use/my-gateways` | Gateway support with status__check_outage, status__search_tickets, status__create_ticket, the prompt status__incident_summary and the resource omp://status/status://services. Claude Code tab selected, OAuth (Use an API key instead off). |
 | 5 | `catalog.png` | 1440×900 | `/catalog` | Sam Ortiz | `/docs/teams/publishing` | Three published servers as described; all healthy. |
 | 6 | `catalog-server.png` | 1440×900 | `/catalog/<status>` | Jordan Kim | `/docs/teams/publishing` | Status published with every capability approved. |

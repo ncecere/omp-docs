@@ -95,7 +95,7 @@ rewrites `lib/mark.json` from `keystone/mark-small.svg` and `mark.svg`, and copi
 
 ### Screenshots
 
-Screenshots come only from the fictional "Example Corp" demo instance, never from a real install. Each image has a named slot in `lib/screenshot-slots.json` (its alt text, the file names it may have, and optionally a `hold` reason that keeps a capture out) and is placed with `<Screenshot slot="…" />`. Until an image is imported, the slot shows a clearly marked placeholder. `SCREENSHOTS.md` lists, per slot, the file, size, page, persona and the state to set up. None has been captured yet. When you replace an image, check that its slot's alt text still describes it.
+Screenshots come only from the fictional "Example Corp" demo instance, never from a real install. Each image has a named slot in `lib/screenshot-slots.json` (its alt text, the file names it may have, and optionally a `hold` reason that keeps a capture out) and is placed with `<Screenshot slot="…" />`. Until an image is imported, the slot shows a clearly marked placeholder. `SCREENSHOTS.md` lists, per slot, the file, size, page, persona and the state to set up. All 43 are captured, from the Example Corp capture stack in `../omp-assets/capture/` (`../omp-assets/screenshots/MANIFEST.md`). When you replace an image, check that its slot's alt text still describes it.
 
 ```sh
 SCREENSHOTS_DIR=../omp-assets/screenshots npm run screenshots

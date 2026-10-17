@@ -1,1 +1,217 @@
-{}
+{
+  "add-server-detect": {
+    "src": "/images/add-server-detect.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-audit": {
+    "src": "/images/admin-audit.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-auth-provider-create": {
+    "src": "/images/admin-auth-provider-create.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-auth-providers": {
+    "src": "/images/admin-auth-providers.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-calls": {
+    "src": "/images/admin-calls.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-capture": {
+    "src": "/images/admin-capture.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-internal-networks": {
+    "src": "/images/admin-internal-networks.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-limits": {
+    "src": "/images/admin-limits.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-publishing": {
+    "src": "/images/admin-publishing.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-retention": {
+    "src": "/images/admin-retention.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-server-review-dialog": {
+    "src": "/images/admin-server-review-dialog.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-servers-review": {
+    "src": "/images/admin-servers-review.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-trusted-clients": {
+    "src": "/images/admin-trusted-clients.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-usage": {
+    "src": "/images/admin-usage.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-user-detail": {
+    "src": "/images/admin-user-detail.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-users": {
+    "src": "/images/admin-users.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "api-key-create": {
+    "src": "/images/api-key-create.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "call-detail-payload": {
+    "src": "/images/call-detail-payload.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "catalog": {
+    "src": "/images/catalog.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "catalog-server": {
+    "src": "/images/catalog-server.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "connect-confirm": {
+    "src": "/images/connect-confirm.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "connect-done": {
+    "src": "/images/connect-done.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "connected-apps": {
+    "src": "/images/connected-apps.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "gateway-access": {
+    "src": "/images/gateway-access.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "gateway-capabilities-picker": {
+    "src": "/images/gateway-capabilities-picker.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "gateway-overview": {
+    "src": "/images/gateway-overview.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "gateway-settings": {
+    "src": "/images/gateway-settings.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "home": {
+    "src": "/images/home.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "my-connections": {
+    "src": "/images/my-connections.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "my-gateway-connect": {
+    "src": "/images/my-gateway-connect.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "my-gateways": {
+    "src": "/images/my-gateways.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "oauth-consent": {
+    "src": "/images/oauth-consent.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "publish-request": {
+    "src": "/images/publish-request.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "server-capabilities": {
+    "src": "/images/server-capabilities.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "server-health": {
+    "src": "/images/server-health.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "server-overview": {
+    "src": "/images/server-overview.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "server-sign-in-card": {
+    "src": "/images/server-sign-in-card.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "server-user-authorization": {
+    "src": "/images/server-user-authorization.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "service-account-key-created": {
+    "src": "/images/service-account-key-created.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "service-account-overview": {
+    "src": "/images/service-account-overview.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "sign-in": {
+    "src": "/images/sign-in.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "team-settings-members": {
+    "src": "/images/team-settings-members.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "team-usage": {
+    "src": "/images/team-usage.webp",
+    "width": 1440,
+    "height": 900
+  }
+}
