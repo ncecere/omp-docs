@@ -1,0 +1,32 @@
+---
+title: Connected apps
+description: The AI clients you signed in to Open MCP Portal's gateways with OAuth, one per gateway, and how to disconnect them.
+---
+
+When an AI client signs you in with OAuth, Open MCP Portal records a **connected app**: that client, on that gateway, acting as you. Account › **Connected apps** lists them.
+
+<Screenshot slot="connected-apps" />
+
+Each row is one client on one gateway. Connecting the same client to three gateways makes three rows, because each connection is bound to one gateway (the OAuth `resource`). A row shows:
+
+- the client's name and the host that vouches for it, or **Unverified** for a client that registered itself;
+- the gateway (marked **Deleted** if the gateway no longer exists);
+- when it was connected and last used.
+
+## Disconnect
+
+**Disconnect…** stops the app at once: its access and refresh tokens no longer work and the consent is forgotten. To use the app again, connect it again and allow it.
+
+Disconnecting is the right step if you lose a laptop or stop using a client. You don't need to disconnect an app when your access changes: every request checks your account and your access to the gateway again, so removing you from the team, removing a grant or suspending you stops the app at its next request.
+
+## How long a connection lasts
+
+- Access tokens last an hour; the app refreshes them itself.
+- A refresh token lasts 30 days and is replaced on every use, so an app used at least once a month stays connected until you disconnect it.
+- If a refresh token is presented again more than 30 seconds after it was replaced (a sign it was copied), the connection is revoked and you sign in again.
+
+## Who else can see them
+
+Platform admins see anyone's connected apps on the person's page in **Admin › Users** and can disconnect them; platform auditors can see them. Nobody can see the tokens.
+
+Connected apps are not the same as [My connections](/docs/use/connecting-accounts): connected apps are clients that use the portal as you; connections are your accounts on other services that the portal uses for you.

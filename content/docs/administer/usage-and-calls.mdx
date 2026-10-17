@@ -1,0 +1,28 @@
+---
+title: Usage and calls
+description: Every call through every Open MCP Portal gateway in Admin › Calls, recorded contents, and the platform-wide usage dashboard.
+---
+
+## Calls
+
+**Admin › Calls** lists every call through every gateway: who called which tool, prompt or resource (a person with a key or a connected app, or a team's service account), through which gateway and server, and how it went. Platform admins and auditors read it. Filter by gateway, server, outcome, person, team, service account (any team's, searchable as "name (team)") and date.
+
+<Screenshot slot="admin-calls" />
+
+The outcomes and the call page are the same as in a team's view; see [Activity and usage](/docs/teams/activity-and-usage). Refused calls carry the reason as their error class, for example `no_access`, `role`, `gateway_disabled`, `key_scope`, `service_account`, `provider_disabled`, `team_archived` or a rate-limit key.
+
+### Recorded contents
+
+Platform admins and auditors can open the recorded contents of **any** recorded call from its page (**View contents**), after a notice that viewing is recorded. Each view writes `mcp_call.payload_view` to the audit log, visible to the team whose switch recorded it. Through a team's pages, platform staff never see contents. See [Recording call contents](/docs/teams/payload-capture).
+
+## Usage
+
+**Admin › Usage** is the usage dashboard for the whole platform: calls through every gateway, how they went and how long they took.
+
+- **Range**: last 24 hours, 7, 30 or 90 days, or custom dates in UTC (at most 90 days; hourly grouping at most 7).
+- **Group by**: gateway, server, capability, team (platform gateways in one row), kind of caller, day or hour. **Team** narrows to one team: its gateways, its servers and its service accounts. There is no grouping by person.
+- Totals, calls per day by outcome, p50 and p95 latency, and bytes sent and received.
+
+<Screenshot slot="admin-usage" />
+
+Usage comes from hourly rollups, recomputed every 5 minutes on one replica, so the dashboards lag by a few minutes. Usage rollups are kept for 400 days by default, longer than call records.

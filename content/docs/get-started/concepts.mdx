@@ -1,0 +1,92 @@
+---
+title: Concepts
+description: MCP servers and capabilities, teams and roles, the catalog, gateways, callers and their credentials, connections, and the records Open MCP Portal keeps.
+---
+
+Open MCP Portal sits between MCP clients (Claude Code, VS Code, Cursor, your own agents) and the MCP servers your teams run. This page explains the words the rest of the docs use.
+
+```text
+MCP clients and agents
+   │  OAuth sign-in, personal API key or service account key
+   ▼
+/mcp/{slug}  ── who is it? ── may they use this gateway and tool? ── rate limit ──►  team MCP servers
+                                                                     (identity token, and the caller's
+                                                                      own token where a tool needs one)
+Browser ── web app and /v1 management API ── call records, usage, audit log
+```
+
+## MCP servers and capabilities
+
+An **MCP server** is a remote server a team runs and registers in the portal: a name, an immutable **slug**, a Streamable HTTP URL, a timeout and how the portal authenticates to it. Servers belong to a **team** and are private to that team until published.
+
+When a server is registered or refreshed, the portal reads what it offers. Each item is a **capability** of one of four kinds: **tool**, **prompt**, **resource** or **resource template**. The portal stores each capability's definition and a fingerprint of it, so it notices when a definition changes. See [Capabilities and change detection](/docs/teams/capabilities).
+
+A server authenticates the portal in one of three ways (its **auth mode**):
+
+- **None**: calls carry only the portal's signed identity token.
+- **Static header**: one header with a fixed value, such as an API key, stored encrypted.
+- **Sign-in with OAuth, per person**: the server is an OAuth resource server itself, such as GitHub's hosted MCP server. Each person signs in to it once, and their own token goes with each of their calls.
+
+## The catalog
+
+The **catalog** lists the servers teams have published, with the capabilities that were approved. Anyone signed in can browse it. Publishing follows a platform **publishing policy**: under **Approval required** (the default) a platform admin reviews each server and each changed capability; under **Self-publish** a team's owners and admins publish directly. A platform admin can set a different policy for one team. See [Publishing and review](/docs/teams/publishing).
+
+## Gateways
+
+A **gateway** is a curated set of capabilities served at one endpoint, `<portal URL>/mcp/{slug}`. MCP clients connect to a gateway, not to servers. A gateway can mix capabilities of several servers. Clients see:
+
+- tools and prompts as `{server-slug}__{name}`, for example `status__check_outage`;
+- resources and resource templates as `omp://{server-slug}/{uri}`, for example `omp://status/status://services`.
+
+There are two kinds:
+
+- **Team gateways** belong to a team. The team's owners and admins build them from the team's own servers (published or not) and from approved capabilities of catalog servers. Every member of the team can use them; a capability can require a **minimum team role** (editor, admin or owner).
+- **Platform gateways** belong to the platform. Platform admins build them from approved catalog capabilities and **grant** them to teams, people or SSO groups.
+
+See [Building gateways](/docs/teams/gateways) and [Platform gateways](/docs/administer/platform-gateways).
+
+## Callers and credentials
+
+Every request to a gateway comes from a **person** or a **service account**, with one of three credentials:
+
+| Credential | For | Looks like |
+|---|---|---|
+| **OAuth sign-in** (a *connected app*) | Interactive clients: Claude Code, VS Code, Cursor, pi, Claude | Nothing to copy: the client signs you in through your browser and keeps short-lived tokens (`ompat_…`, refreshed with `omprt_…`) |
+| **Personal API key** | Scripts and clients that can't open a browser | `omp_…`, created under **API keys** in your account menu |
+| **Service account key** | CI, agents and jobs owned by a team rather than a person | `omp_sa_…`, created under **Team › Service accounts** |
+
+A **service account** is a team-owned identity with a team role of member or editor. It can use the team's own gateways and platform gateways granted to its team. See [Service accounts](/docs/teams/service-accounts).
+
+Whatever the credential, every request is checked again: the credential is valid, the person is active, the gateway is on, the caller may use it, the capability is still selected and available, the caller's role is high enough, and the rate limits allow it. Something the caller may not use looks the same as something that doesn't exist.
+
+## What a server receives
+
+The portal never forwards the caller's own credential. Instead, each forwarded call carries an **identity token**: a JWT signed by the portal (ES256) that names the caller, their teams, the gateway and the tool, valid for 5 minutes. Servers verify it against the portal's public keys at `/.well-known/jwks.json`. See [The identity token](/docs/server-authors/identity-token).
+
+## Connections
+
+Some tools need to act **as the person** on another service: create a GitHub issue as them, read their Google Drive. A platform admin configures that service as an **auth provider**; the server's team sets a **user authorization** requirement (a provider and scopes). The first call asks the person to connect their account in the browser; after that, the portal sends their token with each call that needs it and refreshes it. The resulting **connection** is listed under **My connections**. Servers in OAuth mode use the same connections, bound to that one server. See [Connecting accounts](/docs/use/connecting-accounts).
+
+## Roles
+
+Platform roles and team roles are separate. Signing in creates an account with no platform role and no team.
+
+| Role | Can |
+|---|---|
+| Platform admin | Everything administrative: users, teams, catalog review, platform gateways, internal networks, trusted clients, auth providers, limits, retention, capture settings |
+| Platform auditor | Read every admin page, the audit log and call records; change nothing |
+| Team owner | Everything a team admin can, plus add, change and remove owners |
+| Team admin | Members, publishing, team gateways, service accounts, call records, recording call contents |
+| Team editor | Register, edit, test and refresh the team's servers and set their user authorization |
+| Team member | Use the team's gateways; read its servers, gateways and service accounts |
+
+Platform roles don't give access to a team's gateways: a platform admin uses a team gateway only as a member of the team, and a platform gateway only when granted. Platform staff read a team's recorded call contents only through the admin pages, and every view is in the audit log.
+
+## Records
+
+- **Call records**: who called which capability through which gateway and server, the outcome, latency and sizes. Never the arguments or results.
+- **Recorded call contents**: off by default. When a gateway's or server's team turns it on, arguments and results are kept too, with secret-looking values redacted, for a limited time. See [Recording call contents](/docs/teams/payload-capture).
+- **Usage**: hourly rollups of calls for dashboards.
+- **Audit log**: every administrative change and sign-in.
+
+How long each is kept is set in [Retention](/docs/administer/retention).

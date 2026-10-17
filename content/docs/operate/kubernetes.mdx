@@ -1,0 +1,94 @@
+---
+title: Install on Kubernetes
+description: "Deploy Open MCP Portal with the repository's Kustomize base and example overlay: secrets, configuration, network policies, ingress and probes."
+---
+
+The repository's [`deploy/kubernetes`](https://github.com/ncecere/open-mcp-portal/tree/main/deploy/kubernetes) holds a Kustomize **base** and an **example overlay** (namespace, pinned image, settings, an NGINX Ingress or a Gateway API `HTTPRoute`, narrowed NetworkPolicies, and optional metrics). Copy the overlay into your own GitOps repository and replace every `example.org` value and the image digest. Bring your own PostgreSQL 17 and backups: there is no in-cluster database component. `make k8s-validate` renders the base and overlay and checks them against the Kubernetes schemas.
+
+## Secrets
+
+The base references the secret `open-mcp-portal-runtime` by name and never contains values. Create it with your secrets operator or by hand:
+
+```sh
+kubectl create namespace open-mcp-portal   # or apply the overlay's namespace.yaml first
+kubectl -n open-mcp-portal create secret generic open-mcp-portal-runtime \
+  --from-literal=DATABASE_URL='postgres://omp:<password>@db.example.org:5432/omp?sslmode=require' \
+  --from-literal=ENCRYPTION_KEY="$(openssl rand -base64 32)" \
+  --from-literal=API_KEY_PEPPER="$(openssl rand -base64 32)" \
+  --from-literal=OIDC_CLIENT_SECRET='<from your IdP>'
+```
+
+| Key | Used by |
+|---|---|
+| `DATABASE_URL` | The `migrate` init container and the `portal` container |
+| `ENCRYPTION_KEY`, `API_KEY_PEPPER`, `OIDC_CLIENT_SECRET` | `portal` (required: a missing key stops the pod with `CreateContainerConfigError`) |
+| `ENCRYPTION_KEY_PREVIOUS`, `API_KEY_PEPPER_PREVIOUS` | `portal`, optional, only during a [rotation](/docs/operate/secrets-and-key-rotation) |
+
+Keep `ENCRYPTION_KEY` and `API_KEY_PEPPER` in your secrets store as well: a database backup is useless without them. Secrets aren't hashed into the pod template, so after changing one, run `kubectl -n open-mcp-portal rollout restart deploy/open-mcp-portal`.
+
+## Configuration
+
+The ConfigMap `open-mcp-portal-config` is generated from `base/config.env`, so its name carries a content hash and **a configuration change rolls the pods**. Merge your keys in the overlay:
+
+```yaml
+configMapGenerator:
+  - name: open-mcp-portal-config
+    behavior: merge
+    literals:
+      - APP_URL=https://mcp.example.org
+      - OIDC_ISSUER=https://idp.example.org
+      - OIDC_CLIENT_ID=open-mcp-portal
+      - OIDC_ALLOWED_EMAIL_DOMAINS=example.org
+      - TRUSTED_PROXIES=10.0.0.0/8
+```
+
+The base sets `LISTEN_ADDR=:8088`, `LOG_FORMAT=json`, `LOG_LEVEL=info`, `DEV_AUTH=false`, `MIGRATE_ON_START=false` (the Deployment pins it too), `SHUTDOWN_DELAY=10s`, `SHUTDOWN_TIMEOUT=125s`, and placeholders for `APP_URL`, `OIDC_ISSUER` and `OIDC_CLIENT_ID`. Don't set `generatorOptions.disableNameSuffixHash`: pods would keep running with stale settings. Pin the image by digest in the overlay's `images:`. Every setting is in [Configuration](/docs/operate/configuration).
+
+## What the base deploys
+
+- **Deployment `open-mcp-portal`**: 2 replicas, `maxUnavailable: 0` and `maxSurge: 1`, spread across nodes (and, best effort, zones), with a `migrate` init container. The pod runs as non-root UID 65532 with a read-only root filesystem, all capabilities dropped, no privilege escalation, seccomp `RuntimeDefault`, an `emptyDir` on `/tmp`, no service-account token and no service links: it meets the `restricted` Pod Security Standard, which the example namespace enforces. Requests 100m CPU and 128Mi, limits 1 CPU and 512Mi, with `GOMEMLIMIT` set from the memory limit. `terminationGracePeriodSeconds` is 150.
+- **Service `open-mcp-portal`**: port `http` 80 → 8088, no session affinity.
+- **PodDisruptionBudget**: `maxUnavailable: 1`; unhealthy pods never block a drain.
+- **ServiceAccount** with `automountServiceAccountToken: false`. The portal never calls the Kubernetes API.
+- **NetworkPolicies** (below).
+- **Metrics**: off by default. The example overlay sets `METRICS_ADDR=:9090`, adds a `metrics` port to the pods and the Service and a NetworkPolicy from the `monitoring` namespace, and keeps an example `ServiceMonitor` beside it. See [Metrics](/docs/operate/metrics).
+
+## Network policies
+
+The policies select only the portal's pods, so the base can share a namespace:
+
+- default deny;
+- ingress on TCP 8088 from the ingress controller's namespace (placeholder `ingress-controller`: patch it);
+- DNS to kube-dns in `kube-system`;
+- TCP 5432 to anywhere (narrow it to your database);
+- TCP 443 to anywhere: MCP servers, the OIDC provider, and auth providers' token, revocation and userinfo endpoints.
+
+MCP servers on other ports (`:8443`, or plain http on 80 or 8080) need extra egress rules in your overlay, as the example shows; so do internal servers you allow in `UPSTREAM_ALLOWED_NETWORKS` or Admin › Internal networks. Many CNIs don't match pod addresses with `ipBlock`, so in-cluster servers (`*.svc.cluster.local`) usually need a `namespaceSelector`/`podSelector` rule for their namespace and port. If the portal allows an address but a policy drops the traffic, the server's health shows a timeout, not "Address not allowed".
+
+The portal's own address guard applies whatever the policies allow: public addresses, internal ones only when an [internal network](/docs/administer/internal-networks) entry covers them, never loopback or link-local, and never through a proxy.
+
+## Ingress
+
+- The host must equal `APP_URL`'s host; TLS terminates at the ingress. Route every path to the portal, including `/mcp/`, `/oauth/`, `/connect/` and `/.well-known/`.
+- **Timeouts.** A `/mcp/{slug}` call waits up to 120 seconds for its MCP server. Allow reads of a few minutes: the example sets `proxy-read-timeout: 300` for ingress-nginx and `timeouts.request: 300s` on the HTTPRoute, and turns off proxy buffering. Requests are capped at 1 MiB.
+- **No sticky sessions.** `/mcp/{slug}` is stateless and browser sessions live in PostgreSQL: any replica can serve any request.
+- Set `TRUSTED_PROXIES` to the controller's pod network, so client addresses are logged and rate-limited correctly.
+
+Register `<APP_URL>/auth/callback` at your identity provider, and `<APP_URL>/connect/callback` at each auth provider's OAuth app.
+
+## Probes
+
+| Endpoint | Means | Probe |
+|---|---|---|
+| `/healthz` | The process is up. It never checks dependencies, so a database outage doesn't restart pods | liveness, startup |
+| `/readyz` | PostgreSQL answers within 2 seconds and the pod isn't draining; otherwise `503` with the failing check | readiness |
+
+See [Health and doctor](/docs/operate/health-and-doctor) for start-up and graceful shutdown, and run the doctor in a pod with:
+
+```sh
+kubectl -n open-mcp-portal exec deploy/open-mcp-portal -c portal -- /open-mcp-portal doctor
+```
+
+## Not included
+
+No Helm chart, HorizontalPodAutoscaler, in-cluster PostgreSQL, backup CronJob or smoke test against a real cluster. The example's image digest is a placeholder until images are published.

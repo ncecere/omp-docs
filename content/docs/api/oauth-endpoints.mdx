@@ -1,0 +1,67 @@
+---
+title: OAuth endpoints
+description: Open MCP Portal's OAuth 2.1 authorization server for MCP clients (discovery metadata, authorize, token, register, revoke), its rules and tokens, and the JWKS for identity tokens.
+---
+
+Open MCP Portal is an OAuth 2.1 authorization server for its own gateways, following the MCP authorization specification: RFC 9728 protected-resource metadata, RFC 8414 server metadata, PKCE (RFC 7636), resource indicators (RFC 8707), the `iss` response parameter (RFC 9207), Client ID Metadata Documents, Dynamic Client Registration (RFC 7591) and revocation (RFC 7009). It's always on. These endpoints are outside the OpenAPI document.
+
+## Endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /.well-known/oauth-protected-resource/mcp/{slug}` | Protected-resource metadata: `resource` = `<APP_URL>/mcp/{slug}`, `authorization_servers` = `[<APP_URL>]`, `bearer_methods_supported`, `resource_name` (the instance name). Served for any well-formed slug without looking the gateway up, so it doesn't reveal which gateways exist |
+| `GET /.well-known/oauth-authorization-server` | Server metadata: authorization code only, `S256` only, `none` token authentication (public clients), `client_id_metadata_document_supported`, `authorization_response_iss_parameter_supported`, the registration and revocation endpoints. No `scopes_supported` |
+| `GET /oauth/authorize` | Authorization code with PKCE |
+| `POST /oauth/token` | `authorization_code` and `refresh_token` grants |
+| `POST /oauth/register` | Dynamic Client Registration, public clients only |
+| `POST /oauth/revoke` | Token revocation |
+| `GET /.well-known/jwks.json` | The public keys that sign [identity tokens](/docs/server-authors/identity-token) sent to MCP servers (not OAuth tokens) |
+
+`GET` on the three `POST` endpoints is `405`.
+
+## Authorize
+
+- `response_type=code`, `code_challenge` with `code_challenge_method=S256` (`plain` is refused), `redirect_uri`, `state` (at most 1,000 characters), and `resource` equal to exactly `<APP_URL>/mcp/{slug}`. There are no scopes: a `scope` parameter is ignored.
+- Problems before the client and its redirect address are known (an unknown or unfetchable client, a redirect URI it didn't register, a repeated parameter, a query over 8,000 characters) show an error page, "Can't connect this app", and never redirect. Later problems go back to the client with `state` and `iss`: `unsupported_response_type`, `invalid_request` (no PKCE, `plain`, a malformed challenge), `invalid_target` (a missing or wrong `resource`), `access_denied`.
+- Then the person signs in, if they aren't already. Signed in, the resource must be a gateway they may use **now**; otherwise `invalid_target` (unknown, turned off and no access look the same).
+- A remembered consent (the same person, client and gateway) or a [trusted client](/docs/administer/trusted-clients) gets a code at once; anyone else sees the consent page.
+
+## Clients
+
+- **Client ID Metadata Documents** (preferred): the client ID is an https URL. The portal fetches it through its address guard (public addresses, or allowed internal networks), with no proxy and no redirects, within 5 seconds, at most 16 KiB, as JSON; its `client_id` must equal the URL. It's cached for its `max-age`, between 1 minute and 1 hour (10 minutes by default).
+- **Dynamic Client Registration**: public clients only, IDs `ompcl_…`, 10 a minute per address. A registration unused for 30 days expires. Registered clients are shown as unverified and can never be trusted.
+- **Redirect URIs**: https, or http on a loopback address (any port).
+
+## Tokens
+
+| Token | Prefix | Lifetime |
+|---|---|---|
+| Authorization code | `ompac_` | 60 seconds, single use |
+| Access token | `ompat_` | 1 hour |
+| Refresh token | `omprt_` | 30 days, replaced on every use |
+
+- An access token is accepted only by `/mcp/{slug}` of its own gateway, and never by the management API.
+- A refresh token presented again within 30 seconds of its rotation gets another pair (a client refreshing twice at once); later reuse revokes the connection.
+- Tokens are opaque and stored only as HMAC-SHA256 digests under `API_KEY_PEPPER`.
+- Every request re-checks the token, its connection, that the person is active (`401` otherwise) and their access to the gateway (`404` otherwise).
+
+## Revoke
+
+A refresh token revokes the whole connection; an access token only itself. Another client's token, or an unknown one, is a no-op `200`. People also disconnect apps under Account › Connected apps, and platform admins on a person's page.
+
+## Rate limits
+
+Per client address, shared by every replica: 60 a minute on authorize, token and revoke, 10 a minute on register. Over the limit: `429` with `slow_down` and `Retry-After`.
+
+## Audit
+
+`oauth.client_register`, `oauth.consent` (with `how`: `allowed` or `trusted`), `oauth.token_issue` and `oauth.revoke`. Never a token.
+
+## Connecting accounts
+
+Two browser routes complete [delegated credentials](/docs/use/connecting-accounts) and sign-in to OAuth-protected MCP servers, also outside the OpenAPI document:
+
+- `/connect/{provider}?request=…`: the web app's confirm page for a consent link;
+- `GET /connect/callback`: the redirect URI registered at every auth provider and OAuth-protected server, `<APP_URL>/connect/callback`. It always answers `303`, to the request's return path or to `/connect/done`.
+
+The portal's own client metadata document for OAuth-protected MCP servers is served at `/oauth/upstream-client-metadata.json`.

@@ -1,0 +1,20 @@
+---
+title: Releases
+description: Open MCP Portal's releases, what to expect before 1.0, and how releases are published.
+---
+
+| Release | Date | In short |
+|---|---|---|
+| [v0.1.0](/docs/releases/v0-1-0) | Not yet released | The first release: a registry and company catalog of MCP servers, curated gateways, OAuth sign-in for MCP clients and service accounts, a signed identity on every call, delegated credentials, per-person OAuth to OAuth-protected servers, and operations. Migrations `00001` to `00013`. |
+
+These docs describe **v0.1.0**, which isn't tagged yet: until it is, they follow the `main` branch. The full history is in the repository's [changelog](https://github.com/ncecere/open-mcp-portal/blob/main/CHANGELOG.md) and [commits](https://github.com/ncecere/open-mcp-portal/commits/main).
+
+## Before 1.0
+
+- **It is development software.** It has been tested with unit and integration tests against a real PostgreSQL, fake MCP servers and a fake OAuth provider, and with real clients and a real upstream server (see the release's notes). It hasn't run in production yet; a pilot is your environment's test.
+- **Upgrades only go forward.** Migrations can't be undone by changing images; going back past a migration means restoring a backup. Read every release's notes between your version and the target. See [Migrations and upgrades](/docs/operate/migrations-and-upgrades).
+- **The management API may change** in any minor release before 1.0; each release's notes say how to adapt. The MCP endpoint follows the MCP specification, and the headers MCP servers receive (`MCP-Gateway-Identity`, `MCP-Gateway-Provider`, `MCP-Gateway-Provider-Token`) won't change.
+
+## How releases are published
+
+Each release will be a Git tag, `vX.Y.Z`, on the main branch, with an entry in the repository's `CHANGELOG.md`. The project follows Semantic Versioning. There is no published container image or release workflow yet: build the image from the tag with the repository's `Dockerfile` (`make docker`). Security fixes are made on `main`, and once releases exist, released as a patch of the latest minor release.

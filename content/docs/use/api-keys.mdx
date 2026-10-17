@@ -1,0 +1,49 @@
+---
+title: API keys
+description: "Personal API keys for scripts and MCP clients that can't sign in with a browser: creating, limiting to gateways, using and revoking them in Open MCP Portal."
+---
+
+A personal API key (`omp_…`) lets a script, `curl` or an MCP client that can't open a browser call your gateways. It **acts as you**: it reaches the gateways you can use, with your access, checked on every request. For interactive clients, prefer [OAuth sign-in](/docs/get-started/connect-your-client); for automation that mustn't depend on you, use a team [service account](/docs/teams/service-accounts).
+
+Your keys are under Account › **API keys** (the menu under your name).
+
+## Create a key
+
+Choose **Create API key** and fill in:
+
+- **Name**: where you'll use it, for example "Claude Code on my laptop". When a request doesn't carry the MCP client's own name, call records and MCP servers see the key's name as the client.
+- **Expires after (days)**: keys always expire, from 1 to 365 days (90 by default). Create a new one when it does.
+- **Limit to gateways (optional)**: the key then works only on those gateways, and only while you can use them. Leave it empty to use the key on every gateway you can use. A limit never gives you more access. At most 50 gateways.
+
+<Screenshot slot="api-key-create" />
+
+The secret is shown **once**, right after creation: copy it then. Under **Connect a gateway** you can pick one of your gateways and get its snippets; **Put this key into the snippets** fills in the real key (only on that screen: anyone who sees the snippets can use the key).
+
+## Use it
+
+Send it as a bearer token to a gateway's URL:
+
+```sh
+curl -X POST https://mcp.example.com/mcp/support \
+  -H "Authorization: Bearer omp_..." -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+The client snippets with **Use an API key instead** turned on show the same for Claude Code, VS Code, Cursor and pi. See [Connect your AI client](/docs/get-started/connect-your-client).
+
+API keys work only on `/mcp/{slug}`, not on the management API.
+
+## The list
+
+Each key shows its status (**Active**, **Expired** or **Revoked**), when it was last used, when it expires, and where it works: **All my gateways** or the gateways it's limited to. A gateway that was deleted is marked; a key whose gateways are all gone **works nowhere**, and the page warns about it. Revoked and expired keys stay listed for 30 days.
+
+## Revoke a key
+
+**Revoke** stops the key at once: clients and scripts using it fail on their next request. It can't be undone.
+
+## When a key stops working
+
+A key is refused (`401`) once it's revoked or expired, or when you're suspended. It doesn't see a gateway (`404`) when you lose access to it: you leave the team, a grant is removed, or the gateway is turned off. A key limited to other gateways also gets `404`.
+
+Keys are stored only as keyed digests; nobody, including platform admins, can see a key after it's created.

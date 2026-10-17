@@ -1,0 +1,79 @@
+---
+title: The mail example
+description: A Gmail MCP server that relies on Open MCP Portal's delegated credentials instead of running its own OAuth, with the checks it makes and how to run it.
+---
+
+The repository's [`examples/mail-mcp`](https://github.com/ncecere/open-mcp-portal/tree/main/examples/mail-mcp) is a reference MCP server with three Gmail tools. It shows how to adapt a server that used to run its own Google OAuth so that it relies on Open MCP Portal's [provider tokens](/docs/server-authors/provider-tokens). The portal signs the person in, asks for their consent at Google once, keeps and refreshes their token, and forwards it with each call that needs it. The server stores no tokens, sessions or client secret.
+
+| Tool | Annotations | Gmail API | Scope |
+|---|---|---|---|
+| `search_messages` `{query, max ≤ 25}` | `readOnlyHint` | `GET users/me/messages?q=` and `messages/{id}?format=metadata` | `gmail.readonly` |
+| `read_message` `{id}` | `readOnlyHint` | `GET users/me/messages/{id}?format=full` | `gmail.readonly` |
+| `create_draft` `{to, subject, body}` | `destructiveHint: false` (it writes, but only adds a draft and never sends) | `POST users/me/drafts` | `gmail.compose` |
+
+## Before and after
+
+| | The server runs its own OAuth | Behind the portal |
+|---|---|---|
+| Sign-in | An OAuth client of Google, with its own `/login` and `/callback`, a client secret and a session store | None. The portal signs the person in and runs the Google consent (`<APP_URL>/connect/callback`) |
+| Tokens | Stored, encrypted and refreshed by the server | None stored. Every call brings a fresh access token in `MCP-Gateway-Provider-Token` |
+| Who is calling | Google's userinfo, or the server's own session | The portal's signed identity token (`sub`, `email`, `teams`, `tool`, `provider`) |
+| First use | The server sends the person to its login page | The portal answers the client with `-32042` and a consent link; the person connects, then runs the tool again |
+| Revocation | A disconnect page in the server | Account › My connections in the portal |
+| Access control | Your own rules | The portal decides who may call which tool; the server can still check `email`, `teams` or `sub` |
+
+In code, the change is small:
+
+```go
+// Before: look up the person's stored token, refresh it, maybe redirect to /login.
+tok, err := tokenStore.Get(session.UserID) // + oauth2.Config.TokenSource(...) + refresh + persistence
+
+// After: verify the portal's identity token (once per HTTP request) and take the token it forwarded.
+id := IdentityFrom(r.Context())               // verified: iss, aud, exp, ES256 signature from the portal's JWKS
+if id.Provider != "google" || r.Header.Get("MCP-Gateway-Provider") != "google" { /* refuse */ }
+token := r.Header.Get("MCP-Gateway-Provider-Token") // bare access token, never logged or stored
+```
+
+## How it checks a request
+
+1. **Find the token**: `MCP-Gateway-Identity`, else `Authorization: Bearer`.
+2. **No token**: only discovery may proceed (`initialize`, `notifications/initialized`, `ping` and the `*/list` methods); anything else, including `tools/call`, gets `401`, and so do provider headers without an identity token. To lock discovery down too, start it with `-discovery-key <secret>` and register `X-Discovery-Key: <secret>` as the server's static header in the portal, which then sends it on every request.
+3. **Verify the JWT**: `ES256`, a `kid` in the portal's JWKS (cached for 5 minutes, refetched for an unknown `kid` at most every 10 seconds, cached keys kept if the JWKS can't be fetched), `iss` = `-issuer` (the portal's `APP_URL`, taken from `-gateway` by default), `aud` = `-audience` (the server's URL exactly as registered), current `exp`, `nbf` and `iat` with 30 seconds of leeway, `exp`, `iat`, `sub` and `principal_type` required, and a lifetime of at most 15 minutes. Any failure gets `401`.
+4. **Provider headers**: if present, `MCP-Gateway-Provider` must equal the token's `provider` claim, else `401`.
+5. **In each tool**: a service account gets a tool error; no provider token gets a tool error saying the requirement isn't set; a token for another provider gets a tool error naming it; Google answering `401` gets a tool error telling the person to reconnect under Account › My connections.
+
+It logs one line per call (tool, `sub`, `jti`, provider, outcome) and never logs tokens, search queries or message contents.
+
+## Run it against a local portal
+
+With a local portal (`make deps-up run dev-seed`, `DEV_AUTH=true`, `APP_URL=http://localhost:8088`) and `make fake-oauth` (a fake OAuth provider standing in for Google):
+
+```sh
+make example-mail-fake      # the server on http://127.0.0.1:8093/mcp, provider slug google-dev, fake Gmail
+make example-mail-smoke     # sets up provider, server and gateway "mail" in team demo, and checks the flow
+```
+
+Then connect a client to the `mail` gateway, for example `claude mcp add --transport http mail http://localhost:8088/mcp/mail`, and ask it to search your mail: the first call shows the consent link.
+
+## Set it up with real Google
+
+1. In a Google Cloud project, enable the **Gmail API** and configure the OAuth consent screen (user type *Internal* for a Google Workspace organisation; `gmail.readonly` and `gmail.compose` are restricted scopes).
+2. Create an OAuth client of type *Web application* with the authorized redirect URI `<APP_URL>/connect/callback`.
+3. A platform admin adds it in Admin › [Auth providers](/docs/administer/auth-providers) with the **Google** preset and the slug `google`.
+4. Run the server where the portal can reach it, over https in production (an internal address needs an [internal network](/docs/administer/internal-networks) entry):
+
+   ```sh
+   go run ./examples/mail-mcp -addr 0.0.0.0:8093 -gateway https://mcp.example.com \
+     -audience https://mail.example.com/mcp -provider google
+   ```
+
+   `-audience` must be exactly the URL you register next.
+
+5. Register the server in a team. In **Settings › User authorization**, choose **Google** with the scope `https://www.googleapis.com/auth/gmail.readonly`; on the **Capabilities** tab, override `create_draft` to `https://www.googleapis.com/auth/gmail.compose`, so people who only read never grant it.
+6. Add the three tools to a gateway, connect a client, and run a mail tool: connect your Google account when asked, then run it again.
+
+Use full scope URLs: they are the names Google's token response returns, so the portal can tell they were granted.
+
+## Adapting it to Microsoft Graph
+
+Use the **Microsoft Entra ID** preset with the delegated permissions `Mail.Read` (search and read) and `Mail.ReadWrite` (drafts) plus `offline_access`; set the requirement to `Mail.Read offline_access` and override `create_draft` to `Mail.ReadWrite offline_access`. Point the client at `https://graph.microsoft.com/v1.0/me/messages`, and start the server with `-provider` set to the provider's slug. Graph answers `401` for a revoked token, which maps to the same "reconnect" tool error.

@@ -1,0 +1,97 @@
+---
+title: Try it locally
+description: Run Open MCP Portal on your own machine with Docker Compose and a fake MCP server, register the server, build a gateway and call it.
+---
+
+The repository has a demo: Open MCP Portal, PostgreSQL and a fake MCP server in Docker Compose, with development sign-in so you don't need an identity provider. You need Docker with Compose and a clone of the [repository](https://github.com/ncecere/open-mcp-portal).
+
+<Callout type="warn" title="Development only">
+The demo uses development sign-in (anyone can pick a persona) and the public example keys from `.env.example`. The portal accepts them only because the demo's `APP_URL` is a loopback address, and the port is published on `127.0.0.1` only. Never expose the demo or reuse its settings for a real install: see [Install with Docker Compose](/docs/operate/compose).
+</Callout>
+
+## Start it
+
+```sh
+git clone https://github.com/ncecere/open-mcp-portal
+cd open-mcp-portal
+make demo        # docker compose -f compose.demo.yaml up --build
+```
+
+The first build compiles the web app and the Go binary, so it takes a few minutes. Then open [http://localhost:8090](http://localhost:8090). To use another port, set `OMP_DEMO_PORT` (for example `OMP_DEMO_PORT=8095 make demo`). `make demo-down` stops the demo and deletes its data.
+
+## Walk through it
+
+<Steps>
+<Step>
+
+### Sign in
+
+Under **Development accounts**, choose **Dev Platform Admin** (`admin`). The other personas are `auditor` (platform auditor) and `user`, `alex`, `blair` and `casey` (no platform role). Each signs in with sample identity-provider groups, so you can try group grants: `admin` is in `platform-admins`, `auditor` in `auditors`, `user` and `alex` in `engineering`, `blair` and `casey` in `support`, and everyone in `everyone`.
+
+</Step>
+<Step>
+
+### Create a team
+
+Switch to **Admin**, open **Teams** and create a team with yourself (`admin@localhost`) as owner. Switch back to **Workspace** and pick the team in the team switcher.
+
+</Step>
+<Step>
+
+### Register the fake MCP server
+
+Open **MCP servers** › **Add server**. Enter a name, a slug such as `status`, and the URL:
+
+```text
+http://127.0.0.1:8091/mcp
+```
+
+The fake server shares the portal's network namespace in the demo, so this is a loopback address to the portal, which development mode allows. Leave the authentication at **None** and save. The portal reads its capabilities at once: the tools `check_outage`, `search_tickets` and `create_ticket` (plus `whoami`, `provider_token` and `echo` for trying the portal's features), a resource, a resource template and a prompt.
+
+</Step>
+<Step>
+
+### Build a gateway
+
+Open **Gateways** › **Create gateway**, give it a slug such as `demo`, and choose a few capabilities, including `status__whoami`. A team gateway can use the team's own servers without publishing them.
+
+</Step>
+<Step>
+
+### Create a key and call it
+
+Open your account menu › **API keys** › **Create API key**, and copy the key. Then:
+
+```sh
+curl -s http://localhost:8090/mcp/demo -H "Authorization: Bearer omp_..." \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"status__whoami","arguments":{}}}'
+```
+
+`whoami` answers with the identity token the fake server received: the header it arrived in, its claims and whether it verified against the portal's keys. That is what every MCP server gets with each call. See [The identity token](/docs/server-authors/identity-token).
+
+</Step>
+<Step>
+
+### Connect a real client
+
+The gateway's **Overview** tab and **My gateways** show snippets for Claude Code, VS Code and Cursor. With OAuth sign-in, the client opens `localhost:8090` in your browser and you approve it there.
+
+</Step>
+</Steps>
+
+## Running from source
+
+For development on the portal itself, the repository's `Makefile` runs it outside Docker:
+
+```sh
+make deps-up                  # PostgreSQL on 127.0.0.1:55442
+cp -n .env.example .env       # DEV_AUTH=true, APP_URL=http://localhost:8088, example keys
+make web && make build        # build the web app into the binary
+make run                      # http://localhost:8088
+make fake-mcp                 # the fake MCP server on http://127.0.0.1:8091/mcp (another terminal)
+make fake-oauth               # a fake OAuth provider on http://127.0.0.1:8092 (another terminal)
+make dev-seed                 # team "demo", a published server and two gateways
+```
+
+`make dev-seed` creates the team `demo` (owner `admin@localhost`, member `user@localhost`), the server `demo-tools` pointing at the fake MCP server and published to the catalog, the team gateway `demo` and the platform gateway `company`, granted to the demo team. `make fake-oauth` stands in for a provider such as GitHub when you try [tools that act as a person](/docs/use/connecting-accounts).

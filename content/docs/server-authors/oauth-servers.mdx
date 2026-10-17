@@ -1,0 +1,56 @@
+---
+title: OAuth-protected servers
+description: "What Open MCP Portal expects from an MCP server that is an OAuth resource server itself, with per-person sign-in: RFC 9728 metadata, RFC 8414 discovery, PKCE, resource indicators, 401 and 403 challenges."
+---
+
+Some MCP servers are OAuth resource servers themselves: they accept only a token their own authorization server issued to the person, as GitHub's hosted MCP server does. In **Sign-in with OAuth, per person** mode, Open MCP Portal is an ordinary MCP client of such a server, following the [MCP authorization specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization) (2025-11-25). Each person signs in once; every call they make carries their own token.
+
+## What the portal expects
+
+**A challenge on unauthenticated requests.** An MCP request without a token gets `401` with a `Bearer` challenge, ideally with `resource_metadata`:
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer resource_metadata="https://tools.example.com/.well-known/oauth-protected-resource/mcp"
+```
+
+**Protected-resource metadata** (RFC 9728) at that URL, or else at `/.well-known/oauth-protected-resource{path}` or the root form. Its `resource` must equal your server's URL as the team registers it (the detection offers the team your form when it differs only by a trailing slash or letter case), and `authorization_servers` names your authorization server. `scopes_supported` helps the team choose scopes.
+
+**Authorization server metadata** (RFC 8414 or OpenID Connect discovery), found in the specification's order: for an issuer with a path, `/.well-known/oauth-authorization-server{path}`, `/.well-known/openid-configuration{path}`, then `{issuer}/.well-known/openid-configuration`; without a path, the two root forms. Its `issuer` must equal the identifier exactly, and every endpoint must be https and reachable under the portal's [address rules](/docs/administer/internal-networks).
+
+**PKCE with S256.** `code_challenge_methods_supported` must include `S256`; the portal refuses an authorization server without it.
+
+**A way to get a client.** In the specification's order of preference:
+
+- **Client ID Metadata Documents**: when your metadata has `client_id_metadata_document_supported` and the portal's address is public https, the portal's client ID is `<APP_URL>/oauth/upstream-client-metadata.json`, a public client.
+- **Dynamic Client Registration** (RFC 7591): with a `registration_endpoint`, the portal registers when the server is saved, with `redirect_uris` `[<APP_URL>/connect/callback]`, grant types `authorization_code` and `refresh_token`, and `client_secret_basic` (or `client_secret_post`, or `none`) as the token method.
+- **A client entered by hand**: the team creates an OAuth app with the callback `<APP_URL>/connect/callback` and pastes its ID and secret.
+- **A platform auth provider** whose authorization and token URLs equal yours.
+
+**Resource indicators** (RFC 8707). The portal sends your server's URL as `resource` on authorize, token and refresh requests, so tokens are bound to your server. Teams can turn this off for authorization servers that refuse it.
+
+**`iss` in the authorization response** (RFC 9207). If you advertise `authorization_response_iss_parameter_supported`, the callback must carry `iss` equal to your issuer; whenever `iss` is present, it must match.
+
+## What each call carries
+
+| Header | Value |
+|---|---|
+| `Authorization` | `Bearer <the person's token>` |
+| `MCP-Gateway-Identity` | The portal's [identity token](/docs/server-authors/identity-token), unless the team turned off **Send identity token** |
+
+There is no `MCP-Gateway-Provider` header and no `provider` claim. The person's token goes only to your server's stored URL, which must equal your metadata's `resource` (checked before every send), to your token endpoint (to refresh) and to your revocation endpoint. It never goes to another server, on lists, or into captured call contents.
+
+## How to answer
+
+- **A token that isn't valid**: answer `401` with a `Bearer` challenge (`error="invalid_token"`, or any error other than `insufficient_scope`). A `401` means you didn't execute the call. The portal refreshes the token once and retries once; if that fails, it erases the person's token and sends them a new sign-in link (`-32042`).
+- **A call that needs more access**: answer `403` with `error="insufficient_scope", scope="…"`. The portal asks the person to sign in again with the union of what they granted and what you ask for, if those scopes are within the ones the team reviewed or your `scopes_supported`. Otherwise, or if the person already granted them, the call fails with `-32010` (`insufficient_scope`), so there's no loop.
+- **Different people, different tools.** Your tool lists come from discovery by the person who set the server up. You may show each person different tools; still check every call.
+
+## Health and discovery
+
+- **Scheduled health checks** use nobody's token: an unauthenticated `initialize` that gets your `401` challenge (with `resource_metadata` equal to the stored metadata URL, or none when it was found through the fallback) counts as healthy, "Reachable — requires sign-in". A challenge that points elsewhere fails.
+- **Discovery** (refresh) and **Test connection** use the connection of the editor who set the server up.
+
+## Service accounts
+
+Service accounts can't call an OAuth-protected server's tools: there's no person to sign in. Their calls are refused with `-32010` before reaching you.

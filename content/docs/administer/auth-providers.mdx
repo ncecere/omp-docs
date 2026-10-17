@@ -1,0 +1,54 @@
+---
+title: Auth providers
+description: Configure the OAuth apps (GitHub, Google, Microsoft Entra ID, Atlassian, Slack, GitLab or your own) that let Open MCP Portal tools act as the person calling.
+---
+
+An **auth provider** is an OAuth app on another service that people connect their own accounts with, so a server's tools can act as them: create a GitHub issue, read a Google Drive file. Platform admins configure each provider once in **Admin › Auth providers**; teams then choose a provider and scopes on their servers ([user authorization](/docs/teams/user-authorization)). The portal keeps each person's tokens, encrypted, and sends each one only to the server that needs it. Auditors can read the configuration.
+
+<Screenshot slot="admin-auth-providers" />
+
+## Add a provider
+
+**Add auth provider** › **Start from** a preset, or **Custom OAuth 2.0 provider** (any provider with the authorization code flow, including internal ones). A preset only pre-fills the form; check the values against the provider's documentation. Presets that need a value in their addresses ask for it (Microsoft's tenant, GitLab's host).
+
+| Preset | Pre-filled |
+|---|---|
+| **GitHub** | Authorize `https://github.com/login/oauth/authorize`, token `…/access_token`, userinfo `https://api.github.com/user`; default scope `read:user`. No revocation endpoint |
+| **Google** | Google's authorize, token, revoke and userinfo endpoints; default scopes `openid` and `…/auth/userinfo.email`; `access_type=offline`, `prompt=consent`, `include_granted_scopes=true`. Use full scope URLs |
+| **Microsoft Entra ID** | `login.microsoftonline.com/{tenant}/oauth2/v2.0/…` (tenant `organizations` by default), userinfo `graph.microsoft.com/oidc/userinfo`; default scopes `openid profile email offline_access User.Read` |
+| **Atlassian** | `auth.atlassian.com`, userinfo `api.atlassian.com/me`; default scopes `read:me offline_access`; `audience=api.atlassian.com`, `prompt=consent`; PKCE off |
+| **Slack** | `slack.com/oauth/v2/authorize` and `oauth.v2.access`; user tokens: scope parameter `user_scope`, comma separator, token under `authed_user`; PKCE off; no revocation endpoint |
+| **GitLab** | `{host}/oauth/…` (host `gitlab.com` by default, or your self-managed host), with revoke and userinfo; default scopes `openid read_user` |
+
+<Screenshot slot="admin-auth-provider-create" />
+
+The form's sections:
+
+- **Provider**: **Name** (what people see when they connect), **Slug** (lower-case letters, digits and dashes; servers receive it in `MCP-Gateway-Provider` and the identity token's `provider` claim, and consent links use it; can't be changed; `done`, `callback` and names starting with `mcp-` are reserved), **Logo URL**, **Enabled**.
+- **OAuth app**: the **Redirect URI** to register at the provider, always `<APP_URL>/connect/callback`, with a copy button; **Client ID**; **Client secret** (encrypted, never shown again, not even to platform admins); **Token endpoint authentication** (`client_secret_post`, the default, `client_secret_basic`, or none for a public client, which needs PKCE); **Use PKCE (S256)** (keep it on unless the provider rejects it).
+- **Endpoints**: **Authorization URL** (where people's browsers go to approve), **Token URL**, optional **Revocation URL** (RFC 7009, used when someone disconnects) and **Userinfo URL** (read once after connecting, to label the account, such as `octocat`). All must be https; the token, revocation and userinfo endpoints are reached through the same address guard as MCP servers, so an internal identity provider needs an [internal network](/docs/administer/internal-networks) entry.
+- **Authorization request**: **Default scopes** (asked for when a server's requirement names none, and when someone connects from My connections), **Scope parameter** (`scope`, or `user_scope` for Slack user tokens), **Scope separator** (space, or comma for Slack), **Token response format** (standard, or under `authed_user` for Slack), and **Extra authorization parameters** (one `key=value` per line, at most 10; the portal sets `client_id`, `redirect_uri`, `state`, the scope parameter and PKCE itself).
+
+Register the redirect URI at the provider before people connect: they can't until it matches. Up to 100 providers.
+
+## A provider's page
+
+**Overview** shows the redirect URI, the configuration (never the secret) and its use: the servers that require it and how many people connected it. **Settings** edits everything except the slug; the client secret is replace-only.
+
+- **Changing the Client ID** disconnects everyone: their tokens belong to the old app, so their connections are marked as needing to connect again and their tokens are erased.
+- **Turning it off** refuses calls that need it (`-32010`, `provider_disabled`) and new connections. Existing connections are kept.
+- **Delete this provider** is refused while any server requires it (the dialog lists them). Otherwise it erases every connection and revokes it at the provider where it can.
+
+## How tokens are handled
+
+- People connect through a consent link the first time a tool needs the provider, or ahead of time from My connections or My gateways. See [Connecting accounts](/docs/use/connecting-accounts).
+- Token requests are form-encoded; answers may be JSON or form-encoded. Every exchange has a 10-second limit (userinfo 5 seconds) and a 64 KiB answer limit, follows no redirects and uses no proxy.
+- Access tokens are refreshed when they expire within 60 seconds, under a database row lock so two replicas never use a rotating refresh token twice. A refused refresh marks the connection as needing to connect again; an unreachable provider answers `-32010` (`provider_unavailable`) and keeps the connection.
+- Tokens and the client secret are never returned, logged, audited, recorded in calls or captured.
+- The portal doesn't check that the provider account belongs to the person (for example by email). The account label is informational.
+
+Audit: `auth_provider.create`, `.update` (with `clientSecretChanged` and `connectionsReset`), `.delete`, and `provider_connection.create`, `.refresh_failed`, `.revoke`.
+
+## OAuth-protected MCP servers
+
+Servers in [Sign-in with OAuth, per person](/docs/teams/register-a-server#sign-in-with-oauth-per-person) mode have their own client, configured by their team, and don't appear in this list. A team can instead **link** a platform provider whose authorization and token URLs equal the server's discovered ones: the server then uses that provider's client (ID, secret and settings), but keeps its own connections. While a server uses it, the provider can't be deleted and its authorization and token URLs can't be changed.

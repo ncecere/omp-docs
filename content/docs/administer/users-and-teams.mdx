@@ -1,0 +1,38 @@
+---
+title: Users and teams
+description: Platform roles, suspending and reactivating people, creating, archiving and overriding teams in Open MCP Portal's admin portal.
+---
+
+## Users
+
+**Admin › Users** lists everyone who has signed in, with their platform role, status, first and last sign-in. Accounts are created at first sign-in from your identity provider (name, email and, from `OIDC_GROUPS_CLAIM`, groups); nothing here edits a person's name or email.
+
+<Screenshot slot="admin-users" />
+
+A person's page shows:
+
+- **Profile and access**: email, first and last sign-in, and the **Platform role**: none, **auditor** (**Make auditor**) or **admin** (**Make platform admin**), or **Remove platform role**. Neither role gives access to a team's recorded call contents through the team's pages. The last platform admin can't be removed.
+- **Teams**: their memberships. Team owners and admins manage members; a platform admin assigns owners on the team's page.
+- **Connected apps**: the MCP clients they signed in with OAuth, per gateway. Platform admins can disconnect them; auditors read.
+- **Connections**: their connected accounts on other services (metadata only, never tokens). Platform admins can disconnect them; auditors read.
+- **Activity**: changes they made, from the audit log.
+
+<Screenshot slot="admin-user-detail" />
+
+### Suspend and reactivate
+
+**Suspend…** signs the person out of the web app immediately and refuses every later request at authentication: their connected apps, API keys and access to teams and gateways stop working. Nothing is deleted: their connected apps, keys, provider connections and memberships are kept, so **Reactivate** restores them (an app may ask them to sign in again). You can't suspend yourself.
+
+## Teams
+
+**Admin › Teams** lists every team. Only platform admins create them: **Create team** with a name, a slug (unchangeable), a description and the owner's email (added at once, or invited if they've never signed in).
+
+A team's admin page has:
+
+- **Overview** and **Members**: members and owners. A platform admin can make someone an owner (promoting a member, adding a person or inviting an email).
+- **Limits & retention**: overrides of the platform's rate limits (per service account and per gateway) and retention periods (call records and recorded contents) for this team. See [Limits](/docs/administer/limits) and [Retention](/docs/administer/retention).
+- **Settings**: the name and description, the team's [publishing policy](/docs/administer/publishing-policy) override, and **Archive team…** / **Unarchive team**.
+
+### Archiving
+
+Archiving makes a team read-only for everyone: members keep read access but can't change anything. While a team is archived its servers leave the catalog, gateway pickers and health checks, its team gateways answer "not found", other gateways show its capabilities as "Team archived", and its service accounts' keys are refused. Archiving changes no data, so **Unarchive team** restores everything.

@@ -1,0 +1,61 @@
+---
+title: What is Open MCP Portal
+description: A self-hosted place where a company's teams register their MCP servers, publish them to a catalog and give people and agents governed access through gateways.
+---
+
+Open MCP Portal is an open-source portal to the [Model Context Protocol](https://modelcontextprotocol.io) (MCP) servers a company runs. Teams register the remote MCP servers they build. The portal reads what each server offers (its tools, resources and prompts), keeps an eye on its health and, after review, lists it in a company **catalog**. Teams and platform admins then curate **gateways**: chosen tools from one or several servers, served at one address, `/mcp/{slug}`.
+
+People connect an AI client such as Claude Code, VS Code or Cursor to a gateway and sign in with their company account. Headless agents, CI jobs and scripts use API keys. Either way, each caller sees only what they may use, and every call is checked again before it is forwarded. Every forwarded call carries a short-lived token, signed by the portal, that tells the MCP server who is calling (a server's team can turn that off for servers run outside the company). The caller's own credential never reaches the server.
+
+<Screenshot slot="my-gateway-connect" />
+
+## What it does
+
+<Cards>
+  <Card title="A company catalog" href="/docs/teams/publishing">
+    Teams register servers, private to the team at first. Publishing to the catalog follows a platform policy: a platform admin reviews each server, or trusted teams publish themselves.
+  </Card>
+  <Card title="Curated gateways" href="/docs/teams/gateways">
+    A gateway offers selected tools, prompts and resources from several servers at one URL. Team gateways serve the team; platform gateways are granted to teams, people or SSO groups.
+  </Card>
+  <Card title="Sign-in for every client" href="/docs/get-started/connect-your-client">
+    Interactive clients sign in with OAuth through your identity provider. Scripts use personal API keys; automation uses team service accounts.
+  </Card>
+  <Card title="Who is calling, signed" href="/docs/server-authors/identity-token">
+    Every forwarded call carries an ES256 identity token with the caller, their teams, the gateway and the tool. Servers verify it against the portal's published keys.
+  </Card>
+  <Card title="Tools that act as you" href="/docs/use/connecting-accounts">
+    A tool can use the caller's own GitHub, Google or other OAuth account. The portal asks for consent once, keeps and refreshes the token, and sends it only to the server that needs it.
+  </Card>
+  <Card title="Records and limits" href="/docs/administer/usage-and-calls">
+    Call records, usage dashboards, an audit log, rate limits shared by every replica, retention, and opt-in recording of call contents with secrets redacted.
+  </Card>
+</Cards>
+
+## How it is built
+
+Open MCP Portal is one Go binary, `open-mcp-portal`, in one container image. It serves the web app, the management API (`/v1/*`), the MCP endpoints (`/mcp/{slug}`), the OAuth endpoints for MCP clients, and health checks. It is stateless: several replicas can share one **PostgreSQL** database, which holds everything, including rate-limit counters. There is no cache, queue or object storage to run. Sign-in uses your OpenID Connect identity provider. See [Operate](/docs/operate).
+
+MCP servers stay where their teams run them. The portal reaches them over Streamable HTTP, through an address guard that allows public addresses and only the internal networks a platform admin has allowed. It doesn't host or run MCP servers, and it isn't an LLM gateway: it doesn't call models.
+
+## Who these docs are for
+
+| You are | Start with |
+|---|---|
+| Someone who uses gateways from an AI client | [Connect your AI client](/docs/get-started/connect-your-client), then [Use](/docs/use) |
+| A developer calling tools from your own agent | [Use from your own agents](/docs/get-started/use-from-your-agents) |
+| A team owner, admin or editor registering servers and building gateways | [Teams](/docs/teams) |
+| A platform admin or auditor | [Administer](/docs/administer) |
+| An operator installing and running it | [Operate](/docs/operate) |
+| Someone who writes MCP servers | [For MCP server authors](/docs/server-authors) |
+| A developer looking for endpoints | [API reference](/docs/api) |
+
+To see it working first, [try it locally](/docs/get-started/try-it-locally) with the demo.
+
+## Project status
+
+Open MCP Portal is **pre-1.0 development software**. These docs describe **v0.1.0**, the first release, which isn't tagged yet: they follow the `main` branch until it is. See [Releases](/docs/releases). In short:
+
+- The management API may change between releases before 1.0. The MCP endpoint follows the MCP specification.
+- There is no published container image yet: you build it from the repository. See [Install with Docker Compose](/docs/operate/compose).
+- Some flows have been tested against fakes and not yet against every real client and provider; the [release notes](/docs/releases/v0-1-0) list what wasn't verified.

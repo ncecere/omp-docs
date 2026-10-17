@@ -1,0 +1,66 @@
+---
+title: Publishing and review
+description: Take a team's MCP server from private to the Open MCP Portal company catalog, under the Approval required or Self-publish policy, and what sends it back to review.
+---
+
+A new server is **private**: only its team sees it, and the team can use it in its own gateways without any review. **Publishing** puts it in the company **catalog**, where everyone can see it and platform admins can add its approved capabilities to platform gateways. Other teams' gateways can select approved capabilities of published servers.
+
+## States
+
+| State | Shown as | Means |
+|---|---|---|
+| `private` | Private | Only this team sees the server |
+| `pending` | Waiting for review | A platform admin is reviewing it; it's not in the catalog yet |
+| `published` | Published | In the catalog with its approved capabilities |
+| `rejected` | Rejected | A platform admin didn't approve it; it stays private to the team, and the team sees the reviewer's note |
+
+## The policy
+
+Your team's **effective policy** is set by platform admins: the platform default, or an override for your team. The server's Overview tab shows it in the **Company catalog** card.
+
+- **Approval required** (the default): a platform admin reviews each server, and each changed capability, before it reaches the catalog.
+- **Self-publish**: the team's owners and admins publish servers and approve changed capabilities themselves, without a review.
+
+## Publish
+
+Team owners and admins publish from the **Company catalog** card on the server's Overview tab:
+
+<Screenshot slot="server-overview" />
+
+
+- Under **Approval required**, **Request review…** asks for a review, with an optional **Note for the reviewer** (what the server is for, who should use it, anything they should check). The server becomes **Waiting for review**. **Withdraw request** stops the review and makes it private again.
+- Under **Self-publish**, **Publish…** publishes at once, with its current capabilities approved as they are. Read them on the Capabilities tab first.
+
+<Screenshot slot="publish-request" />
+
+A server can't be published while it's disabled, or before its capabilities have been read from its current URL (for an OAuth server, before someone authorized it to read them).
+
+Owners and admins can make the server private again at any point: **Withdraw request** (waiting for review), **Remove from catalog…** (published) or **Make private…** (rejected; then **Request review again…** when it's fixed). Once it's private, people in other teams no longer find it in the catalog, and other teams' gateways and platform gateways stop serving its capabilities. Publishing it again follows the policy in force then.
+
+## What the reviewer sees
+
+A platform admin reviewing the server sees its URL, health, capabilities and their definitions, the auth mode and, for OAuth servers, the authorization server (highlighted when its host differs from the server's), registration and scopes, any user authorization requirement and overrides, and your note. They **Approve and publish** or **Reject**, with a note for the team (required to reject). See [Catalog review](/docs/administer/catalog-review).
+
+## What sends a published server back to review
+
+Under **Approval required**, a published server goes back to **Waiting for review** (and leaves the catalog until it's reviewed) when:
+
+- its **URL** changes;
+- it switches to **OAuth** mode, to another authorization server, or asks for a scope it didn't ask for before;
+- a capability's **user authorization requirement widens** (a provider where there was none, another provider, or a new scope).
+
+Narrowing scopes, changing an OAuth client, leaving OAuth mode, removing a requirement, turning off **Send identity token** and turning on recording of call contents don't. Under **Self-publish** none of these changes the state.
+
+**Changed capabilities** don't send the whole server back: each changed or new capability waits for approval on its own (by a platform admin under **Approval required**; by the team's owners and admins under **Self-publish**), and the rest of the server stays in the catalog. See [Capabilities and change detection](/docs/teams/capabilities).
+
+## When the policy changes
+
+Changing the policy never changes any server's state. Servers waiting for review stay waiting until a platform admin reviews them or the team withdraws them; under a new **Self-publish** policy, their owners and admins can simply publish them. Moving back to **Approval required** leaves published servers published.
+
+## The catalog
+
+**Catalog** in the sidebar lists servers that are published and enabled and whose team is active, with only their approved, still-listed capabilities. Each server's page shows its team, health, capabilities and badges such as **Sign-in per person** (an OAuth server), **Needs GitHub (repo)** or **Records call contents**. The catalog shows what a server offers; to use its tools, people connect through a gateway.
+
+<Screenshot slot="catalog" />
+
+<Screenshot slot="catalog-server" />

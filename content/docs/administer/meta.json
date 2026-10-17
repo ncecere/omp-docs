@@ -1,0 +1,26 @@
+{
+  "title": "Administer",
+  "description": "Platform administration: people, the catalog, access and operations",
+  "root": true,
+  "pages": [
+    "index",
+    "first-run",
+    "---People---",
+    "users-and-teams",
+    "---Catalog---",
+    "catalog-review",
+    "publishing-policy",
+    "internal-networks",
+    "---Access---",
+    "platform-gateways",
+    "trusted-clients",
+    "auth-providers",
+    "---Records---",
+    "audit-log",
+    "usage-and-calls",
+    "---Operations---",
+    "limits",
+    "retention",
+    "payload-capture"
+  ]
+}

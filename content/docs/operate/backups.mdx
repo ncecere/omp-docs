@@ -1,0 +1,21 @@
+---
+title: Backups
+description: Back up Open MCP Portal's PostgreSQL database and keep the encryption key and pepper that make a backup usable.
+---
+
+PostgreSQL is Open MCP Portal's only state: teams, servers and their capabilities, gateways, keys (as digests), connections (encrypted), call records, usage, the audit log and every setting made in the web app. Back it up with your usual tooling: managed snapshots, `pg_dump`, or WAL archiving. The repository doesn't ship a backup job.
+
+Keep these **separately** from the backups, somewhere safe:
+
+- `ENCRYPTION_KEY` (and any `ENCRYPTION_KEY_PREVIOUS`): without it, a restored database's MCP server header values, signing keys, client secrets, provider tokens and recorded contents can't be decrypted.
+- `API_KEY_PEPPER`: without it, every API key and service account key stops working, and every connected app signs in again.
+
+Keep the deployment's configuration (environment, `UPSTREAM_ALLOWED_NETWORKS`, the OIDC client) in version control or your secrets store too.
+
+## Restoring
+
+1. Restore the database to a PostgreSQL 17 server.
+2. Start the image of the release the backup came from, or a newer one (migrations only go forward), with the same `ENCRYPTION_KEY` and `API_KEY_PEPPER`.
+3. Run `open-mcp-portal doctor`: `keys encryption` reports any values that can't be decrypted.
+
+What a restore loses: rate-limit counters (they're unlogged and short-lived anyway), and anything written after the backup. Signing keys rotate on their own; MCP servers fetch the JWKS again for an unknown key.

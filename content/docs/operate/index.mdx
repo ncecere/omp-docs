@@ -1,0 +1,38 @@
+---
+title: Running Open MCP Portal
+description: "For operators: what Open MCP Portal needs, how to install it with Docker Compose or Kubernetes, and how to run it."
+---
+
+Open MCP Portal is one stateless binary, `open-mcp-portal`, in one container image. It needs:
+
+- **PostgreSQL 17**: the only state. Every replica shares it, including rate-limit counters.
+- **An OpenID Connect identity provider** for sign-in.
+- **TLS in front of it**: `APP_URL` must be https (an ingress or reverse proxy terminates TLS).
+- **Two secrets** you generate: `ENCRYPTION_KEY` and `API_KEY_PEPPER`.
+
+There is no worker, cache, queue or object storage. The binary serves the web app, the management API, the MCP endpoints, the OAuth endpoints and the background loops (health checks, signing-key rotation, retention, usage rollups).
+
+<Callout type="warn" title="Pre-1.0">
+Open MCP Portal v0.1.0 isn't released yet, and no container image is published: build the image from the repository (`make docker`). The docs follow the `main` branch until the release is tagged.
+</Callout>
+
+| Command | Does |
+|---|---|
+| `open-mcp-portal serve` | The web app, APIs, MCP endpoints and background loops (the default) |
+| `open-mcp-portal migrate` | Applies database migrations and exits |
+| `open-mcp-portal doctor` | Checks the configuration, PostgreSQL, migrations and keys ([Health and doctor](/docs/operate/health-and-doctor)) |
+| `open-mcp-portal rotate-keys` | Re-encrypts stored secrets after an `ENCRYPTION_KEY` change ([Secrets and key rotation](/docs/operate/secrets-and-key-rotation)) |
+| `open-mcp-portal version` | Prints the version |
+
+<Cards>
+  <Card title="Install with Docker Compose" href="/docs/operate/compose">The image, the demo, and a single-instance install.</Card>
+  <Card title="Install on Kubernetes" href="/docs/operate/kubernetes">The Kustomize base and example overlay.</Card>
+  <Card title="Configuration" href="/docs/operate/configuration">Every setting, with its default.</Card>
+  <Card title="Secrets and key rotation" href="/docs/operate/secrets-and-key-rotation">The encryption key, the pepper, and rotating both.</Card>
+  <Card title="Migrations and upgrades" href="/docs/operate/migrations-and-upgrades">Forward-only migrations and rolling upgrades.</Card>
+  <Card title="Scaling" href="/docs/operate/scaling">Replicas, background loops and the database.</Card>
+  <Card title="Health and doctor" href="/docs/operate/health-and-doctor">Probes, graceful shutdown and the doctor command.</Card>
+  <Card title="Metrics" href="/docs/operate/metrics">Prometheus metrics and useful alerts.</Card>
+  <Card title="Backups" href="/docs/operate/backups">What to back up, and what a backup is useless without.</Card>
+  <Card title="Security model" href="/docs/operate/security">What the portal protects, and how.</Card>
+</Cards>

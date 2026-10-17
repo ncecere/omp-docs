@@ -1,0 +1,83 @@
+---
+title: Building gateways
+description: Create a team gateway in Open MCP Portal, choose its capabilities from your servers and the catalog, set minimum roles, rate limits and recording, and connect to it.
+---
+
+A **gateway** is a curated set of capabilities at one MCP endpoint, `<portal URL>/mcp/{slug}`. Team owners and admins create and edit the team's gateways under **Gateways**; every member of the team can read them and connect. Platform admins build [platform gateways](/docs/administer/platform-gateways) the same way and grant them to other teams, people or SSO groups.
+
+Team gateways are for the team's own members only. To share tools with other teams, publish the server and ask a platform admin for a platform gateway.
+
+## Create a gateway
+
+**Gateways** › **Create gateway**:
+
+- **Name** and **Description** (people see them under My gateways).
+- **Slug**: 1 to 48 lowercase letters, digits and hyphens, unique across the platform. It **can't be changed later**: the endpoint is `/mcp/<slug>`.
+- **Enabled**: turned off, the endpoint answers "not found" to everyone.
+
+Then choose its capabilities.
+
+## Choose capabilities
+
+The **Capabilities** tab's **Choose capabilities** picker offers:
+
+- **any capability of your team's own servers**, private or published, as long as the server is enabled and still lists it; and
+- **approved capabilities of published catalog servers**, from any team.
+
+Search by name, title or server, filter by **Server** and **Kind**, and use **Selected only** to review what you picked. Badges show what each capability needs: **Needs GitHub (repo)** for a [user authorization requirement](/docs/teams/user-authorization), a sign-in for OAuth servers, **Server records contents** when its server records call contents. Your selection is kept while you search and page.
+
+<Screenshot slot="gateway-capabilities-picker" />
+
+Rules when you save:
+
+- **Names must be unique** within the gateway, ignoring case and across kinds. Clients see tools and prompts as `{server-slug}__{name}` and resources as `omp://{server-slug}/{uri}`, so two servers never clash, but two capabilities of one server with names differing only in case do.
+- **Resource templates** are offered only when they use simple `{var}` or reserved `{+var}` expressions with one variable each.
+- A capability already selected can stay even while it's unavailable (for example its server left the catalog): every call checks it again, and it comes back when it's available.
+- If someone else saved the gateway while you were editing, the picker says so; saving puts yours over theirs.
+
+<Callout type="warn" title="Untrusted text">
+Names, descriptions and schemas come from the servers, and a model reads them as instructions. Read them before you add a capability.
+</Callout>
+
+## Minimum roles
+
+On a team gateway, each capability has **Who may use**: **Every member** (the default), **Editors and above**, **Admins and owners** or **Owners only**. Callers below the minimum don't see the capability, and their calls are refused. A team service account counts with its own role (member or editor). Platform gateways have no minimum roles: their grants decide who may use them.
+
+## Availability
+
+A selected capability can be unavailable for a while; the Capabilities tab says why, and calls to it are refused:
+
+| Shown as | Means |
+|---|---|
+| No longer listed | The server doesn't list it any more |
+| Team archived | The server's team (or this gateway's team) is archived |
+| Server disabled | Its server is turned off |
+| Left the catalog | A catalog capability whose server was taken off the catalog |
+| Not approved | A catalog capability whose current definition isn't approved |
+| Changed, waiting for approval | Its definition changed since it was approved; it's served again once the change is approved |
+
+Capabilities of your team's own servers need no approval in your team's gateways.
+
+## The gateway's tabs
+
+- **Overview**: the endpoint URL, the gateway at a glance (capabilities, unavailable now, status), whether it records call contents, and a **Connect** card with snippets. See [Connect your AI client](/docs/get-started/connect-your-client).
+- **Capabilities**: the selection and its availability.
+- **Activity**: the gateway's calls (owners and admins). See [Activity and usage](/docs/teams/activity-and-usage).
+- **Settings**: below.
+
+<Screenshot slot="gateway-overview" />
+
+## Settings
+
+- **General**: name, description and **Enabled**. Turned off, the endpoint answers "not found" to everyone; its capabilities and access stay as they are.
+- **Rate limit**: requests per minute from all callers together, 1 to 1,000,000. Inherit the team's or platform's default, or set **This gateway's own limit**, up to the platform's ceiling. The form shows the value that applies now and after saving. Over it, callers get HTTP `429` and are told to retry shortly; each person, key and service account also has its own limit. See [Limits](/docs/administer/limits).
+- **Record call contents**: off by default. See [Recording call contents](/docs/teams/payload-capture).
+- **Delete this gateway**: removes it and its endpoint. Clients connected to it stop working at once, and its slug becomes free. Its call records are kept.
+
+<Screenshot slot="gateway-settings" />
+
+Platform admins can turn a team gateway off and on from Admin › Gateways, and nothing else.
+
+## Who can use it, checked every time
+
+Every request to a gateway checks, in order: the credential, the person (or service account), that the gateway is on and its team active, that the caller may use it, that the capability is still selected and available, the caller's role, and the rate limits. A refused call looks like a call to a tool that doesn't exist. Changes take effect at the next request, with no reconnect.

@@ -1,0 +1,28 @@
+---
+title: Retention
+description: How long Open MCP Portal keeps call records, recorded call contents, the audit log and usage rollups, with team overrides and the retention job.
+---
+
+**Admin › Retention** sets how long records are kept before the retention job deletes them.
+
+<Screenshot slot="admin-retention" />
+
+| Kind | Default | Allowed (days) | Team override |
+|---|---|---|---|
+| **Call records** | 90 days | 1 to 3,650 | Yes |
+| **Recorded call contents** | 14 days | 1 to 90 | Yes |
+| **Audit log** | 400 days | 30 to 3,650 | No |
+| **Usage rollups** | 400 days | 90 to 3,650 | No |
+
+- A call involving two teams (a gateway of one team, a server of another) is kept for the **shorter** of the two teams' periods; with neither, the platform's.
+- Recorded contents go when their own period passes or with their call record, whichever is first.
+- Team overrides are set on the team's admin page (**Limits & retention**); teams see what applies under **Team settings › Limits & retention**.
+- Shortening a period asks for confirmation: the next run permanently deletes what's older.
+
+## The retention job
+
+One replica at a time runs the job every `RETENTION_INTERVAL` (15 minutes by default). It deletes each kind in batches of `RETENTION_BATCH_SIZE` rows (1,000 by default), at most 100 batches per kind per run: recorded contents, then call records, then audit entries, then usage rollups. Call records are never deleted before the usage rollup has counted them. It also clears expired consent links and old rate-limit windows. It's idempotent, and a kind that fails doesn't stop the others.
+
+**Last run** shows when the job last ran, what it deleted per kind ("Nothing deleted" when nothing was due) and any kind that failed. Each run that deleted something writes a `retention.purge` audit entry with counts only.
+
+There are no legal holds or dry runs. Changes are audited as `settings.retention_update` and `team.retention_update`.

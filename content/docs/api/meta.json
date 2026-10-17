@@ -1,0 +1,6 @@
+{
+  "title": "API reference",
+  "description": "The MCP endpoint, the OAuth endpoints and the management API",
+  "root": true,
+  "pages": ["index", "mcp-endpoint", "oauth-endpoints", "---Management API---", "reference"]
+}

@@ -1,0 +1,203 @@
+---
+title: Connect your AI client
+description: Add an Open MCP Portal gateway to Claude Code, VS Code, Cursor, pi, Claude or any MCP client, with OAuth sign-in or an API key.
+---
+
+Every gateway has one MCP endpoint, `<portal URL>/mcp/<gateway slug>`, for example `https://mcp.example.com/mcp/support`. Open MCP Portal serves it over **Streamable HTTP**. You find the URL, with ready-made snippets, under **My gateways** › the gateway › **Connect**, or on the gateway's **Overview** tab.
+
+<Screenshot slot="my-gateway-connect" />
+
+## OAuth sign-in or an API key
+
+| Who connects | Use | Credential |
+|---|---|---|
+| You, in an interactive client (Claude Code, VS Code, Cursor, pi, Claude) | **OAuth sign-in** (the default in the snippets) | None to copy: the client opens your browser, you sign in with your company account, and the client keeps short-lived tokens |
+| You, from a script or a client that can't open a browser | A **personal API key** (`omp_…`) | Account › [API keys](/docs/use/api-keys) |
+| CI, an agent or a job that mustn't depend on one person | A **service account key** (`omp_sa_…`) | Team › [Service accounts](/docs/teams/service-accounts) |
+
+All three see only what the caller may use on that gateway, checked again on every request. Prefer OAuth for yourself: there's no secret to store, and the connection is limited to one gateway. The **Connect** card's snippets use OAuth; turn on **Use an API key instead** for the header variants.
+
+## What happens when you sign in
+
+Add the gateway's URL to your client **without any header**. The first time the client talks to the gateway, the portal answers `401` with a pointer to its sign-in metadata. The client then opens your browser:
+
+1. You sign in with your company account, if you aren't signed in to the portal already.
+2. The consent page names the app, the host that vouches for it, the gateway it wants and where your browser goes back to. Choose **Allow** (or **Deny**).
+3. The browser returns to the app, which now has tokens and refreshes them by itself.
+
+Consent is remembered **per app and gateway**: connecting the same app to another gateway asks again. Apps your platform admins trust (Claude, Claude Code and VS Code out of the box) skip the consent page, but you still sign in.
+
+<Screenshot slot="oauth-consent" />
+
+What a connected app can do:
+
+- It acts as **you**, on **that gateway only**. Its token is refused by every other gateway and by the management API.
+- Every request checks your account (suspended people are refused), your current access to the gateway (removing you from the team or the grant stops it at the next request) and that the connection still exists.
+- Access tokens last an hour. The app refreshes them; each refresh token lasts 30 days and is replaced on every use, so an app used at least monthly stays connected. If a refresh token is used twice (a sign of theft), the connection is revoked and you sign in again.
+- You can disconnect it at any time under Account › [Connected apps](/docs/use/connected-apps).
+
+## Claude Code
+
+<Tabs items={['OAuth sign-in', 'API key']}>
+  <Tab value="OAuth sign-in">
+
+```sh
+claude mcp add --transport http support https://mcp.example.com/mcp/support
+```
+
+The first time Claude Code uses the gateway, it opens your browser to sign in. You can also run `/mcp` in Claude Code and choose the server.
+
+  </Tab>
+  <Tab value="API key">
+
+```sh
+claude mcp add --transport http support https://mcp.example.com/mcp/support \
+  --header "Authorization: Bearer <YOUR_API_KEY>"
+```
+
+  </Tab>
+</Tabs>
+
+## VS Code
+
+Add this to `.vscode/mcp.json` in your workspace (or your user configuration).
+
+<Tabs items={['OAuth sign-in', 'API key']}>
+  <Tab value="OAuth sign-in">
+
+```json
+{
+  "servers": {
+    "support": { "type": "http", "url": "https://mcp.example.com/mcp/support" }
+  }
+}
+```
+
+When VS Code starts the server, it asks you to sign in in your browser.
+
+  </Tab>
+  <Tab value="API key">
+
+```json
+{
+  "inputs": [{ "type": "promptString", "id": "omp-key", "description": "Open MCP Portal API key", "password": true }],
+  "servers": {
+    "support": {
+      "type": "http",
+      "url": "https://mcp.example.com/mcp/support",
+      "headers": { "Authorization": "Bearer ${input:omp-key}" }
+    }
+  }
+}
+```
+
+VS Code asks for the key once and keeps it in its secret storage, never in the file.
+
+  </Tab>
+</Tabs>
+
+## Cursor
+
+Add this to `~/.cursor/mcp.json` (or `.cursor/mcp.json` in a project), then reload Cursor's MCP servers.
+
+<Tabs items={['OAuth sign-in', 'API key']}>
+  <Tab value="OAuth sign-in">
+
+```json
+{
+  "mcpServers": {
+    "support": { "url": "https://mcp.example.com/mcp/support" }
+  }
+}
+```
+
+Cursor shows a sign-in prompt for the server in its MCP settings.
+
+  </Tab>
+  <Tab value="API key">
+
+```json
+{
+  "mcpServers": {
+    "support": {
+      "url": "https://mcp.example.com/mcp/support",
+      "headers": { "Authorization": "Bearer <YOUR_API_KEY>" }
+    }
+  }
+}
+```
+
+  </Tab>
+</Tabs>
+
+## pi
+
+The portal's **Connect** card has no pi tab, but pi speaks Streamable HTTP and OAuth, so the gateway's URL is all it needs.
+
+<Tabs items={['OAuth sign-in', 'API key']}>
+  <Tab value="OAuth sign-in">
+
+```sh
+pi mcp add support --url https://mcp.example.com/mcp/support
+pi mcp login support
+```
+
+`pi mcp login` (or `/mcp` in a session, then **Sign in**) opens your browser. By default pi registers itself with the portal, so the consent page marks it **Unverified** ("It registered itself"). To have it identify with its published client metadata document instead, so the consent page shows "From pi.dev", set `clientRegistration` in `~/.pi/agent/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "support": {
+      "url": "https://mcp.example.com/mcp/support",
+      "oauth": { "clientRegistration": "cimd" }
+    }
+  }
+}
+```
+
+  </Tab>
+  <Tab value="API key">
+
+```sh
+export PORTAL_KEY=<YOUR_API_KEY>
+pi mcp add support --url https://mcp.example.com/mcp/support --bearer-token-env-var PORTAL_KEY
+pi mcp list
+```
+
+pi sends `Authorization: Bearer ${PORTAL_KEY}` with every request.
+
+  </Tab>
+</Tabs>
+
+## Claude (claude.ai and Claude Desktop)
+
+Add a custom connector with the gateway's URL. claude.ai connects from the internet, so the portal must be reachable from the internet for it.
+
+## Other MCP clients
+
+Any client that supports MCP over Streamable HTTP works:
+
+- **With OAuth**: give it the URL with no header. The portal follows the MCP authorization specification: protected-resource metadata at `/.well-known/oauth-protected-resource/mcp/<slug>`, authorization server metadata at `/.well-known/oauth-authorization-server`, authorization code with PKCE (S256 only), and the gateway's URL as the `resource`. Clients identify themselves with a Client ID Metadata Document (preferred) or by registering (Dynamic Client Registration). Redirect URIs must be https, or http on a loopback address. See [OAuth endpoints](/docs/api/oauth-endpoints).
+- **With a key**: send `Authorization: Bearer <key>` on every request.
+
+To check a URL and key from a terminal:
+
+```sh
+curl -X POST https://mcp.example.com/mcp/support \
+  -H "Authorization: Bearer <YOUR_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+## Apps without a metadata document
+
+Clients identify themselves either with a *Client ID Metadata Document* (an https URL their maker publishes; the consent page shows "From &lt;host&gt;") or, for older clients, by registering themselves. Self-registered apps are marked **Unverified** on the consent page: anyone can register any name, so allow one only if you just connected it yourself, and check the host the page says your answer goes to. They are never on the trusted list, a registration unused for 30 days expires (the app registers again), and call records show their calls as "via &lt;name&gt; (unverified)".
+
+If the browser shows **Can't connect this app**, the app's request was refused before anything was shared: an unknown app, a redirect address the app never registered, or a metadata document the portal can't fetch. Errors after that (no PKCE, a URL that isn't one of your gateways, a gateway you can't use) go back to the app, which usually shows them.
+
+## Next
+
+- Tools that need your account on another service: [Connecting accounts](/docs/use/connecting-accounts).
+- Something doesn't work: [Troubleshooting](/docs/use/troubleshooting).
+- Calling tools from your own code: [Use from your own agents](/docs/get-started/use-from-your-agents).

@@ -1,0 +1,69 @@
+---
+title: v0.1.0
+description: "The first release of Open MCP Portal (not yet released): registry and catalog, gateways, client sign-in and service accounts, delegated credentials, per-person upstream OAuth and operations."
+---
+
+**Not yet released.** These notes describe the `main` branch, which will become v0.1.0. Migrations `00001` to `00013`.
+
+The first version of Open MCP Portal: a self-hosted portal where teams register MCP servers, publish them to a company catalog, curate gateways and give people and agents governed access.
+
+## Foundations
+
+- One Go binary (`open-mcp-portal`: `serve`, `migrate`, `doctor`, `rotate-keys`, `version`) with the web app built in, and PostgreSQL 17 as the only dependency, with forward-only expand/contract migrations.
+- Configuration from environment variables or a YAML file (`OMP_CONFIG_FILE`), with secrets from `<NAME>_FILE`. Production safety checks refuse the example keys, development sign-in and an http `APP_URL` off loopback.
+- OpenID Connect sign-in, a one-time bootstrap platform admin, server-side sessions with CSRF and `Origin` checks, and a loopback-only development sign-in.
+- Platform admins and auditors; teams with owners, admins, editors and members; invites; an append-only audit log.
+- The web app: workspace and admin modes, a team switcher and a command palette.
+
+## Registry and catalog
+
+- Team-owned remote MCP servers over Streamable HTTP, with discovery of tools, prompts, resources and resource templates, change detection by fingerprint, scheduled health checks and encrypted static header values.
+- A company catalog under the **Approval required** or **Self-publish** policy, with per-team overrides, review of servers and changed capabilities, and automatic return to review when a published server's URL, upstream sign-in or user authorization widens.
+- An address guard on every outbound connection, and an allowlist of internal networks and hosts (Admin › Internal networks and `UPSTREAM_ALLOWED_NETWORKS`).
+
+## Gateways
+
+- Team and platform gateways at `/mcp/{slug}` (stateless Streamable HTTP), mixing capabilities of several servers, with minimum team roles and grants to teams, people and SSO groups. Tools and prompts are exposed as `{server}__{name}`, resources as `omp://{server}/{uri}`.
+- Every forwarded call carries a 5-minute ES256 identity token (JWKS at `/.well-known/jwks.json`, keys rotating every 30 days and published a day ahead), with a per-server switch to stop sending it to servers outside the company.
+- Personal API keys (`omp_…`), optionally limited to some gateways, and call records without arguments or results.
+
+## Sign-in for MCP clients and service accounts
+
+- An OAuth 2.1 authorization server for gateways: PKCE S256, Client ID Metadata Documents and Dynamic Client Registration, one gateway per connection, per-person consent, trusted clients (Claude, Claude Code and VS Code out of the box), rotating refresh tokens with reuse detection. Tokens `ompat_`, `omprt_`, codes `ompac_`, registered clients `ompcl_`.
+- Account › Connected apps, and Admin › Users › a person's connected apps.
+- Team service accounts with member or editor roles and expiring keys (`omp_sa_…`, two active for rotation).
+- Connect snippets for Claude Code, VS Code, Cursor and curl on every gateway.
+
+## Delegated credentials
+
+- Auth providers with presets for GitHub, Google, Microsoft Entra ID, Atlassian, Slack and GitLab, or any OAuth 2.0 provider.
+- User authorization requirements on servers, with per-capability overrides.
+- Consent links (JSON-RPC `-32042`) that work once, for 10 minutes, for one person; tokens encrypted, refreshed under a row lock and revocable under Account › My connections; sent to servers in `MCP-Gateway-Provider-Token`.
+- A Gmail example server (`examples/mail-mcp`).
+
+## Per-person OAuth to OAuth-protected servers
+
+- A **Sign-in with OAuth, per person** mode for servers that are OAuth resource servers themselves, such as GitHub's hosted MCP server: **Detect sign-in** (RFC 9728, RFC 8414 and OpenID Connect discovery), a client from a metadata document, dynamic registration, a client entered by hand or a linked platform provider, a setup sign-in that reads capabilities, each caller's own token with refresh and step-up, and health checks that accept the sign-in challenge.
+- SEP-2243 `Mcp-Param-*` headers on forwarded tool calls, built from the approved definition.
+
+## Operations
+
+- Rate limits shared by every replica, per person, per key or app, per service account and per gateway, with ceilings and team overrides (`429`, JSON-RPC `-32029`).
+- Opt-in recording of call contents per gateway or server: redacted (built-in rules and your patterns), truncated to 16 KiB, encrypted, with audited views.
+- Retention with team overrides; hourly usage rollups and dashboards for teams and platform admins.
+- Prometheus metrics (`omp_*`) on `METRICS_ADDR`; encryption key and pepper rotation (`rotate-keys`, `ENCRYPTION_KEY_PREVIOUS`, `API_KEY_PEPPER_PREVIOUS`); `doctor`.
+- A distroless image, a demo Compose file, and a Kustomize base and example overlay.
+
+## Verified
+
+Besides the test suites: Claude Code's real client signed in to a gateway with OAuth (through its metadata document, as a trusted client) and called tools; pi signed in (registering itself, through the consent page) and called tools; and GitHub's hosted MCP server ran end to end in per-person OAuth mode, with a GitHub App as the client, each person signing in with their own GitHub account, and six tools called from pi.
+
+## Not verified yet
+
+- Delegated credentials against a real Google or Microsoft provider: providers were run only against a fake OAuth provider. The presets were checked against the providers' documentation.
+- VS Code and Cursor sign-in, and upstream servers that use Client ID Metadata Documents or dynamic registration in practice.
+- The CI workflow on GitHub's runners, and a smoke test on a real Kubernetes cluster (the manifests are only rendered and schema-checked).
+
+## Upgrading from a development build
+
+Development builds from before the product was renamed used other key and token prefixes. Those keys and tokens no longer authenticate: create new keys and sign MCP clients in again. Recording of call contents still redacts the old prefixes. Migration `00013` updates the database.

@@ -1,0 +1,42 @@
+---
+title: For MCP server authors
+description: What an MCP server behind Open MCP Portal receives, which requests reach it, and how it should trust them.
+---
+
+Your MCP server keeps running where your team runs it. Open MCP Portal connects to it as an MCP client over **Streamable HTTP**, reads its capabilities, and forwards the calls people and agents make through gateways. These pages are about what reaches your server and how to trust it.
+
+<Cards>
+  <Card title="The identity token" href="/docs/server-authors/identity-token">The signed JWT that says who is calling, and how to verify it against the portal's JWKS.</Card>
+  <Card title="Provider tokens" href="/docs/server-authors/provider-tokens">The person's own token for GitHub, Google or another service, and the checks to make before you use it.</Card>
+  <Card title="OAuth-protected servers" href="/docs/server-authors/oauth-servers">What the portal expects from a server that runs its own OAuth sign-in.</Card>
+  <Card title="Parameter headers" href="/docs/server-authors/parameter-headers">Tool arguments the portal also sends as Mcp-Param-* headers.</Card>
+  <Card title="The mail example" href="/docs/server-authors/mail-example">A Gmail server that relies on the portal's delegated credentials.</Card>
+</Cards>
+
+## What your server receives
+
+- **Discovery.** When the server is registered, refreshed or its URL changes, the portal sends `initialize` and lists every kind of capability you advertise: tools, prompts, resources and resource templates, page by page (at most 500 per kind). It never calls a tool to discover it.
+- **Health checks.** Every few minutes (5 by default), an MCP exchange to see that you answer. Plus a check whenever someone presses **Test connection** or **Refresh capabilities**.
+- **Calls.** `tools/call`, `prompts/get` and `resources/read`, only for capabilities a gateway selected and a caller was allowed to use. Lists never reach you: clients get the definitions the portal stored and approved.
+
+The portal is stateless: each call is its own MCP session, so it performs the `initialize` handshake again before each call. Answer in JSON or as an SSE stream; the portal reads either.
+
+Every forwarded call carries the [identity token](/docs/server-authors/identity-token) (unless your team turned off **Send identity token**), your static header if you registered one, and where relevant a [provider token](/docs/server-authors/provider-tokens) or, for an [OAuth-protected server](/docs/server-authors/oauth-servers), the person's own bearer token. The caller's own API key or OAuth token **never** reaches you.
+
+## What the portal does with your answers
+
+- Names: clients see your tool `check_outage` of server `status` as `status__check_outage`, and your resource `status://services` as `omp://status/status://services`. A `resources/read` arrives with your own URI (the prefix is stripped), and `contents[].uri` in your answer is rewritten for the client.
+- `_meta["io.modelcontextprotocol/serverInfo"]` is removed from results: clients talk to the portal, and your server's name and version aren't theirs to see. Other `_meta` entries pass through.
+- `structuredContent` that isn't a JSON object is dropped from results, and an `outputSchema` that isn't an object is dropped from tool lists, as the MCP schema requires.
+- Requests and responses are limited to 1 MiB, and every exchange to your server's timeout (1 to 120 seconds, set by your team).
+- Redirects are never followed, and the portal never sends sampling, elicitation or roots requests to you or relays yours.
+
+## Definitions are reviewed
+
+What you list (names, titles, descriptions, schemas) is shown to models as instructions, so platform admins review it before it reaches the catalog. When a definition changes on a published server, that capability leaves the catalog until the change is approved. Keep descriptions stable and honest, and don't put data that changes between calls in definitions: use `_meta`, which the portal leaves out of fingerprints. See [Capabilities and change detection](/docs/teams/capabilities).
+
+Annotations (read-only, destructive, idempotent and open-world hints) are shown to people but never trusted for any decision.
+
+## Your server decides what callers may do
+
+The portal has already checked that the caller may use this tool through this gateway. Your server still decides what they may do with it: read the identity token's `principal_type`, `sub`, `email` and `teams` and apply your own rules.

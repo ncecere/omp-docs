@@ -1,0 +1,6 @@
+{
+  "title": "Get started",
+  "description": "What Open MCP Portal is and how to connect to it",
+  "root": true,
+  "pages": ["index", "concepts", "quick-tour", "connect-your-client", "use-from-your-agents", "try-it-locally"]
+}

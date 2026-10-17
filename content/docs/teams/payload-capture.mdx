@@ -1,0 +1,52 @@
+---
+title: Recording call contents
+description: Opt-in recording of tool call arguments and results in Open MCP Portal, per gateway or per server, with secrets redacted, a time limit and audited views.
+---
+
+By default, call records hold only metadata: who called what, when and how it went. A team can turn on **Record call contents** for a gateway or a server to keep the **arguments and results** too, for debugging and review. It is off by default, and callers are told when it's on.
+
+## Turning it on
+
+- **On a gateway**: the gateway's **Settings** › **Record call contents**. Team owners and admins for team gateways; platform admins for platform gateways.
+- **On a server**: the server's **Settings** › **Record call contents**. The server team's owners and admins (editors can't change it).
+
+A forwarded call is recorded if its gateway's switch **or** its server's switch was on at the time. Turning it on asks for confirmation and states who can read the recordings and for how long. It applies from the next call; turning it off keeps recordings already made for their retention period. It isn't a review trigger: the server already receives every argument and returns every result.
+
+<Screenshot slot="gateway-settings" />
+
+## What is recorded
+
+- For `tools/call` and `prompts/get`: the call's arguments, and the result the client received (or the server's error). For `resources/read`: the URI read, and the contents.
+- When there's no result (timeout, unreachable server, an answer too large), only the arguments.
+- **Never**: HTTP headers, the identity token, provider tokens, the caller's own key or token, or the server's static header value. Lists and anything refused before forwarding (denied, rate limited, needed a connection) are never recorded.
+
+## Redaction, then truncation
+
+Before anything is stored, the portal walks the JSON and redacts:
+
+1. **Sensitive member names**: values of members named like `password`, `secret`, `token`, `access_token`, `refresh_token`, `id_token`, `api_key`, `authorization`, `cookie`, `set-cookie`, `client_secret`, `private_key` or `session_id` (compared in lower case, without `-` and `_`) become `"[REDACTED]"`.
+2. **Built-in rules** in every string: bearer tokens, JWTs, the portal's own keys and tokens, GitHub, GitLab and Slack tokens, Google tokens and API keys, AWS access key IDs, PEM private keys, and user names and passwords in URLs.
+3. **Your organisation's patterns**, which platform admins add in Admin › [Payload capture](/docs/administer/payload-capture).
+4. **This call's own secrets**: the identity token, provider token, the caller's credential and the server's static header value, wherever they appear (in case a server echoes them).
+5. Image, audio and binary data become `"[binary N bytes]"`.
+
+Strings that hold a JSON document are parsed and redacted the same way. Then each part (arguments, result) is cut to **16 KiB** at a character boundary; a cut part is marked and is no longer valid JSON. The record keeps how many values were redacted, never what they were. Recordings are encrypted at rest.
+
+Redaction is a safety net, not a guarantee: values that look like nothing in particular (an employee number, a customer's name) are kept unless a pattern matches them.
+
+## Who can read them
+
+- The **owners and admins of the team whose switch recorded the call**: the gateway's team if the gateway's switch did it, the server's team if the server's did. Another team involved in the call can't read them.
+- **Platform admins and auditors**, from Admin › Calls.
+
+Opening a call's contents (**View contents**) shows a notice first: every view is recorded in the audit log with the viewer's name and the time, and the team that recorded the call sees platform staff's views in its own audit log.
+
+<Screenshot slot="call-detail-payload" />
+
+## How long they're kept
+
+14 days by default. Platform admins set the period (at most 90 days) and teams can have their own. Contents are deleted when their period passes or when their call record is deleted, whichever comes first. See [Retention](/docs/administer/retention).
+
+## What callers see
+
+**My gateways**, the gateway picker and the catalog mark gateways and servers that record contents: **Records what you send** and **Records call contents**. Callers are told that the gateway's owners can read what they send (with secrets removed first), so they should avoid sending anything they wouldn't share with them.

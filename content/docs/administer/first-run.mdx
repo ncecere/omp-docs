@@ -1,0 +1,47 @@
+---
+title: First run
+description: Make the first platform admin of a new Open MCP Portal installation, create the first team and check the settings that matter on day one.
+---
+
+A new installation has no platform admin and no teams. Signing in alone gives nobody any role.
+
+<Steps>
+<Step>
+
+### Make the first platform admin
+
+Before the first sign-in, set `BOOTSTRAP_ADMIN_SUBJECT` to the OpenID Connect subject (`sub`) of the person who should be the first platform admin. On that identity's first sign-in, the portal makes them a platform admin, once: if they're demoted later, signing in again doesn't restore the role. Then they can make others platform admins or auditors in **Admin › Users**. See [Configuration](/docs/operate/configuration#sign-in).
+
+</Step>
+<Step>
+
+### Create the first team
+
+**Admin › Teams** › **Create team**: a name, a slug (used in the team's addresses and unchangeable), a description and the **owner's email**. The owner is added at once, or invited if they've never signed in. Only platform admins create teams; set `TEAM_REQUEST_URL` to point people at your request form.
+
+</Step>
+<Step>
+
+### Allow internal networks, if servers run inside
+
+Teams' servers must be at public https addresses unless you allow internal networks and hosts in **Admin › [Internal networks](/docs/administer/internal-networks)** (or the deployment's `UPSTREAM_ALLOWED_NETWORKS`).
+
+</Step>
+<Step>
+
+### Check the defaults
+
+- **Admin › [Publishing](/docs/administer/publishing-policy)**: Approval required, out of the box.
+- **Admin › [Trusted clients](/docs/administer/trusted-clients)**: Claude, Claude Code and VS Code skip the consent screen.
+- **Admin › [Limits](/docs/administer/limits)**: 600 requests per minute per person, 300 per key or app, 1,200 per service account, none per gateway.
+- **Admin › [Retention](/docs/administer/retention)**: call records 90 days, recorded contents 14, audit log and usage 400.
+
+</Step>
+<Step>
+
+### Add auth providers, if tools act as people
+
+If teams' tools need people's GitHub, Google or other accounts, add those services in **Admin › [Auth providers](/docs/administer/auth-providers)**.
+
+</Step>
+</Steps>

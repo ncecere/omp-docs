@@ -1,0 +1,32 @@
+---
+title: Scaling
+description: "Run several Open MCP Portal replicas: what's shared in PostgreSQL, which background loops run once, and how to size the database."
+---
+
+Open MCP Portal is stateless: scale it horizontally. Any replica can serve any request; there are no sticky sessions. Browser sessions, sign-in state, rate-limit counters and everything else live in PostgreSQL. `/mcp/{slug}` keeps no MCP session between requests.
+
+## Background loops
+
+| Loop | How often | Runs on |
+|---|---|---|
+| MCP server health checks | `HEALTH_CHECK_INTERVAL` (5 minutes) | One replica at a time (advisory lock); a server checked within the last 90% of the interval is skipped |
+| Identity signing-key rotation | Checked hourly | One replica at a time |
+| Retention | `RETENTION_INTERVAL` (15 minutes) | One replica at a time |
+| Usage rollups | Every 5 minutes | One replica at a time |
+| Old rate-limit windows; expired sessions and consent links | Every minute; every 15 minutes | Every replica (idempotent deletes) |
+
+`omp_loop_leader{loop="retention"}` and `{loop="usage_rollup"}` say which replica led each loop's latest run.
+
+## Settings caches
+
+Some settings are cached per replica for up to 30 seconds: internal networks, rate-limit settings, redaction patterns. The replica that saves a change applies it at once; the others within 30 seconds. Trusted clients, team overrides and gateway limits are read on each request.
+
+## Rate limits
+
+Limits on `/mcp/{slug}`, the OAuth endpoints, connection starts, sign-in and the management API are counted in one PostgreSQL table in fixed one-minute windows, shared by every replica. One `/mcp` request is one statement. A single gateway's counter row is fine up to a few thousand requests per second. The table is unlogged: counters may be lost on a crash or failover, which only resets the current minute. Client addresses are stored only as SHA-256 digests. Put the ingress's own limits in front of unauthenticated traffic, which isn't counted.
+
+## The database
+
+Each replica holds a connection pool; size PostgreSQL's `max_connections` (or a pooler) for replicas × pool size. `omp_db_pool_*` metrics show how busy the pool is.
+
+Calls are buffered: a call holds a request for up to its server's timeout (at most 120 seconds) and at most 1 MiB each way.

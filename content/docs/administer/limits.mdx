@@ -1,0 +1,44 @@
+---
+title: Limits
+description: Rate limits on Open MCP Portal's gateways per person, per key or app, per service account and per gateway, with defaults, ceilings and team overrides.
+---
+
+**Admin › Limits** sets how many requests per minute callers may send to gateways. Limits are counted in PostgreSQL in fixed one-minute windows, so every replica shares the same counters.
+
+<Screenshot slot="admin-limits" />
+
+## The four limits
+
+| Limit | Counts | Built-in default | Team override |
+|---|---|---|---|
+| **Per person** | Every request by one person to any gateway, with any API key or connected app | 600 | No |
+| **Per API key or connected app** | Requests with one personal API key or one OAuth connection | 300 | No |
+| **Per service account** | Requests by one service account, all its keys together | 1,200 | Yes |
+| **Per gateway** | Requests to one gateway from all callers together | Unlimited | Yes, and each gateway can set its own |
+
+Values are 1 to 1,000,000 per minute, or unlimited. The two overridable limits also have a **ceiling** (or none): team overrides and a gateway's own limit may be above or below the default, but not above the ceiling.
+
+What applies:
+
+- a service account: the team's override, else the default;
+- a gateway: the gateway's own limit, else (for a team gateway) the team's override, else the default.
+
+Both are capped at the current ceiling. Lowering a ceiling keeps the stored values and caps them when they're applied; the page counts the teams and gateways it caps. Team overrides are set on the team's admin page (**Limits & retention**); a gateway's own limit on its **Settings** tab. Changes apply on every replica within 30 seconds.
+
+## What counts
+
+Every authenticated request to `/mcp/{slug}` that reaches a gateway counts: `initialize`, `ping`, notifications, lists and calls, including refused ones. Requests answered `401` or `404` don't count, so put the ingress's own limits in front of unauthenticated traffic.
+
+## Over a limit
+
+The request isn't forwarded. The caller gets HTTP `429` with `Retry-After` (seconds to the end of the window, at least 1) and a JSON-RPC error `-32029`, such as "Rate limit exceeded (person); try again in 12 s", with `data.reason` `rate_limited`, the limit's key, `limitPerMinute` and `retryAfterSeconds`. When several limits are exceeded, the most specific is named (key or app, person, service account, gateway). The call is recorded with outcome **Rate limited**.
+
+Counted responses carry `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` for the caller's own tightest limit (person, key or app, or service account); gateway-wide counts are never shown to callers.
+
+A minute boundary can let up to twice a limit through in a short burst. Counters may be lost on a database crash or failover (the table is unlogged), which only resets the current minute.
+
+## Other limits
+
+The same counters also limit, per client address or person: the OAuth endpoints (60 a minute per address on authorize, token and revoke; 10 on registration), starting a connection (20 a minute per person), detecting a server's sign-in (10 a minute per person), sign-in (`LOGIN_ATTEMPTS_PER_MINUTE`, 20) and the management API (`REQUESTS_PER_MINUTE`, 600 per person). Client addresses are stored only as SHA-256 digests. See [Configuration](/docs/operate/configuration).
+
+Changes are audited as `settings.limits_update` and `team.limits_update`.

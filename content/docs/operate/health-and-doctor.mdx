@@ -1,0 +1,48 @@
+---
+title: Health and doctor
+description: Open MCP Portal's liveness and readiness endpoints, start-up and graceful shutdown, and the doctor command that checks configuration, PostgreSQL, migrations and keys.
+---
+
+## Probes
+
+| Endpoint | Means | Use for |
+|---|---|---|
+| `/healthz` | The process is up. It never checks dependencies, so a database outage doesn't restart pods | Liveness and start-up probes |
+| `/readyz` | PostgreSQL answers within 2 seconds and the replica isn't draining; otherwise `503` with the failing check | Readiness, load balancer health |
+
+## Start-up
+
+`serve` validates the configuration (including the [safety checks](/docs/operate/configuration#safety-checks)) and stops with a message if anything is wrong. It then waits up to 3 minutes for PostgreSQL to answer, checks that the schema is current (or migrates, with `MIGRATE_ON_START=true`), and only then opens its listener. The Kubernetes base's start-up probe allows 4 minutes.
+
+## Graceful shutdown
+
+On SIGTERM the portal fails `/readyz` and waits `SHUTDOWN_DELAY`, so endpoints and load balancers stop sending traffic, then gives in-flight requests `SHUTDOWN_TIMEOUT` to finish. A call can wait up to 120 seconds for its MCP server, so the Kubernetes base sets 10 seconds and 125 seconds, with `terminationGracePeriodSeconds: 150`. The grace period must exceed the two together: raise all three together.
+
+## doctor
+
+```sh
+open-mcp-portal doctor                 # human-readable; --json for JSON
+open-mcp-portal doctor --mode migrate  # check the configuration migrate needs
+kubectl -n open-mcp-portal exec deploy/open-mcp-portal -c portal -- /open-mcp-portal doctor
+```
+
+`doctor` uses the same configuration as the other commands and checks, each with a status (ok, info or failed), a duration and a fix where it has one:
+
+| Check | What it looks at |
+|---|---|
+| `configuration` | The settings load and are valid for the mode (`serve` by default) |
+| `safety production` | The production safety checks: no example keys, no `DEV_AUTH`, https `APP_URL` (info on a loopback `APP_URL`) |
+| `postgres connect` | PostgreSQL answers, and its version |
+| `postgres migrations` | The schema's version against the binary's, and pending migrations |
+| `keys encryption` | Stored secrets per encryption key, values that can't be decrypted, and whether `ENCRYPTION_KEY_PREVIOUS` can be removed |
+| `keys pepper` | Keys still on the previous pepper, and whether `API_KEY_PEPPER_PREVIOUS` can be removed |
+
+Each check has a time limit (`--timeout`, 10 seconds by default). `doctor` exits `1` if any check failed, so you can use it in scripts and after upgrades.
+
+## Logs
+
+Logs are structured, on stdout (`LOG_FORMAT=json` by default, or `text`), at `LOG_LEVEL`. Every response carries an `X-Request-ID`, also logged and shown on call pages and in the audit log. Secrets, tokens and header values are never logged.
+
+## MCP server health
+
+The health of teams' MCP servers is a feature, not an operator concern: see [Capabilities and change detection](/docs/teams/capabilities#health). `omp_mcp_servers{state="failing"}` counts failing servers.

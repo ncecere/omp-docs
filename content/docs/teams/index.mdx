@@ -1,0 +1,55 @@
+---
+title: For teams
+description: "For team owners, admins and editors in Open MCP Portal: registering MCP servers, publishing them to the catalog, building gateways and running service accounts."
+---
+
+In Open MCP Portal, teams own the MCP servers they run and the gateways their members use. A platform admin creates each team and names its first owner; owners and admins then manage its members under **Team settings**.
+
+What each role can do in a team:
+
+| | Member | Editor | Admin | Owner |
+|---|---|---|---|---|
+| Use the team's gateways (subject to minimum roles) | ✓ | ✓ | ✓ | ✓ |
+| Read the team's servers, gateways and service accounts | ✓ | ✓ | ✓ | ✓ |
+| Register, edit, test and refresh servers; set user authorization | | ✓ | ✓ | ✓ |
+| See the team's usage and audit log | | ✓ | ✓ | ✓ |
+| Publish, unpublish and delete servers; record call contents | | | ✓ | ✓ |
+| Create and edit team gateways and service accounts | | | ✓ | ✓ |
+| Read call records | | | ✓ | ✓ |
+| Manage members and invites | | | ✓ | ✓ |
+| Add, change or remove owners | | | | ✓ |
+
+The usual path:
+
+<Steps>
+<Step>
+
+### Register your server
+
+Enter its URL, detect how it signs people in, and save. The portal reads its tools, prompts and resources. See [Registering an MCP server](/docs/teams/register-a-server).
+
+</Step>
+<Step>
+
+### Check what it offers
+
+Read the capabilities on the server's **Capabilities** tab: descriptions and schemas are text a model will read. See [Capabilities and change detection](/docs/teams/capabilities).
+
+</Step>
+<Step>
+
+### Build a gateway
+
+Your team can use its own server straight away in a team gateway, without publishing it. See [Building gateways](/docs/teams/gateways).
+
+</Step>
+<Step>
+
+### Publish it, if other teams should use it
+
+Publishing puts the server in the company catalog, after a platform admin's review unless your team may self-publish. See [Publishing and review](/docs/teams/publishing).
+
+</Step>
+</Steps>
+
+An **archived** team is read-only: its servers leave the catalog, its gateways answer "not found", and its service accounts' keys stop working, until a platform admin unarchives it. Archiving changes no data.

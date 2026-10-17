@@ -1,0 +1,20 @@
+{
+  "title": "Operate",
+  "description": "Installing, configuring and running Open MCP Portal",
+  "root": true,
+  "pages": [
+    "index",
+    "---Install---",
+    "compose",
+    "kubernetes",
+    "configuration",
+    "---Run---",
+    "secrets-and-key-rotation",
+    "migrations-and-upgrades",
+    "scaling",
+    "health-and-doctor",
+    "metrics",
+    "backups",
+    "security"
+  ]
+}

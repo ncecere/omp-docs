@@ -1,0 +1,34 @@
+---
+title: Metrics
+description: Open MCP Portal's Prometheus metrics on METRICS_ADDR, their labels, and useful alerts.
+---
+
+Set `METRICS_ADDR` (for example `:9090`) to serve Prometheus metrics at `/metrics` on a listener of its own. It has **no authentication**: allow only your monitoring system to reach it (the Kubernetes example overlay has a NetworkPolicy from the `monitoring` namespace and an example `ServiceMonitor`).
+
+Labels never carry user, key, service account, team or request IDs. Gateway, server and provider slugs are limited to existing objects (at most `METRICS_MAX_OBJECTS`, 200 by default, each; then `other`), and their series are dropped when the object is deleted.
+
+| Metric | Labels |
+|---|---|
+| `omp_build_info` | `version`, `commit` |
+| `omp_mcp_requests_total`, `omp_mcp_request_duration_seconds` | `method` (MCP methods, `notification`, else `other`), `outcome` |
+| `omp_mcp_call_duration_seconds` | `gateway`, `server` (buckets from 5 ms to 120 s, as in usage) |
+| `omp_mcp_rate_limited_total` | `limit` (`person_per_minute`, `credential_per_minute`, `service_account_per_minute`, `gateway_per_minute`) |
+| `omp_payload_captures_total`, `omp_payload_capture_errors_total`, `omp_payload_redactions_total` | `rule` (redactions) |
+| `omp_provider_token_refresh_total` | `provider`, `result` (`ok`, `refused`, `unavailable`) |
+| `omp_server_health_checks_total`, `omp_mcp_servers` | `result` / `state` (`healthy`, `failing`, `unknown`) |
+| `omp_http_requests_total`, `omp_http_request_duration_seconds` | `route` (the registered pattern), `method`, `code` (`2xx`, …) |
+| `omp_retention_deleted_total`, `omp_retention_last_success_timestamp_seconds` | `kind` |
+| `omp_usage_rollup_last_success_timestamp_seconds`, `omp_loop_leader` | `loop` |
+| `omp_db_pool_*` | Connections acquired, idle, total and maximum; acquires, empty acquires and wait time |
+
+Plus the Go runtime and process collectors. `omp_mcp_requests_total` counts requests to `/mcp/{slug}` that reached a gateway.
+
+## Useful alerts
+
+- `omp_payload_capture_errors_total` increasing: recordings are failing (calls still succeed).
+- No replica with `omp_loop_leader{loop="retention"} == 1` for an hour, or `omp_retention_last_success_timestamp_seconds` too old: old data isn't being deleted.
+- `omp_usage_rollup_last_success_timestamp_seconds` older than 15 minutes: dashboards are stale.
+- `omp_mcp_servers{state="failing"} > 0`: a team's server is down.
+- A high rate of `omp_mcp_rate_limited_total`, or of `omp_provider_token_refresh_total{result="unavailable"}`.
+
+There are no ready-made dashboards, alert rules or tracing yet.

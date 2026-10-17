@@ -1,0 +1,68 @@
+---
+title: Capabilities and change detection
+description: How Open MCP Portal reads a server's tools, prompts, resources and resource templates, notices changed definitions, and checks the server's health.
+---
+
+A server's **capabilities** are what it lists: tools, prompts, resources and resource templates. Open MCP Portal reads them when the server is created, when its URL changes and when an editor chooses **Refresh capabilities** on the **Overview** tab. Gateways and the catalog never contact the server to list them: clients get the definitions the portal stored and approved.
+
+<Screenshot slot="server-capabilities" />
+
+## Reading capabilities
+
+A refresh connects to the server and lists every kind it advertises, page by page. It never calls a tool. Limits keep a misbehaving server from flooding the portal:
+
+- at most 500 entries per kind, and at most 500 pages; a repeated cursor stops the listing;
+- each response at most 1 MiB, and a single definition at most 64 KiB (more fails the refresh);
+- titles clipped to 200 characters and descriptions to 10,000; names and URIs up to 1,000 characters (longer or invalid entries are skipped).
+
+A kind the server advertises but answers with "method not found" counts as empty. For a server in OAuth mode, the refresh uses the connection of the person who authorized it ("Capabilities read as …"); if that connection lapsed, or that person is no longer an editor or above, the refresh asks someone to authorize again.
+
+The **Capabilities** tab lists what was read, by kind, with each item's description and the hints the server declares (read-only, destructive, idempotent, open world). The portal shows those hints but never trusts them for any decision.
+
+<Callout type="warn" title="Untrusted text">
+Names, descriptions and schemas come from the server, and a model reads them as instructions. Read them before you publish a server or approve a change.
+</Callout>
+
+## Fingerprints and changes
+
+The portal stores each capability's definition as canonical JSON (sorted keys, without `_meta`, which servers use for data that changes between calls) and its SHA-256 **fingerprint**. On each refresh it compares:
+
+- **Approved** means the current definition is the one that was approved, and the server still lists it.
+- **Changed**: on a published server, a definition that differs from the approved one. A changed capability drops out of the catalog and stops being served by gateways that use it as a catalog capability, at once, without anyone acting, until the change is approved.
+- **New**: on a published server, a capability listed for the first time isn't approved either.
+- **Gone**: a capability the server no longer lists. Its approval is withdrawn; if it comes back, it needs approval like a new one.
+
+A refresh never approves anything. The server's pending-changes count covers changed and new capabilities. Each refresh reports how many were listed, added, changed and gone, and is recorded in the audit log.
+
+Who approves: a platform admin under **Approval required**; the team's owners and admins under **Self-publish** (**Approve change** on the capability, after reading its definition). Private servers need no approval for the team's own gateways: a team gateway serves the team's own servers' capabilities as they are now. See [Publishing and review](/docs/teams/publishing).
+
+## Health
+
+Each server's health comes from checks:
+
+- **Scheduled**: every `HEALTH_CHECK_INTERVAL` (5 minutes by default), the portal checks every enabled server of every active team, four at a time, on one replica.
+- **Test connection** on the Overview tab runs a check now.
+- Every **Refresh capabilities** also stores a check.
+
+The **Health** tab lists the latest 100 checks: ok or failed, latency, what triggered it, the HTTP status and a short message with secrets redacted. A failing server shows since when.
+
+<Screenshot slot="server-health" />
+
+| Error | Means |
+|---|---|
+| Couldn't reach the server | A network error, or an HTTP error other than those below (such as `5xx`) |
+| Credentials refused | The server answered `401` or `403` |
+| Not found: check the URL | `404` |
+| Rate limited | `429` |
+| Request refused | `400`, or a JSON-RPC invalid request or invalid params error |
+| Unexpected response: is this an MCP server? | The answer wasn't valid MCP, or was cut off |
+| Settings problem | The stored header value can't be decrypted (for example after an encryption key change without the previous key) |
+| No answer in time | The server's timeout passed |
+| Response too large | Over 1 MiB |
+| Address not allowed: private, loopback or a redirect | Blocked by the address guard, or the server redirected |
+
+For a server in OAuth mode, scheduled checks use nobody's token: an unauthenticated `initialize` that gets the expected `401` challenge for this server counts as healthy, shown as **Reachable — requires sign-in**. **Test connection** uses the setup person's connection.
+
+## Disabling a server
+
+Turning a server off in **Settings** stops checks and calls, and removes it from the catalog; gateways show its capabilities as unavailable ("Server disabled") until it's turned on again.

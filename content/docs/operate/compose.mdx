@@ -1,0 +1,90 @@
+---
+title: Install with Docker Compose
+description: Build the Open MCP Portal image, try the demo, and run a single instance with Docker Compose behind TLS.
+---
+
+## The image
+
+```sh
+git clone https://github.com/ncecere/open-mcp-portal
+cd open-mcp-portal
+make docker                         # open-mcp-portal:<git describe>
+docker run --rm open-mcp-portal:<tag> version
+```
+
+- The image is distroless: the binary is `/open-mcp-portal` (the entrypoint) and there is no shell. Commands: `serve` (default), `migrate`, `doctor`, `rotate-keys`, `version`.
+- It runs as UID/GID 65532, listens on port 8088 (`LISTEN_ADDR`) and needs no writable filesystem.
+- There's no `HEALTHCHECK` (no shell or curl): probe `/healthz` and `/readyz` from your orchestrator.
+- Multi-arch: `docker buildx build --platform linux/amd64,linux/arm64 --build-arg VERSION=… --build-arg COMMIT=… .` The web app and Go builds run on the build platform and cross-compile.
+
+No image is published yet; push the one you build to your own registry.
+
+## The demo
+
+`make demo` (`docker compose -f compose.demo.yaml up --build`) runs the portal, PostgreSQL and a fake MCP server with development sign-in on [http://localhost:8090](http://localhost:8090). It is for trying things on your own machine only. See [Try it locally](/docs/get-started/try-it-locally).
+
+## A single instance
+
+The repository has no production Compose file. For a small install, write your own along these lines: the portal and PostgreSQL 17, with TLS terminated by a reverse proxy you already run in front of port 8088.
+
+```yaml
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: omp
+      POSTGRES_DB: omp
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+    secrets: [postgres-password]
+    volumes: [postgres:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omp -d omp"]
+      interval: 5s
+      retries: 30
+
+  portal:
+    image: registry.example.com/open-mcp-portal:v0.1.0   # the image you built and pushed
+    command: ["serve"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_URL: https://mcp.example.com
+      LISTEN_ADDR: :8088
+      MIGRATE_ON_START: "true"          # fine for one instance; see Migrations
+      OIDC_ISSUER: https://idp.example.com
+      OIDC_CLIENT_ID: open-mcp-portal
+      BOOTSTRAP_ADMIN_SUBJECT: "<the first admin's OIDC sub>"
+      TRUSTED_PROXIES: 172.16.0.0/12    # your reverse proxy's addresses
+      DATABASE_URL_FILE: /run/secrets/database-url
+      ENCRYPTION_KEY_FILE: /run/secrets/encryption-key
+      API_KEY_PEPPER_FILE: /run/secrets/api-key-pepper
+      OIDC_CLIENT_SECRET_FILE: /run/secrets/oidc-client-secret
+    secrets: [database-url, encryption-key, api-key-pepper, oidc-client-secret]
+    ports: ["127.0.0.1:8088:8088"]
+    read_only: true
+    restart: unless-stopped
+
+secrets:
+  postgres-password: { file: ./secrets/postgres-password }
+  database-url: { file: ./secrets/database-url }        # postgres://omp:<password>@postgres:5432/omp?sslmode=disable
+  encryption-key: { file: ./secrets/encryption-key }    # openssl rand -base64 32
+  api-key-pepper: { file: ./secrets/api-key-pepper }    # openssl rand -base64 32 (a different value)
+  oidc-client-secret: { file: ./secrets/oidc-client-secret }
+
+volumes:
+  postgres: {}
+```
+
+Then:
+
+1. Register `https://mcp.example.com/auth/callback` as the redirect URI of the portal's client at your identity provider.
+2. Point your reverse proxy's host at port 8088, with read timeouts of a few minutes (a call can wait up to 120 seconds for its MCP server) and request bodies of at least 1 MiB. Route every path to the portal, including `/mcp/`, `/oauth/`, `/connect/` and `/.well-known/`.
+3. `docker compose up -d`, then `docker compose exec portal /open-mcp-portal doctor` to check everything.
+4. Sign in as the bootstrap admin and follow [First run](/docs/administer/first-run).
+
+Every setting is in [Configuration](/docs/operate/configuration). Keep the encryption key and pepper somewhere safe besides the server: see [Backups](/docs/operate/backups).
+
+<Callout type="warn" title="Never reuse the demo's settings">
+Off a loopback `APP_URL`, `serve` refuses to start with the example `ENCRYPTION_KEY` or `API_KEY_PEPPER` from `.env.example`, with `DEV_AUTH=true`, or with an `http://` `APP_URL`.
+</Callout>

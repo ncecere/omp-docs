@@ -1,0 +1,35 @@
+---
+title: API overview
+description: Open MCP Portal's three HTTP surfaces (the MCP endpoint, the OAuth endpoints and the management API), their conventions and the generated reference.
+---
+
+Open MCP Portal serves three HTTP surfaces from one origin, its `APP_URL`:
+
+- **The MCP endpoint**, `POST /mcp/{slug}`: one per gateway, Streamable HTTP, for MCP clients and agents. It's JSON-RPC, so it isn't in the OpenAPI document. See [The MCP endpoint](/docs/api/mcp-endpoint).
+- **The OAuth endpoints** under `/oauth/` and `/.well-known/`: the authorization server MCP clients sign in with, and the JWKS MCP servers verify identity tokens with. See [OAuth endpoints](/docs/api/oauth-endpoints).
+- **The management API** under `/v1`, plus `/auth/*` and the health checks: everything the web app does. It's described by an OpenAPI 3.0 document that covers every route (a test in the product repository enforces it). See the [reference](/docs/api/reference/operations/getHealthz), generated from that document.
+
+<Cards>
+  <Card title="The MCP endpoint" href="/docs/api/mcp-endpoint">Methods, protocol versions, names, error codes and limits.</Card>
+  <Card title="OAuth endpoints" href="/docs/api/oauth-endpoints">Discovery metadata, authorize, token, register, revoke and the JWKS.</Card>
+</Cards>
+
+## The management API
+
+The management API serves the web app. It authenticates **browser sessions only**: a request with an `Authorization` header is refused (`401`), so API keys and OAuth tokens can't call it. It **may change between releases** before 1.0.
+
+Conventions:
+
+- **Responses** are `{"data": ...}` on success and `{"error": {"code": "...", "message": "...", "details": ...}}` on failure. Every response carries `X-Request-ID`.
+- **Writes** need the session's CSRF token in `X-CSRF-Token` (from `GET /v1/me`) and a same-origin `Origin`. JSON bodies are decoded strictly: unknown fields are refused.
+- **Edits** use revisions: objects carry a `revision` and an `ETag`, and updates send `If-Match`. A missing `If-Match` is `428`, a stale one `412`.
+- **Lists** use cursors (`cursor`, `limit`, 50 by default, at most 200) and search with `q`.
+- **IDs** are UUIDs; teams, servers and gateways also have immutable slugs.
+- **Not allowed and not found look alike**: people outside a team get `404` for its objects.
+- **Rate limit**: `REQUESTS_PER_MINUTE` per person (600 by default), `429` with `Retry-After`.
+
+The tags group the routes: sign-in, me, teams, MCP servers, catalog, gateways and calls, API keys, OAuth consent and connected apps, service accounts, auth providers, connections, limits, retention, usage and admin.
+
+## Keeping the reference current
+
+The reference is generated at build time from `openapi/open-mcp-portal.yaml` in this documentation's repository, a copy of `api/openapi.yaml` from the Open MCP Portal release these docs describe (v0.1.0, which follows `main` until it's tagged). The product repository's copy is the source of truth.

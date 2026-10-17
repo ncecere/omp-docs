@@ -1,0 +1,34 @@
+---
+title: Parameter headers
+description: Tool arguments marked with x-mcp-header in an input schema, which Open MCP Portal also sends as Mcp-Param-* HTTP headers on forwarded tool calls.
+---
+
+A tool's input schema may mark an argument with `"x-mcp-header": "<Name>"`. A client then also sends that argument's value in an `Mcp-Param-<Name>` HTTP header on `tools/call`, so servers and proxies can route on it without parsing the body (SEP-2243, in the MCP 2026-07-28 revision). GitHub's hosted MCP server requires them, for `owner` and `repo`.
+
+Open MCP Portal opens a new MCP session for each call, so it builds these headers itself from the **approved definition** of the tool, as listed when the server was discovered:
+
+```json
+{
+  "name": "list_issues",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "owner": { "type": "string", "x-mcp-header": "Owner" },
+      "repo": { "type": "string", "x-mcp-header": "Repo" }
+    }
+  }
+}
+```
+
+A call with `{"owner": "example", "repo": "tools"}` is forwarded with `Mcp-Param-Owner: example` and `Mcp-Param-Repo: tools`.
+
+## Rules
+
+- Only properties of the input schema, including nested object properties (up to 8 levels), whose argument is present and not `null`.
+- Only string, boolean and integer values (integers within ±2<sup>53</sup>−1). Other values send no header.
+- The name after `Mcp-Param-` must be an HTTP token of at most 64 characters.
+- Values longer than 1,024 characters send no header.
+- A value with characters outside printable ASCII, or with leading or trailing spaces or tabs, is sent base64-encoded as `=?base64?…?=`.
+- At most 32 such headers per call.
+
+The arguments in the body are unchanged: headers are a copy, not a replacement. Lists, prompts and resource reads never carry them.

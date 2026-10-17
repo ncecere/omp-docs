@@ -1,0 +1,111 @@
+---
+title: Configuration
+description: Every Open MCP Portal setting, its default and bounds, from environment variables, a YAML file or secret files.
+---
+
+Open MCP Portal reads its settings when it starts. Everything else (publishing policy, internal networks, trusted clients, auth providers, limits, retention, redaction patterns) is set in the web app by platform admins and stored in PostgreSQL.
+
+## Where settings come from
+
+In order, later sources winning:
+
+1. built-in defaults;
+2. an optional **YAML file** named by `OMP_CONFIG_FILE`. It's flat: keys are the lower-case variable names, for example `app_url: https://mcp.example.com`. Lists can be YAML lists. Unknown keys are refused;
+3. **environment variables**.
+
+**Secrets** (marked below) can also be read from a file named by `<NAME>_FILE` (or `<name>_file` in the YAML file), for example `DATABASE_URL_FILE=/run/secrets/database-url`, which is how Kubernetes and Compose secrets are mounted. A `_FILE` variable wins over the plain one. Surrounding whitespace is trimmed.
+
+An invalid value stops the process with a message naming the setting. `open-mcp-portal doctor` checks the configuration without starting the server.
+
+## Core
+
+| Setting | Default | Notes |
+|---|---|---|
+| `APP_URL` | none (required by `serve`) | The public origin people and MCP clients use, such as `https://mcp.example.com`: scheme and host (and port), no path. Used for cookies, sign-in redirects, `Origin` checks, the identity token's `iss`, gateway URLs and OAuth metadata. Must be https unless it's a loopback address |
+| `LISTEN_ADDR` | `:8088` | The HTTP listener |
+| `DATABASE_URL` (secret) | none (required) | `postgres://user:pass@host:5432/db?sslmode=require`; URL-encode the password. `migrate` needs only this |
+| `MIGRATE_ON_START` | `false` | Apply migrations when `serve` starts. For a single instance only; otherwise run `migrate` first |
+| `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
+| `LOG_FORMAT` | `json` | `json` or `text`, on stdout |
+| `TRUSTED_PROXIES` | none | Comma-separated CIDRs of proxies allowed to set `X-Forwarded-For` (your ingress), used for logging and per-address rate limits |
+| `SHUTDOWN_DELAY` | `5s` | On SIGTERM, how long `/readyz` fails before the listener stops accepting, so load balancers notice (0 to 5 minutes) |
+| `SHUTDOWN_TIMEOUT` | `60s` | Then how long in-flight requests get to finish (1 second to 30 minutes). Calls can wait up to 120 seconds for an MCP server; the Kubernetes base sets 10s and 125s |
+
+## Sign-in
+
+| Setting | Default | Notes |
+|---|---|---|
+| `OIDC_ISSUER` | none | Your identity provider's issuer URL. Empty turns OpenID Connect off; then `serve` needs `DEV_AUTH`, which only works on a loopback `APP_URL`. Discovery happens at the first sign-in, so a wrong issuer shows up then, and in the logs. Register `${APP_URL}/auth/callback` as the redirect URI |
+| `OIDC_CLIENT_ID` | none | Required with `OIDC_ISSUER` |
+| `OIDC_CLIENT_SECRET` (secret) | none | Required with `OIDC_ISSUER` |
+| `OIDC_SCOPES` | `openid,profile,email` | Must include `openid` |
+| `OIDC_EMAIL_CLAIM` | `email` | The claim holding the email address |
+| `OIDC_GROUPS_CLAIM` | `groups` | The claim holding the person's groups, for [group grants](/docs/administer/platform-gateways); empty stores none |
+| `OIDC_REQUIRE_VERIFIED_EMAIL` | `true` | Require `email_verified`. Team invites are accepted only for verified emails |
+| `OIDC_ALLOWED_EMAIL_DOMAINS` | none (anyone the provider signs in) | Comma-separated domains allowed to sign in |
+| `BOOTSTRAP_ADMIN_SUBJECT` | none | The OIDC `sub` made platform admin at its first sign-in. It takes effect once: a later demotion isn't undone by signing in again |
+| `SESSION_TTL` | `12h` | How long a browser session lasts (5 minutes to 30 days) |
+| `DEV_AUTH` | `false` | Development sign-in with fixed personas and no password. Refused unless `APP_URL` is a loopback address. Never on a reachable host |
+
+## Keys
+
+| Setting | Default | Notes |
+|---|---|---|
+| `ENCRYPTION_KEY` (secret) | none (required by `serve`) | 32 random bytes, base64 (`openssl rand -base64 32`). Encrypts MCP server header values, identity signing keys, auth provider client secrets, people's provider tokens, PKCE verifiers, consent links and recorded call contents |
+| `ENCRYPTION_KEY_PREVIOUS` (secret) | none | The previous key during a rotation: values sealed with it still decrypt until `rotate-keys` re-encrypts them |
+| `API_KEY_PEPPER` (secret) | none (required by `serve`) | 32 random bytes, base64, different from the encryption key. Keys the HMAC that stores API keys, service account keys and OAuth tokens. Rotate it with `API_KEY_PEPPER_PREVIOUS`, never by just replacing it |
+| `API_KEY_PEPPER_PREVIOUS` (secret) | none | The previous pepper: keys and tokens made with it keep working, and keys are re-digested on use. Must differ from `API_KEY_PEPPER` |
+| `SIGNING_KEY_PREPUBLISH` | `24h` | How long a new identity signing key is published in the JWKS before it signs (0 to 7 days). Keys rotate every 30 days |
+
+See [Secrets and key rotation](/docs/operate/secrets-and-key-rotation).
+
+## Internal networks
+
+| Setting | Default | Notes |
+|---|---|---|
+| `UPSTREAM_ALLOWED_NETWORKS` | none | Internal networks and hosts MCP servers (and auth providers' endpoints) may use besides public addresses. Comma-separated: a network or address (`10.20.0.0/16`, `fd00:1234::/32`, `10.20.0.5`) or a host name (`mcp.corp.example.com`, `*.corp.example.com` for subdomains only). Prefix an entry with `http:` to also allow plain http: `10.20.0.0/16,http:*.svc.cluster.local,mcp.corp.example.com`. Shown read-only in Admin › Internal networks; an invalid entry stops the server. See [Internal networks](/docs/administer/internal-networks) |
+
+## Background work
+
+| Setting | Default | Notes |
+|---|---|---|
+| `HEALTH_CHECK_INTERVAL` | `5m` | How often enabled MCP servers are checked: `0` (off) or 30 seconds to 24 hours. One replica at a time |
+| `RETENTION_INTERVAL` | `15m` | How often the retention job runs (1 minute to 24 hours). Periods are set in Admin › Retention |
+| `RETENTION_BATCH_SIZE` | `1000` | Rows deleted per transaction (10 to 100,000) |
+
+## Rate limits
+
+| Setting | Default | Notes |
+|---|---|---|
+| `REQUESTS_PER_MINUTE` | `600` | Management API (`/v1`) requests per signed-in person (1 to 1,000,000) |
+| `LOGIN_ATTEMPTS_PER_MINUTE` | `20` | Sign-in attempts per client address (1 to 10,000) |
+
+Both are counted in PostgreSQL and shared by every replica. Limits on `/mcp/{slug}` are set in [Admin › Limits](/docs/administer/limits).
+
+## Metrics
+
+| Setting | Default | Notes |
+|---|---|---|
+| `METRICS_ADDR` | empty (off) | Serve Prometheus metrics at `/metrics` on this separate listener, such as `:9090`. No authentication: restrict it with network policy. Must differ from `LISTEN_ADDR` |
+| `METRICS_MAX_OBJECTS` | `200` | How many gateway, server and provider slugs are used as label values (10 to 10,000); others become `other` |
+
+## The instance
+
+| Setting | Default | Notes |
+|---|---|---|
+| `INSTANCE_NAME` | `Open MCP Portal` | The name in the web app and page titles (1 to 100 characters) |
+| `ORG_NAME` | none | Your organisation's name, as in "Use your Example Corp account to continue" (up to 200 characters) |
+| `UI_THEME` | `neutral` | The only theme |
+| `UI_LOGO_URL` | none | Your logo: an https URL or a same-origin path such as `/logo.svg`. Without it, the product's mark is shown |
+| `SUPPORT_URL` | none | The **Help** link in the account menu: an http(s) URL or a `mailto:` address |
+| `TEAM_REQUEST_URL` | none | Where people request a team, such as a service desk form (http or https). Shown to people who aren't on a team |
+
+## Safety checks
+
+Unless `APP_URL` is a loopback address, `serve` refuses to start when:
+
+- `ENCRYPTION_KEY` or `API_KEY_PEPPER` (or `API_KEY_PEPPER_PREVIOUS`) is the public example value from the repository's `.env.example`;
+- `DEV_AUTH=true`;
+- `APP_URL` is `http://`.
+
+`serve` also needs a sign-in method: OpenID Connect, or development sign-in on a loopback address. `migrate` needs only `DATABASE_URL`, and applies the safety checks only when `APP_URL` is set.

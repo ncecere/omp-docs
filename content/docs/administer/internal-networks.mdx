@@ -1,0 +1,45 @@
+---
+title: Internal networks
+description: Allow teams' MCP servers on internal networks and hosts in Open MCP Portal, optionally over plain http, and check a URL against the rules.
+---
+
+Out of the box, Open MCP Portal connects only to MCP servers at **public** addresses over https. **Admin › Internal networks** lists the internal networks (CIDRs) and host names that teams' servers may also use. The same rules apply to auth providers' token, revocation and userinfo endpoints, to OAuth client metadata documents, and to the discovery of OAuth-protected servers.
+
+<Screenshot slot="admin-internal-networks" />
+
+## Three kinds of address
+
+| Kind | Examples | Allowed |
+|---|---|---|
+| **Always blocked** | Loopback (`127.0.0.0/8`, `::1`), link-local including cloud metadata (`169.254.0.0/16`, `169.254.169.254`, `fe80::/10`), unspecified (`0.0.0.0`, `::`), `0.0.0.0/8`, multicast, broadcast, other metadata addresses (`168.63.129.16`, `100.100.100.200`, `fd00:ec2::254`), their IPv4-mapped, IPv4-compatible and NAT64 forms, and the names `localhost` and `*.localhost` | Never, whatever the list says |
+| **Public** | Allocated public unicast | Over https |
+| **Private** | Everything else: RFC 1918, CGNAT, ULA, documentation and reserved ranges | Only when an entry allows it |
+
+## Entries
+
+**Add network or host**:
+
+- **Network** (`cidr`): an IPv4 or IPv6 prefix such as `10.20.0.0/16` or `fd00:1234::/32`, or a single address. Servers whose address is inside it, typed in the URL or resolved from its host name, are allowed. A prefix entirely inside an always-blocked range is refused.
+- **Host** (`host`): an exact name such as `mcp.corp.example.com`, or `*.corp.example.com` for its subdomains (`a.corp.example.com`, `a.b.corp.example.com`, but not `corp.example.com` itself or `evilcorp.example.com`). The internal addresses it resolves to are allowed. Names are ASCII (use punycode for international names), compared without case or a trailing dot; no scheme, port or path.
+- **Allow plain http**: for URLs whose host matches this name, or is a literal address inside this network. A name that merely resolves into an http-allowed network still needs https.
+- **Note**: why this is allowed, or who owns it (up to 200 characters).
+
+Up to 100 entries. Edits are staged; **Save networks** asks for confirmation. The replica that saves applies the change at once; other replicas within 30 seconds.
+
+**From deployment config** lists entries set by the deployment in `UPSTREAM_ALLOWED_NETWORKS`, read-only here; both lists apply together. See [Configuration](/docs/operate/configuration#internal-networks).
+
+## Check a URL
+
+**Check a URL** tells you whether the portal would connect to an MCP server URL now, with the saved list: it looks the host up (for at most 3 seconds) but never contacts it, and shows the verdict, the reason (public, a matching network or host entry, or why it's refused) and each resolved address with its own verdict.
+
+## When it's enforced
+
+- When a server is saved: the URL's form, the scheme, literal addresses and `localhost`.
+- Before every exchange (refresh, test, health check, call): the stored URL against the current list.
+- Every time the portal connects: **every** address the host resolves to must be allowed, and the connection is pinned to the checked addresses, so DNS rebinding to a blocked address is refused even for a host entry. Redirects are never followed and proxy settings are ignored.
+
+Removing an entry never edits servers: a server outside the new rules fails its next exchange with "Address not allowed", and its health shows failing.
+
+<Callout title="Network policies too">
+In Kubernetes, the portal's egress NetworkPolicies must allow the same networks and ports. If the portal approves an address but the policy drops the traffic, the server's health shows a timeout, not "Address not allowed". See [Kubernetes](/docs/operate/kubernetes#network-policies).
+</Callout>

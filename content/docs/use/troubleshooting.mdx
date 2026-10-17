@@ -1,0 +1,24 @@
+---
+title: Troubleshooting
+description: What 401, 404, 429, missing tools, consent links and repeated consent prompts mean when you use Open MCP Portal's gateways.
+---
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| `401` with `error="invalid_token"` | The key or token was revoked or expired, you're suspended, the service account is turned off or its team archived, or an OAuth token was used on another gateway than the one it was issued for | Sign in again, or use a valid key |
+| `404 Gateway not found` | The gateway doesn't exist or is turned off, you (or the service account) can't use it, its team is archived, or the key is limited to other gateways | Check the URL under My gateways, and the key's gateways under API keys |
+| `429` and JSON-RPC `-32029` "Rate limit exceeded" | You, your key or app, your service account, or the gateway as a whole went over its requests per minute. `Retry-After` says when to retry | Wait and retry; ask a platform admin if the limit is too low for your use |
+| A tool you expect is missing | It isn't selected in this gateway, its server is turned off, unpublished or its change isn't approved yet, or your team role is below the tool's minimum | Check the gateway's page under My gateways; ask the gateway's team |
+| `Unknown tool` (`-32602`) on a call that worked before | The same reasons, changed since your client listed the tools: every call is checked again | Ask your client to list tools again |
+| `-32042` with a link | The tool needs your account on another service, or needs you to sign in to its MCP server | Open the link in your browser, connect, then run the tool again. See [Connecting accounts](/docs/use/connecting-accounts) |
+| `-32010` with `service_account` | Service accounts can't use tools that act as a person | Use those tools as yourself |
+| `-32010` with `provider_disabled` or `provider_unavailable` | The service's auth provider is turned off, or the service didn't answer when the portal refreshed your token | Try again later, or ask a platform admin |
+| The connect link says "This link was made for someone else" | You're signed in to the portal as another person, or someone else's tool produced the link | Sign in as yourself, then run the tool again for a new link |
+| The connect link says "This link expired" | Links last 10 minutes and work once | Run the tool again |
+| The browser keeps asking for consent | The app isn't trusted and you disconnected it, or it connects to a different gateway (one consent per gateway) | Allow it once per gateway |
+| The browser shows "Can't connect this app" | The app's request was refused before anything was shared: an unknown app, a redirect address it never registered, or a metadata document the portal can't fetch | Try connecting again from the app; if it persists, tell the app's maker or a platform admin |
+| A tool result is an error with `isError: true` | The MCP server ran the tool and reported a failure | Read the message; it comes from the server, not the portal |
+
+Requests and responses are limited to 1 MiB, and a call waits at most the server's timeout (at most 120 seconds). A larger answer fails as too large.
+
+The team that owns a gateway can look up a call in its call records (owners and admins) if you tell them roughly when you made it and through which gateway.

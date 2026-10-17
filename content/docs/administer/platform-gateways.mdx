@@ -1,0 +1,37 @@
+---
+title: Platform gateways
+description: Build platform gateways in Open MCP Portal from approved catalog capabilities and grant them to teams, people or SSO groups.
+---
+
+**Admin › Gateways** lists every gateway: the teams' and the platform's. Platform admins create and edit **platform gateways**, which share catalog tools across teams. Auditors read everything.
+
+## Create one
+
+**Create platform gateway**: name, slug (1 to 48 lowercase letters, digits and hyphens, unique across the platform and unchangeable; the endpoint is `/mcp/<slug>`), description and **Enabled**. Then choose capabilities on its **Capabilities** tab, exactly as for a [team gateway](/docs/teams/gateways#choose-capabilities), with two differences:
+
+- only **approved capabilities of published servers** can be selected;
+- there are **no minimum roles**: the grants decide who may use it.
+
+## Access
+
+A platform gateway's **Access** tab lists its **Grants**. Nobody can use it until it's granted. **Grant access** to:
+
+| Grant to | Covers |
+|---|---|
+| **Team** | Everyone on the team, including people who join later, and the team's **service accounts** |
+| **Person** | Someone who has signed in at least once, by email |
+| **SSO group** | Everyone whose identity provider reported the group at their last sign-in. Enter the name exactly as it appears in the groups claim, such as `engineering` or `cn=engineering,ou=groups` (compared case-sensitively) |
+
+<Screenshot slot="gateway-access" />
+
+Grants take effect on the next request; people it covers see the gateway under My gateways. Removing a grant cuts access on the next call, unless another grant covers them. Service accounts are covered only by team grants: a grant to a person or group never covers a service account, and there are no grants to individual service accounts.
+
+Group grants use `users.groups`, the groups the identity provider sent at the person's last sign-in through `OIDC_GROUPS_CLAIM` (`groups` by default). People see their groups on their Profile.
+
+## Team gateways in Admin
+
+Platform admins can see every team gateway and turn it **off and on** (for example to stop an abused endpoint), and nothing else: its capabilities and settings belong to the team. A platform admin uses a team gateway only as a member of its team, and a platform gateway only when a grant covers them.
+
+## Settings and records
+
+Platform gateways have the same **Settings** as team gateways: a [rate limit](/docs/administer/limits) of their own, **Record call contents** (readable by platform admins and auditors), and **Delete**. Their **Activity** tab lists their calls. Changes are audited (`gateway.create`, `gateway.capabilities_set`, `gateway.grant_add`, `gateway.grant_remove`, …).

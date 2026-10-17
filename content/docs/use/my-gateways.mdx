@@ -1,0 +1,40 @@
+---
+title: My gateways
+description: The gateways you can connect to in Open MCP Portal, why you have access, what each offers you, and its connect snippets.
+---
+
+**My gateways** (in the sidebar's Workspace section) lists every gateway you can connect your AI clients to. Each offers you only the tools, prompts and resources you may use.
+
+<Screenshot slot="my-gateways" />
+
+## The list
+
+Each gateway shows its name, description, how many capabilities it offers you right now and **why you have access**:
+
+| Badge | Means |
+|---|---|
+| **Member of &lt;team&gt;** | A team gateway of a team you're on |
+| **Granted to your team** | A platform gateway granted to one of your teams |
+| **Granted to you** | A platform gateway granted to you by name |
+| **Granted to your SSO group** | A platform gateway granted to one of your identity provider's groups (the badge names it) |
+
+Platform gateways also carry a **Platform gateway** badge. **Records what you send** means calls through it may be recorded with their arguments and results: the gateway records them, or the server of at least one capability it offers you does. See [Recording call contents](/docs/teams/payload-capture).
+
+A gateway that is turned off, or whose team is archived, isn't listed. If you expected a gateway and don't see it, ask the team's owners or admins, or a platform admin for platform gateways.
+
+Group grants use the groups your identity provider sent at your last sign-in; your **Profile** lists them. If your groups changed, sign out and in again.
+
+## A gateway's page
+
+Open a gateway to see:
+
+- **Connect**: the endpoint URL and snippets for Claude Code, VS Code, Cursor and curl. **Name in your client** changes the name the snippets give the gateway; **Use an API key instead** switches to the header variants. See [Connect your AI client](/docs/get-started/connect-your-client).
+- **What it offers you**: the capabilities you can use right now, with the names clients see: `{server-slug}__{name}` for tools and prompts, `omp://{server-slug}/{uri}` for resources (a template's `{variables}` are filled in by the client). Capabilities that need a higher team role than yours, or whose server is unavailable, aren't listed.
+- **Accounts it needs**: the services some of its tools act on as you, such as GitHub or Google, or MCP servers you sign in to yourself, each **Connected** or **Not connected**, with a **Connect** button. See [Connecting accounts](/docs/use/connecting-accounts).
+- A notice when the gateway records what you send.
+
+<Screenshot slot="my-gateway-connect" />
+
+## Who decides what you see
+
+The gateway's owners choose its capabilities; you see the subset you may use. Every request checks again, so a change takes effect at once: if someone removes a capability, raises its minimum role, unpublishes its server or removes your access, your next call is refused even if your client listed the tool earlier. A refused call looks the same as a call to a tool that doesn't exist (`Unknown tool`).

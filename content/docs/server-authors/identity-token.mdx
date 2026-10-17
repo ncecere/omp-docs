@@ -1,0 +1,184 @@
+---
+title: The identity token
+description: The short-lived ES256 JWT Open MCP Portal sends with every forwarded call, its claims, where it arrives, and how to verify it against the JWKS in Go, Python and TypeScript.
+---
+
+When someone calls a tool, gets a prompt or reads a resource through a gateway, Open MCP Portal forwards the request to your MCP server with a short-lived **identity token**: a JWT signed by the portal that says who is calling, through which gateway and for which tool. Verify it before you trust it. It is the only credential from the caller that reaches your server: the portal never forwards the client's own API key, service account key or OAuth token.
+
+The caller is either a **person** (with a personal API key, or through an MCP client they connected with OAuth sign-in) or a team **service account** (a headless agent, CI job or script). The `principal_type` claim says which.
+
+## Where it arrives
+
+| Your server's authentication (set when it was registered) | The token arrives as |
+|---|---|
+| None, or a static header other than `Authorization` (for example `X-API-Key`) | `Authorization: Bearer <jwt>` |
+| A static `Authorization` header | `MCP-Gateway-Identity: <jwt>` (the bare token). Your static `Authorization` value is sent unchanged |
+| Sign-in with OAuth, per person | `MCP-Gateway-Identity: <jwt>`. `Authorization: Bearer` carries the person's own token for your server. See [OAuth-protected servers](/docs/server-authors/oauth-servers) |
+| Any mode with **Send identity token** off | Not sent at all |
+
+With no static header, your server can act as an ordinary OAuth resource server that accepts bearer tokens signed with the portal's keys. The header names keep `Gateway`: they describe what reaches your server, a call relayed through a gateway, and they won't change. Teams can't register a static header named `MCP-Gateway-Identity`, `MCP-Gateway-Provider` or `MCP-Gateway-Provider-Token`.
+
+**Send identity token** is on by default. Teams are advised to turn it off for servers run outside the company, so that people's names, emails and teams aren't sent to a third party. The identity token is sent only with calls: not with discovery, tests or health checks.
+
+## What to check
+
+| Item | Value |
+|---|---|
+| Algorithm | `ES256` only (header `alg`); the header `kid` names the key |
+| Keys | `GET <APP_URL>/.well-known/jwks.json`: a JWK Set with the key that signs now, the next key (published at least a day before it signs) and any key retired in the last day. Cache it for up to 5 minutes (`Cache-Control: max-age=300`), and fetch it again when a token has a `kid` you haven't seen |
+| `iss` | The portal's URL, its `APP_URL`, for example `https://mcp.example.com` |
+| `aud` | **Your server's URL exactly as registered**, for example `https://status.example.com/mcp`. Reject a token minted for another server |
+| `exp`, `nbf`, `iat` | `exp` is 5 minutes after `iat`, and `nbf` 30 seconds before it. Allow a little clock skew |
+
+Signing keys rotate every 30 days. A cached set normally already holds the next key, but the very first key signs as soon as it exists, so always refetch for an unknown `kid` (and rate-limit refetches).
+
+## The claims
+
+| Claim | Meaning |
+|---|---|
+| `principal_type` | `user` for a person, `service_account` for a team service account. Always present |
+| `sub` | A person's user ID, or the service account's ID (stable UUIDs). Check `principal_type` before treating `sub` as a person |
+| `email` | A person's email at the time of the call. **Absent for service accounts** |
+| `name` | A person's display name, or the service account's name (such as `ci-release-bot`) |
+| `teams` | Slugs of the person's teams; for a service account, its own team only |
+| `gateway` | The gateway's slug |
+| `tool` / `prompt` | The exposed name of the tool (`tools/call`) or prompt (`prompts/get`): `{server-slug}__{name}` |
+| `resource` | The exposed URI read (`resources/read`): `omp://{server-slug}/{your-uri}`, for example `omp://status/status://services/email`. Exactly one of `tool`, `prompt` and `resource` is set |
+| `client` | For a client connected with OAuth, the client's name as it signed in (such as `Claude Code`), with `client_verified`. Otherwise the MCP client's `clientInfo.name` when the request carried it, else the name of the API key or service account key |
+| `client_verified` | Present whenever `client` comes from an OAuth client. `true`: the client is identified by a Client ID Metadata Document, so its name is vouched for by the host that publishes it. `false`: it registered itself and its name is **self-asserted**. Absent for keys |
+| `provider` | The slug of the auth provider whose token came with this call in `MCP-Gateway-Provider-Token`. **Absent** when the call carries none. See [Provider tokens](/docs/server-authors/provider-tokens) |
+| `jti` | A unique ID for the token, useful in your logs |
+| `iss`, `aud`, `iat`, `nbf`, `exp` | As above |
+
+Decide on `principal_type`, `sub`, `email` and `teams`, which the portal checked. `client` is a hint, and plain self-asserted text unless `client_verified` is `true`.
+
+The portal has already checked that the caller may use this tool (for a service account: its team's own gateways, with its role `member` or `editor` for minimum roles, and platform gateways granted to its team). Your server decides what they may do with it.
+
+A service account's token, for example:
+
+```json
+{"iss": "https://mcp.example.com", "aud": "https://status.example.com/mcp", "principal_type": "service_account",
+ "sub": "2f2e1390-9eca-4c8e-ac70-701505d92272", "name": "ci-bot", "teams": ["platform-tools"],
+ "gateway": "support", "tool": "status__check_outage", "client": "deploy", "jti": "…",
+ "iat": 1760650000, "nbf": 1760649970, "exp": 1760650300}
+```
+
+## Python (PyJWT)
+
+```python
+import jwt  # pip install "pyjwt[crypto]"
+
+PORTAL = "https://mcp.example.com"
+MY_URL = "https://status.example.com/mcp"  # exactly as registered in the portal
+
+# Caches keys; fetches the set again when it meets an unknown kid.
+jwks = jwt.PyJWKClient(f"{PORTAL}/.well-known/jwks.json", cache_jwk_set=True, lifespan=300)
+
+def identity(headers) -> dict:
+    token = headers.get("MCP-Gateway-Identity") or headers.get("Authorization", "").removeprefix("Bearer ")
+    key = jwks.get_signing_key_from_jwt(token)
+    return jwt.decode(
+        token, key.key, algorithms=["ES256"], issuer=PORTAL, audience=MY_URL, leeway=30,
+        options={"require": ["exp", "iat", "iss", "aud", "sub"]},
+    )  # claims["principal_type"], claims["sub"], claims.get("email"), claims["teams"], claims.get("tool")
+```
+
+## TypeScript (jose)
+
+```ts
+import { createRemoteJWKSet, jwtVerify } from "jose";
+
+const PORTAL = "https://mcp.example.com";
+const MY_URL = "https://status.example.com/mcp"; // exactly as registered in the portal
+
+// Caches keys and fetches the set again for an unknown kid.
+const jwks = createRemoteJWKSet(new URL(`${PORTAL}/.well-known/jwks.json`), { cacheMaxAge: 300_000 });
+
+export async function identity(headers: Headers) {
+  const token = headers.get("mcp-gateway-identity") ?? headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
+  const { payload } = await jwtVerify(token, jwks, {
+    algorithms: ["ES256"], issuer: PORTAL, audience: MY_URL, clockTolerance: 30,
+  });
+  return payload; // payload.principal_type, payload.sub, payload.email (people only), payload.teams, payload.tool
+}
+```
+
+## Go (go-jose)
+
+```go
+import (
+	"encoding/json"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
+)
+
+const portalURL = "https://mcp.example.com"
+const myURL = "https://status.example.com/mcp" // exactly as registered in the portal
+
+type Identity struct {
+	PrincipalType  string   `json:"principal_type"` // "user" or "service_account"
+	Email          string   `json:"email"`
+	Name           string   `json:"name"`
+	Teams          []string `json:"teams"`
+	Gateway        string   `json:"gateway"`
+	Tool           string   `json:"tool"`
+	Client         string   `json:"client"`
+	ClientVerified *bool    `json:"client_verified"` // set only for OAuth clients
+	Provider       string   `json:"provider"`
+}
+
+// Fetch the JWKS (cache it for up to 5 minutes, and fetch again for an unknown kid).
+func fetchKeys() (jose.JSONWebKeySet, error) {
+	var set jose.JSONWebKeySet
+	res, err := http.Get(portalURL + "/.well-known/jwks.json")
+	if err != nil {
+		return set, err
+	}
+	defer res.Body.Close()
+	return set, json.NewDecoder(res.Body).Decode(&set)
+}
+
+func verify(r *http.Request, keys jose.JSONWebKeySet) (jwt.Claims, Identity, error) {
+	raw := r.Header.Get("MCP-Gateway-Identity")
+	if raw == "" {
+		raw = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	}
+	var std jwt.Claims
+	var id Identity
+	tok, err := jwt.ParseSigned(raw, []jose.SignatureAlgorithm{jose.ES256})
+	if err != nil || len(tok.Headers) != 1 {
+		return std, id, err
+	}
+	matches := keys.Key(tok.Headers[0].KeyID)
+	if len(matches) == 0 {
+		return std, id, errUnknownKey // fetch the JWKS again and retry once
+	}
+	if err := tok.Claims(matches[0].Key, &std, &id); err != nil {
+		return std, id, err
+	}
+	err = std.ValidateWithLeeway(jwt.Expected{Issuer: portalURL, AnyAudience: jwt.Audience{myURL}, Time: time.Now()}, 30*time.Second)
+	return std, id, err // std.Subject is the person's user ID, or the service account's
+}
+```
+
+## Try it locally
+
+The repository's fake MCP server checks the token the same way. With a local portal on `http://localhost:8088`:
+
+```sh
+make fake-mcp   # go run ./cmd/fakemcp -jwks http://localhost:8088/.well-known/jwks.json
+```
+
+Register `http://127.0.0.1:8091/mcp` in a team, select its `whoami` tool in a gateway, create an API key and call it:
+
+```sh
+curl -s http://localhost:8088/mcp/<gateway> -H "Authorization: Bearer omp_..." \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"<server>__whoami","arguments":{}}}'
+```
+
+The result shows the header the token arrived in, its claims and `"verified": true`. See [Try it locally](/docs/get-started/try-it-locally).

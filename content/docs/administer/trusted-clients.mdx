@@ -1,0 +1,24 @@
+---
+title: Trusted clients
+description: Choose which MCP clients skip the OAuth consent screen when people connect them to Open MCP Portal's gateways.
+---
+
+When someone connects an MCP client to a gateway with OAuth sign-in, Open MCP Portal shows a consent page naming the client, the host that vouches for it and the gateway. **Admin › Trusted clients** lists clients that skip that page. People still sign in with their company account, and a trusted client still gets only their access, one gateway at a time.
+
+<Screenshot slot="admin-trusted-clients" />
+
+Out of the box the list holds:
+
+| Label | Client ID |
+|---|---|
+| Claude | `https://claude.ai/oauth/mcp-oauth-client-metadata` |
+| Claude Code | `https://claude.ai/oauth/claude-code-client-metadata` |
+| VS Code | `https://vscode.dev/oauth/client-metadata.json` |
+
+## Which clients can be trusted
+
+Only clients identified by a **Client ID Metadata Document**: the client ID is an https URL with a path, published by the client's maker, which the portal fetches to learn the client's name and redirect addresses. Clients that registered themselves (Dynamic Client Registration) can never be trusted: their IDs change, and anyone can register any name.
+
+**Add trusted client**: the **Client ID** (the https address of the client's metadata document, its OAuth `client_id`) and a **Label** (up to 100 characters). Up to 50 clients. **Save trusted clients** applies the list at once: it's read on every authorization.
+
+Removing a client brings the consent screen back the next time someone connects it; existing connections keep working. A trusted client's first connection is still recorded in the audit log (`oauth.consent` with `how: trusted`).

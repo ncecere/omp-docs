@@ -1,0 +1,99 @@
+---
+title: Use from your own agents
+description: Call an Open MCP Portal gateway from Python or TypeScript with the official MCP SDKs, with a service account key or a personal API key.
+---
+
+A gateway is an ordinary MCP server to your code: Streamable HTTP at `<portal URL>/mcp/<gateway slug>`, authenticated with `Authorization: Bearer <key>`. Use the official MCP SDKs; nothing specific to Open MCP Portal is needed.
+
+## Which key
+
+- **A service account key** (`omp_sa_…`) for anything that runs unattended: CI, scheduled jobs, agents in production. The key belongs to a team, not to you, so it keeps working when people change teams. See [Service accounts](/docs/teams/service-accounts).
+- **A personal API key** (`omp_…`) for your own scripts and experiments. It acts as you, with your access. See [API keys](/docs/use/api-keys).
+
+Keep keys in your secret store or environment, never in code. Both kinds can be limited to some gateways, and both always expire (at most 365 days).
+
+Name your keys after where they run ("release workflow", "support triage agent"). When a request doesn't carry the MCP client's own name, the key's name is what call records and MCP servers see as the client.
+
+## Python
+
+With the [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) (`pip install mcp`):
+
+```python
+import asyncio
+import os
+
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
+
+URL = "https://mcp.example.com/mcp/support"
+
+
+async def main() -> None:
+    headers = {"Authorization": f"Bearer {os.environ['PORTAL_KEY']}"}
+    async with streamablehttp_client(URL, headers=headers) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+
+            tools = await session.list_tools()
+            for tool in tools.tools:
+                print(tool.name, "-", tool.description)
+
+            result = await session.call_tool("status__check_outage", {"service": "email"})
+            print(result.content)
+
+
+asyncio.run(main())
+```
+
+## TypeScript
+
+With the [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) (`npm install @modelcontextprotocol/sdk`):
+
+```ts
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+
+const url = new URL("https://mcp.example.com/mcp/support");
+const transport = new StreamableHTTPClientTransport(url, {
+  requestInit: { headers: { Authorization: `Bearer ${process.env.PORTAL_KEY}` } },
+});
+
+const client = new Client({ name: "support-triage-agent", version: "1.0.0" });
+await client.connect(transport);
+
+const { tools } = await client.listTools();
+console.log(tools.map((t) => t.name));
+
+const result = await client.callTool({ name: "status__check_outage", arguments: { service: "email" } });
+console.log(result.content);
+
+await client.close();
+```
+
+## Names
+
+Tools and prompts are named `{server-slug}__{name}`, so tools of different servers never clash: the `check_outage` tool of the server `status` is `status__check_outage`. Resources are `omp://{server-slug}/{uri}`; read them with the URI exactly as listed. List first rather than hard-coding names: the list shows only what this key may use right now.
+
+## How the endpoint behaves
+
+- **Stateless.** The portal keeps no MCP session between requests, and any replica can answer. It answers `POST` only (`GET` and `DELETE` are `405`); the SDKs handle that.
+- **Lists come from the portal.** `tools/list`, `prompts/list`, `resources/list` and `resources/templates/list` are served from the definitions the portal approved, without contacting the MCP servers. Calls are forwarded.
+- **Limits.** Requests and responses are at most 1 MiB. A call waits at most the server's timeout (up to 120 seconds).
+- **No sampling, elicitation or roots** are forwarded to your client.
+
+## Errors to handle
+
+| What you get | Means | Do |
+|---|---|---|
+| HTTP `401` | The key is wrong, revoked or expired; or the person is suspended; or the service account is turned off or its team archived | Fix the key |
+| HTTP `404` | The gateway doesn't exist, is turned off, or this key can't use it (including a key limited to other gateways) | Check the URL and the key's gateways |
+| HTTP `429`, JSON-RPC `-32029` | A rate limit; `Retry-After` says how many seconds to wait | Wait and retry |
+| JSON-RPC `-32602` "Unknown tool" | The tool isn't on this gateway for this key now: not selected, a higher team role needed, or its server unavailable | List again |
+| JSON-RPC `-32042` | The tool needs the person's account on another service. The error's message and `data.elicitations[0].url` carry a link the person opens in their browser | Show the link to the person, then retry |
+| JSON-RPC `-32010` | Refused for a stated reason in `data.reason`: for example `service_account` (service accounts can't use tools that act as a person), `provider_disabled` or `provider_unavailable` | Don't retry blindly |
+
+A tool's own failure comes back as a normal result with `isError: true`, as MCP specifies. Every code is described in [The MCP endpoint](/docs/api/mcp-endpoint).
+
+## Tools that act as a person
+
+Tools that need a person's account on another service (a GitHub or Google account, or an MCP server in OAuth mode) can't be used by service accounts: they answer `-32010` with `data.reason` `service_account`. With a personal key, the first call answers `-32042` with a consent link; once you have connected the account under Account › [My connections](/docs/use/connecting-accounts), the calls go through. You can connect ahead of time from **My gateways**.

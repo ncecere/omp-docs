@@ -1,0 +1,43 @@
+---
+title: Provider tokens
+description: How an MCP server behind Open MCP Portal receives the caller's own GitHub, Google or other OAuth token in MCP-Gateway-Provider-Token, and the checks to make before using it.
+---
+
+A server can act **as the person** on a third-party service, for example to create a GitHub issue as them, without running OAuth itself. A platform admin configures the service as an [auth provider](/docs/administer/auth-providers); your team sets a [user authorization requirement](/docs/teams/user-authorization) on the server (a provider and scopes), optionally overridden per capability. The portal asks each person to connect their account once, stores and refreshes the token, and sends it with each call that needs it.
+
+## What arrives
+
+Every call of a capability that requires the provider carries:
+
+| Header | Value |
+|---|---|
+| `MCP-Gateway-Provider` | The provider's slug, for example `github` |
+| `MCP-Gateway-Provider-Token` | The person's access token for that provider, **bare** (no `Bearer`). The portal refreshes it before it expires |
+
+and the [identity token](/docs/server-authors/identity-token) gains `"provider": "github"`.
+
+Calls without a requirement (or with the override **No account**) never get these headers or the claim, and neither do discovery, tests or health checks. Service accounts can't call such capabilities: the portal refuses them before they reach you. The client and the model never see the token.
+
+The token is sent only to your server's registered URL, and only for capabilities whose requirement names that provider. One provider per call.
+
+## Checks to make
+
+1. **Verify the identity token first.** See [The identity token](/docs/server-authors/identity-token).
+2. **Check that its `provider` claim equals `MCP-Gateway-Provider`.** A request with the headers but without the claim, or with another value, didn't come from the portal for this provider: reject it.
+3. **Use the token only with that provider's API**, as the person, and never log or store it.
+
+The portal doesn't check that the provider account belongs to the person (for example by email). If that matters, ask the provider whose token it is and compare it with the identity token's `email` or `sub`.
+
+## Errors
+
+- **The provider answers `401`**: the token was revoked at the provider. Return a tool error telling the person to reconnect under Account › My connections. (The portal refreshes tokens that are about to expire; it doesn't learn about a revocation from your server.)
+- **No token arrived** for a tool that needs one: the requirement isn't configured on the server. Return a clear tool error naming the provider and scopes your team should set.
+- **A token for another provider**: return a tool error naming the provider you expected.
+
+## Recorded call contents
+
+When your team (or a gateway's) turns on recording of call contents, the portal stores each call's arguments and your result, redacted. Headers are never stored, and the identity token, the provider token and your static header value are replaced by `[REDACTED]` wherever they appear in a result. Still, don't echo credentials: other secrets in your results are caught only by the redaction rules.
+
+## Example
+
+The [mail example](/docs/server-authors/mail-example) is a Gmail server built this way: it verifies the identity token on every request, checks the `provider` claim against the header, and returns clear tool errors when no token comes.

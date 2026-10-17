@@ -1,0 +1,33 @@
+---
+title: Team settings
+description: Members, invites and roles, the team's audit log, the limits and retention that apply, and the team's general settings in Open MCP Portal.
+---
+
+**Team settings** has four tabs: **Members**, **Audit log**, **Limits & retention** and **General**.
+
+## Members
+
+Every member has one role: **owner**, **admin**, **editor** or **member** (see [the role table](/docs/teams)). Owners and admins manage members; only owners add, change or remove owners.
+
+**Add member** takes an email address and a role:
+
+- someone who has signed in before is added at once;
+- someone who has never signed in gets an **invite**. They join the team when they first sign in with that email, provided their identity provider marks the email as verified. Invites last 30 days and are listed under **Open invites**, where they can be revoked.
+
+Use the email address people sign in with. Changing someone's role or removing them takes effect at their next request: a removed member's API keys and connected apps no longer reach the team's gateways.
+
+A team always has at least one owner: the only owner can't leave or step down until they make someone else an owner.
+
+<Screenshot slot="team-settings-members" />
+
+## Audit log
+
+Owners, admins and editors see the team's own audit log: changes to its members, servers, gateways, service accounts and settings, and views of contents it recorded, including those by platform staff. See [Audit log](/docs/administer/audit-log).
+
+## Limits & retention
+
+Read-only for the team: the **rate limits** that apply to the team's service accounts and gateways, and how long the team's **call records** and **recorded call contents** are kept. Platform admins set these, including team overrides; ask one if your team needs other values. A gateway can also have its own rate limit on its **Settings** tab, up to the platform's ceiling.
+
+## General
+
+The team's name, description and address (its slug can't change, so links keep working), your role, and **Leave this team**. Platform admins rename and archive teams; ask one if something here needs to change.

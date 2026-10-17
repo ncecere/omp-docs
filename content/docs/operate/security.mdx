@@ -1,0 +1,62 @@
+---
+title: Security model
+description: "What Open MCP Portal protects and how: authentication, per-request authorization, the identity token, credentials at rest, the address guard, consent links, records and reporting vulnerabilities."
+---
+
+Open MCP Portal stands between AI clients and your teams' MCP servers. Its job is that every call is made by someone allowed to make it, that servers know who is calling, and that no credential ends up where it shouldn't.
+
+## Callers
+
+- **People** sign in to the web app through your OpenID Connect provider (authorization code with PKCE and a nonce). Browser sessions are server-side; the cookie holds a random secret whose SHA-256 digest is stored. Writes need a CSRF token and a same-origin `Origin`.
+- **MCP clients** sign in with the portal's own OAuth 2.1 authorization server: PKCE S256 only, exact redirect URI matching, a token bound to one gateway (`resource`), consent per person, client and gateway, refresh tokens rotated on every use with reuse detection. Client ID Metadata Documents are fetched through the address guard (at most 16 KiB, no redirects). Self-registered clients are marked unverified and can never be trusted to skip consent.
+- **Keys** (personal and service account) always expire (at most 365 days) and can be limited to some gateways.
+
+## Every request is authorized again
+
+Nothing is cached between a client's list and its call. Every request to `/mcp/{slug}` checks the credential, the person or service account, the gateway and its team, the caller's access, the capability's selection and availability (published and approved, or the team's own), the minimum role and the rate limits. A refused call looks the same as a call to something that doesn't exist. Server-side checks are authoritative; the web app's permission gates only explain.
+
+Tool annotations and model output are never used for authorization. Definitions that change on a published server leave the catalog until they're approved again.
+
+## What servers receive
+
+- The caller's own credential is **never** forwarded. Each call carries an ES256 identity token for that server only (`aud` = the server's URL), valid for 5 minutes, with keys rotating every 30 days and published at `/.well-known/jwks.json`. A team can stop sending it to servers outside the company.
+- A person's provider token goes only to the registered URL of a server whose requirement for that capability names that provider; never on lists, discovery, tests or health checks.
+- A person's token for an OAuth-protected server goes only to that server's URL, which must equal its metadata's `resource`, and to its own token and revocation endpoints.
+- Header names `MCP-Gateway-Identity`, `MCP-Gateway-Provider` and `MCP-Gateway-Provider-Token` are reserved, so a team can't forge them with a static header.
+
+## Credentials at rest
+
+- API keys, service account keys and OAuth tokens are stored only as HMAC-SHA256 digests under `API_KEY_PEPPER`; a key is shown once.
+- Server header values, client secrets, provider tokens, signing keys' private keys, PKCE verifiers, consent links and recorded call contents are encrypted with AES-256-GCM under `ENCRYPTION_KEY`, each bound to its row.
+- Secrets are never returned by the API (only "configured" and a short hint), logged, audited, put in call records or health checks, or captured. Tests check this with sentinel values across responses, logs, the audit log, call records and recorded contents.
+
+See [Secrets and key rotation](/docs/operate/secrets-and-key-rotation).
+
+## Outbound connections
+
+Every connection to an MCP server, an auth provider's token, revocation or userinfo endpoint, a client metadata document or an OAuth-protected server's metadata goes through one address guard: public addresses over https; internal ones only where a platform admin allowed them; never loopback, link-local (including cloud metadata), unspecified, multicast or broadcast, whatever the list says. Every resolved address is checked and the connection pinned to it (no DNS rebinding), redirects are never followed and proxy settings are ignored. See [Internal networks](/docs/administer/internal-networks).
+
+## Consent links
+
+A `-32042` consent link contains only an opaque ID: no personal data, and it signs nobody in. It works only in the browser session of the person whose call created it, once, for 10 minutes. The confirm page shows every scope before the provider is contacted. The OAuth `state` is bound to that session, person, provider and request (stopping login CSRF and mix-up), and redirects after the callback go only to same-origin paths.
+
+## Records
+
+The audit log and call records are append-only (database triggers refuse changes; only the retention job deletes, past their periods). Every change is audited in the same transaction. Recording of call contents is off by default, redacted, truncated, encrypted, readable only by the recording team's owners and admins and by platform staff, and every view is audited.
+
+## Deployment
+
+- `serve` refuses the example keys, development sign-in and an http `APP_URL` off loopback.
+- The image is distroless and runs as a non-root user with a read-only filesystem; the Kubernetes base meets the `restricted` Pod Security Standard and ships default-deny NetworkPolicies.
+- The metrics listener has no authentication: keep it on a separate port reachable only by monitoring.
+- Put the ingress's own rate limits in front of unauthenticated traffic.
+
+## What the portal doesn't do
+
+- It doesn't check that a person's provider account is theirs (for example by email).
+- It doesn't vet what an MCP server does with a call it was allowed to receive, or defend against prompt injection in tool results.
+- Redaction catches common secret formats and your patterns, not everything.
+
+## Reporting a vulnerability
+
+Report vulnerabilities privately through the repository's [security advisories](https://github.com/ncecere/open-mcp-portal/security/advisories/new), as its `SECURITY.md` describes. Don't open a public issue.

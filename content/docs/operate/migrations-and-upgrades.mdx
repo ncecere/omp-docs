@@ -1,0 +1,26 @@
+---
+title: Migrations and upgrades
+description: How Open MCP Portal applies its forward-only database migrations, and how to upgrade and roll back safely.
+---
+
+## Migrations
+
+The database schema is managed by migrations built into the binary. They are **forward-only and expand/contract**: a release's migrations keep working with the previous release's code, so a rolling upgrade never breaks the replicas still running the old version.
+
+- In Kubernetes, the `migrate` init container runs `open-mcp-portal migrate` in every new pod. A PostgreSQL advisory lock serialises concurrent runs, so only the first pod does any work.
+- Elsewhere, run `open-mcp-portal migrate` before starting `serve`, or set `MIGRATE_ON_START=true` on a **single** instance.
+- `serve` refuses to start while migrations are pending; the message names the current and required versions. `doctor` reports the migration state too.
+
+`migrate` needs only `DATABASE_URL`.
+
+## Upgrading
+
+1. **Read the release notes** of every release between yours and the target. See [Releases](/docs/releases).
+2. **Back up** the database. See [Backups](/docs/operate/backups).
+3. **Pin the new image**, by digest.
+4. **Migrate, then roll.** In Kubernetes, the new pods' `migrate` init container applies the schema before any new pod serves, while the old pods keep serving (`maxUnavailable: 0`). Elsewhere, run `migrate` with the new image first, then restart `serve`.
+5. Run `doctor`.
+
+## Rolling back
+
+Pin the previous image. Migrations are never rolled back automatically; because they are expand-only, the previous release normally runs on the newer schema. To undo a migration itself, restore the backup made before the upgrade.

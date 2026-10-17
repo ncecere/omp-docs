@@ -1,0 +1,45 @@
+---
+title: Payload capture
+description: "The redaction rules for recorded call contents in Open MCP Portal: built-in rules, sensitive member names, your own patterns and the redaction tester."
+---
+
+Teams turn on recording of call contents for their gateways and servers (see [Recording call contents](/docs/teams/payload-capture)); platform admins do it for platform gateways. **Admin › Payload capture** controls how recordings are redacted, for every team. Auditors can read it.
+
+<Screenshot slot="admin-capture" />
+
+## Built-in rules
+
+Always on. Values that look like these are replaced with `[REDACTED]` in every recorded string:
+
+| Rule | Catches |
+|---|---|
+| `bearer` | `Bearer <token>` |
+| `jwt` | JSON Web Tokens (`eyJ…`) |
+| `gateway_credentials` | Open MCP Portal's own keys and tokens (`omp_`, `omp_sa_`, `ompat_`, `omprt_`, `ompac_`) |
+| `github` | GitHub tokens (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`) |
+| `gitlab` | GitLab personal access tokens (`glpat-`) |
+| `slack` | Slack tokens (`xoxa-`, `xoxb-`, `xoxp-`, `xoxr-`, `xoxs-`) |
+| `google` | Google OAuth access tokens (`ya29.`) and API keys (`AIza`) |
+| `aws_access_key` | AWS access key IDs (`AKIA`, `ASIA`) |
+| `private_key_pem` | PEM private keys |
+| `url_userinfo` | Passwords in URLs (`scheme://user:password@`) |
+
+**Sensitive member names**: JSON members named `password`, `passwd`, `secret`, `token`, `accesstoken`, `refreshtoken`, `idtoken`, `apikey`, `authorization`, `cookie`, `setcookie`, `clientsecret`, `privatekey` or `sessionid` (compared in lower case, without `-` and `_`) always have their value replaced.
+
+Each call's own secrets (the identity token, a provider token, the caller's credential and the server's static header value) are also replaced wherever they appear, and binary content becomes `[binary N bytes]`. Headers are never recorded.
+
+## Your patterns
+
+Add regular expressions for your organisation's secrets or personal data, such as employee numbers or account IDs:
+
+- **RE2 syntax** (Go), case-sensitive unless it starts with `(?i)`; no lookahead, lookbehind or backreferences. For example `EMP-[0-9]{6}`.
+- At most 50 patterns, each at most 500 characters, none matching empty text.
+- A **Note** says what it catches, for the next admin.
+
+Patterns apply to calls recorded from then on (every replica within 30 seconds); stored recordings aren't changed. Changes are audited as `settings.capture_update` (patterns aren't secrets).
+
+## Test redaction
+
+**Test redaction** takes a sample (JSON, as a tool call's arguments or result, or plain text) and shows what a recording would keep, which rules matched, and whether it would be cut to 16 KiB. It uses the patterns on the page, including unsaved changes. The sample isn't stored or logged.
+
+Each part of a recording (arguments, result) is cut to 16 KiB after redaction. Recordings are encrypted with `ENCRYPTION_KEY`. The metric `omp_payload_redactions_total` counts redactions by rule; `omp_payload_capture_errors_total` counts recordings that failed (a failed recording never fails the call).

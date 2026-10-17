@@ -1,0 +1,36 @@
+---
+title: Audit log
+description: Open MCP Portal's append-only record of every administrative and membership change and every sign-in, with filters and CSV export.
+---
+
+**Admin › Audit log** lists every administrative and membership change on the platform, and every sign-in: who, what, when and how. Platform admins and auditors read it; each team's owners, admins and editors read the team's own entries under **Team settings › Audit log**.
+
+<Screenshot slot="admin-audit" />
+
+## What's recorded
+
+Each entry has the time, the actor (a person, the system, or a person acting through an OAuth client, marked `via: oauth`), the action, the target with a live label, the team when there is one, before-and-after values where something changed, and the request ID and client address. Secrets, header values and tokens are never recorded: only that they changed (`authValueChanged`, `clientSecretChanged`).
+
+Areas include:
+
+| Area | Actions (examples) |
+|---|---|
+| Sign-in | `auth.login`, `auth.login_denied` |
+| Teams and members | `team.member_add`, `team.invite_create`, `team.invite_accept`, `team.owner_assign`, `team.publishing_override`, `team.limits_update`, `team.retention_update` |
+| Servers | `mcp_server.create`, `.update`, `.auth_update`, `.delete`, `.refresh`, `.publish_request`, `.publish`, `.reject`, `.unpublish`, `mcp_capability.approve`, `mcp_capability.requirement_set` |
+| Gateways and keys | `gateway.create`, `.update`, `.delete`, `.capabilities_set`, `.grant_add`, `.grant_remove`, `api_key.create`, `.revoke`, `.pepper_rehash` |
+| Service accounts | `service_account.create`, `.update`, `.delete`, `service_account_key.create`, `.revoke` |
+| OAuth clients | `oauth.client_register`, `oauth.consent`, `oauth.token_issue`, `oauth.revoke` |
+| Delegated credentials | `auth_provider.create`, `.update`, `.delete`, `provider_connection.create`, `.refresh_failed`, `.revoke` |
+| Settings | `settings.publishing_update`, `settings.network_update`, `settings.oauth_clients_update`, `settings.limits_update`, `settings.capture_update`, `settings.retention_update` |
+| Records and operations | `mcp_call.payload_view`, `retention.purge`, `platform.secrets_reencrypt`, `platform.key_rotation` |
+
+`mcp_call.payload_view` is written every time someone opens a call's recorded contents, with how (`via: team` or `admin`); it carries the team whose switch recorded the call, so that team sees platform staff's views in its own log.
+
+## Filters and export
+
+Filter by area or action (type one), target type, actor and date range. Sign-ins are hidden by default; turn off **Hide sign-ins** to see them. **Export CSV** downloads the entries that match the filters.
+
+## Append-only
+
+The audit log can't be edited: a database trigger refuses updates and deletes, except deletes by the retention job of entries older than the audit log's period (400 days by default, at least 30). Every change is written in the same database transaction as the change itself, so there is no change without its entry. See [Retention](/docs/administer/retention).

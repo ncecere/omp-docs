@@ -1,0 +1,52 @@
+---
+title: User authorization
+description: Make a server's tools act as the caller on GitHub, Google or another service, by requiring an auth provider and scopes, with per-capability overrides.
+---
+
+Some servers need to act **as the person calling**: create a GitHub issue as them, search their Gmail. With **user authorization**, Open MCP Portal gets each person's own token for a service, with their consent, and sends it to your server with each call that needs it. Your server stores no tokens and runs no OAuth flow of its own.
+
+This is for servers in **None** or **Static header** mode that call a third-party API. A server that *is* OAuth-protected itself uses [Sign-in with OAuth, per person](/docs/teams/register-a-server#sign-in-with-oauth-per-person) instead; the two can't be combined on one server.
+
+## Set the requirement
+
+Team editors, admins and owners set it in the server's **Settings** › **User authorization**:
+
+- **Requires a connection**: on.
+- **Provider**: one of the auth providers your platform admins configured (GitHub, Google, Microsoft Entra ID, Atlassian, Slack, GitLab or a custom one). If there are none, ask a platform admin to add one in Admin › [Auth providers](/docs/administer/auth-providers). Only an enabled provider can be newly chosen.
+- **Scopes**: what the token may do, in the provider's own names (press Enter after each). Leave empty for the provider's default scopes. For Google, use full scope URLs such as `https://www.googleapis.com/auth/gmail.readonly`: they are the names Google's token response returns, so the portal can tell they were granted.
+
+<Screenshot slot="server-user-authorization" />
+
+## Per-capability overrides
+
+On the **Capabilities** tab, each capability shows the account it needs. **Change the account &lt;name&gt; needs** opens a dialog with three choices:
+
+- **Same as the server** (the default);
+- **No account**: calls to this capability never carry a token and never ask for consent;
+- **Other &lt;provider&gt; scopes**: the same provider with other scopes, for example a write scope only for the one tool that writes. People who only use the read tools never grant it.
+
+Removing the server's requirement, or changing its provider, resets every scope override to **Same as the server**.
+
+The token goes to the **server**: overrides decide where consent is asked and which scopes are requested, not which part of your server's code can see a token. One provider per call.
+
+## Review
+
+Under **Approval required**, a published server goes back to review when any capability's requirement **widens**: a provider where there was none, another provider, or a scope that wasn't in effect before. Removing or narrowing a requirement never needs review, because it sends less. Under **Self-publish** the server stays published. The form warns before you save a change that sends the server back.
+
+## What callers see
+
+- The catalog, the gateway picker and **My gateways** mark such capabilities, for example **Needs GitHub (repo)**.
+- The first call asks the person to connect their account with a consent link (JSON-RPC `-32042`). After that, calls are forwarded with the token. See [Connecting accounts](/docs/use/connecting-accounts).
+- **Service accounts can't use them**: their calls are refused with `-32010`. Team views mark these capabilities "Service accounts can't use this".
+- If the provider is turned off, calls are refused with `-32010` (`provider_disabled`).
+
+## What your server receives
+
+Each call to a capability with a requirement carries, besides the identity token:
+
+| Header | Value |
+|---|---|
+| `MCP-Gateway-Provider` | The provider's slug, for example `github` |
+| `MCP-Gateway-Provider-Token` | The person's access token for that provider, bare (no `Bearer`) |
+
+and the identity token gains a `provider` claim. Lists, discovery, tests and health checks never carry them. See [Provider tokens](/docs/server-authors/provider-tokens) for what your server must check, and the [Gmail example](/docs/server-authors/mail-example).

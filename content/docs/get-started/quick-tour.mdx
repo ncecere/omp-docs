@@ -1,0 +1,71 @@
+---
+title: Quick tour
+description: Signing in, the workspace and team pages, your account menu, and the admin portal of Open MCP Portal's web app.
+---
+
+Open MCP Portal's web app is served by the portal itself at its address (its `APP_URL`, for example `https://mcp.example.com`). It follows your system's light or dark setting; you can change it in the account menu.
+
+## Signing in
+
+The sign-in page shows the instance's name and **Sign in with single sign-on**, which takes you to your company's identity provider. Signing in creates your account the first time; it gives you no team and no platform role by itself. If someone invited your email address to a team, you join it when you first sign in.
+
+When an AI client or a tool sent you to the portal, the sign-in page says so: "An app is waiting to connect" or "A tool needs one of your accounts".
+
+<Screenshot slot="sign-in" />
+
+## The workspace
+
+The sidebar's **Workspace** section is the same for everyone:
+
+| Page | What it's for |
+|---|---|
+| **Home** | Your teams, and for platform staff a link to the admin portal |
+| **Catalog** | The company's published MCP servers and their approved capabilities |
+| **My gateways** | Every gateway you can connect to, with its endpoint and ready-made snippets for your AI client |
+
+<Screenshot slot="home" />
+
+## Your team's pages
+
+Below the workspace, the team switcher picks one of your teams, and the sidebar lists its pages. Which ones you see depends on your role:
+
+| Page | Who sees it | What it's for |
+|---|---|---|
+| **Overview** | Members | The team at a glance |
+| **MCP servers** | Members (editors and above change them) | The servers the team runs: register, test, refresh, publish. See [Registering an MCP server](/docs/teams/register-a-server) |
+| **Gateways** | Members (owners and admins change them) | The team's gateways. See [Building gateways](/docs/teams/gateways) |
+| **Service accounts** | Members (owners and admins change them) | Team identities for CI and agents. See [Service accounts](/docs/teams/service-accounts) |
+| **Usage** | Owners, admins and editors | Calls through the team's gateways, to its servers and by its service accounts |
+| **Team settings** | Members (the audit log: editors and above) | Members and invites, the team's audit log, limits and retention, general settings |
+
+Platform admins and auditors can open any team's overview, servers, gateways, service accounts and settings, read-only.
+
+## Your account menu
+
+Your name at the bottom of the sidebar opens your account menu:
+
+- **Profile**: your name, email, platform role, teams, and the groups your identity provider sent at your last sign-in.
+- **API keys**: personal keys for scripts and clients that can't sign in. See [API keys](/docs/use/api-keys).
+- **Connected apps**: the AI clients you signed in with OAuth, per gateway. See [Connected apps](/docs/use/connected-apps).
+- **My connections**: your accounts on other services that tools use as you. See [Connecting accounts](/docs/use/connecting-accounts).
+- The colour theme, **Help** (when your installation sets a support link) and **Sign out**.
+
+The docs write these as "Account › API keys" and so on.
+
+## The admin portal
+
+Platform admins and auditors see a **Workspace / Admin** switch at the top of the sidebar. Admin mode has five groups:
+
+| Group | Pages |
+|---|---|
+| **People** | Users, Teams |
+| **Catalog** | MCP servers (review), Publishing, Internal networks |
+| **Access** | Gateways (platform gateways), Trusted clients, Auth providers |
+| **Records** | Audit log, Calls, Usage |
+| **Operations** | Limits, Retention, Payload capture |
+
+Auditors see every page but can't change anything. See [Administer](/docs/administer).
+
+## Finding things
+
+Press <kbd>⌘</kbd> <kbd>K</kbd> (or <kbd>Ctrl</kbd> <kbd>K</kbd>) anywhere in the web app to open the command palette: it finds pages by name and by related words, such as "rate limit" or "redaction".

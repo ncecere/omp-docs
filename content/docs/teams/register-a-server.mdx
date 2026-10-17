@@ -1,0 +1,107 @@
+---
+title: Registering an MCP server
+description: Add a remote MCP server to your team in Open MCP Portal, detect how it signs people in, choose none, a static header or per-person OAuth, and reach servers on internal networks.
+---
+
+Team editors, admins and owners register the MCP servers the team runs under **MCP servers** › **Add server**. Open MCP Portal reaches remote servers over **Streamable HTTP**; it doesn't host or start servers. A new server is private to the team: the team can use it in its own gateways at once, and other teams see it only after it's [published](/docs/teams/publishing).
+
+## The form
+
+**Server**
+
+- **Name** (up to 100 characters) and **Description** (up to 2,000; shown in the catalog once published).
+- **Slug**: 1 to 48 lowercase letters, digits and hyphens, starting and ending with a letter or digit, unique across the platform. It **can't be changed later**: gateways name the server's tools `slug__tool`, so keep it short.
+
+**Connection**
+
+- **URL**: the server's Streamable HTTP endpoint, such as `https://tools.example.com/mcp`. It must be https, unless a platform admin allowed plain http for an internal host. It can't contain a user name and password, a query or a fragment: credentials go in the authentication settings.
+- **Timeout (seconds)**: how long one exchange with the server may take, 1 to 120 (30 by default).
+- **Enabled**: turned off, nothing connects to the server, it isn't health-checked, and it can't be published.
+
+**Authentication**: how the portal authenticates to the server (below).
+
+When you save, the portal reads the server's capabilities straight away. The server is created even if that fails; the error is shown, and you can **Refresh capabilities** later.
+
+## Detect sign-in
+
+**Detect sign-in** asks the server how clients sign in, without saving anything: it sends an unauthenticated MCP `initialize` and, if the server answers with an OAuth challenge, reads its protected-resource metadata and its authorization server's metadata. The result is one of:
+
+| Result | Means |
+|---|---|
+| **Answers without sign-in** | Use **None**, or **Static header** if the server needs a key the challenge doesn't reveal |
+| **OAuth: each person signs in** | The server is an OAuth resource server. The result shows the authorization server, whether PKCE S256 is supported, the scopes it supports and how the portal can get a client. **Sign-in with OAuth, per person** becomes available |
+| **Needs credentials, but doesn't offer OAuth sign-in** | It answered `401` or `403` without usable OAuth metadata: use a **Static header** |
+| **Couldn't reach the server** | A network error or a `5xx` |
+| **The portal won't connect to this address** | The address is blocked or not allowed (see [Internal servers](#internal-servers)) |
+
+<Screenshot slot="add-server-detect" />
+
+Detection follows the MCP authorization specification: the `resource_metadata` from the `401` challenge (or the well-known fallbacks), then the authorization server's metadata in the specification's order, including path insertion (`/.well-known/oauth-authorization-server/login/oauth` for GitHub). It refuses metadata whose `resource` doesn't match the URL or whose `issuer` doesn't match, and an authorization server without PKCE S256. When the server's resource differs from your URL only by a trailing slash or letter case, the result offers to use the server's own form (GitHub's is `https://api.githubcopilot.com/mcp/`, with the slash). Every request goes through the same address guard as calls; detection makes at most 8 requests of 5 seconds each, and each person can detect 10 times a minute. **Requests made** lists them.
+
+## Authentication modes
+
+### None
+
+Calls carry only the portal's signed identity token, in `Authorization: Bearer`. The server can verify it like any OAuth bearer token. See [The identity token](/docs/server-authors/identity-token).
+
+### Static header
+
+One header with a fixed value, such as `Authorization: Bearer …` or `X-API-Key: …`, sent with every request (discovery, tests, health checks and calls). The value is encrypted with the installation's `ENCRYPTION_KEY` and never shown again: the server's pages show only that a value is set and, for values of at least 8 characters, its last 4. When you edit the server, leaving the value empty keeps it; **Remove the header and its stored value** removes both.
+
+If the header is `Authorization`, the identity token moves to `MCP-Gateway-Identity`. The names `MCP-Gateway-Identity`, `MCP-Gateway-Provider` and `MCP-Gateway-Provider-Token` are reserved.
+
+### Sign-in with OAuth, per person
+
+For servers that are OAuth resource servers themselves, such as GitHub's hosted MCP server. Each person signs in to the server's own service once, and every call they make carries **their own token** in `Authorization: Bearer`; the identity token goes in `MCP-Gateway-Identity`. Clients and models never see the token. This mode is available after **Detect sign-in** found usable OAuth metadata.
+
+Choose how the portal gets its OAuth client at the authorization server:
+
+| Option | When it's offered |
+|---|---|
+| **Automatic: the portal's client metadata document** | The authorization server supports Client ID Metadata Documents and the portal's `APP_URL` is public https. Nothing to create |
+| **Automatic: register a client** | The authorization server has a registration endpoint (Dynamic Client Registration). The portal registers when you save |
+| **Use platform provider &lt;name&gt;** | A platform admin configured an [auth provider](/docs/administer/auth-providers) whose authorization and token URLs equal the discovered ones. Its client is shared; connections aren't |
+| **Enter a client ID and secret** | Always. Create an OAuth app at the authorization server with the **Callback URL** shown (`<APP_URL>/connect/callback`), then paste its client ID and secret and choose the **Token method** |
+
+Then choose the **Scopes** to ask for, from those the server supports. No scope ticked means the authorization server's default access. Under **Advanced**, **Send resource indicator** (on by default) sends the server's URL as the `resource` parameter (RFC 8707), as the MCP specification requires, so tokens work only for this server; turn it off only if the authorization server refuses it.
+
+When you save, the portal runs the discovery again itself (it never trusts endpoints sent by the browser) and stores the client; a secret is encrypted and never shown again. Then:
+
+1. **Authorize to read its tools**: an editor signs in to the server once. The portal reads the capabilities with that person's connection, and the server shows "Capabilities read as &lt;person&gt;". Any editor can **Re-authorize as me** later.
+2. Each person who calls its tools signs in once, the first time, through a [consent link](/docs/use/connecting-accounts).
+
+<Screenshot slot="server-sign-in-card" />
+
+The server's **Sign-in** card shows the authorization server, the scopes, whether the resource indicator is sent, whose connection the capabilities were read with, how many people have signed in, and what each call carries.
+
+**OAuth mode and other settings.** OAuth mode excludes a static `Authorization` header and a [user authorization requirement](/docs/teams/user-authorization) on the same server: one credential per call. Service accounts can't call an OAuth server's tools.
+
+#### Example: GitHub's hosted MCP server
+
+1. **Add server**, URL `https://api.githubcopilot.com/mcp/`, then **Detect sign-in**. Expect OAuth, the authorization server `https://github.com/login/oauth`, S256, and no automatic registration.
+2. On GitHub, create a GitHub App or an OAuth App (Settings › Developer settings) with the callback URL the portal shows, `<APP_URL>/connect/callback`. Copy the client ID and generate a client secret. A GitHub App ignores scopes: set its permissions on the app instead (with expiring user tokens, the portal refreshes them). An organization with OAuth App access restrictions must approve an OAuth App.
+3. Choose **Enter a client ID and secret**, paste them, and keep the preselected scopes (`repo`, `read:org`, `read:user`) or change them.
+4. Turn off **Send identity token** (below): GitHub is outside your company.
+5. Save, then **Authorize to read its tools** and approve on GitHub.
+
+GitHub's server needs some tool arguments as HTTP headers too; the portal sends them. See [Parameter headers](/docs/server-authors/parameter-headers).
+
+## Send identity token
+
+**Send identity token** (on by default) adds the portal's signed identity token to every call: the caller's name, email and teams, the gateway and the tool. Turn it off for servers run outside your company, such as GitHub's hosted server, so that personal data isn't sent to a third party. The server then gets no identity token on any call. Turning it off isn't a review trigger: it sends less.
+
+## Internal servers
+
+Out of the box, servers must be at **public** addresses over https. A server on your internal network is refused with "The portal won't connect to this internal (private) address" until a platform admin allows its network or host name in **Admin › [Internal networks](/docs/administer/internal-networks)**, optionally with plain http. Loopback, link-local and cloud metadata addresses are never allowed, whatever the list says.
+
+The check happens when you save (the URL's form and literal addresses), before every exchange, and every time the portal connects: each address the host name resolves to must be allowed. Redirects are never followed, and proxies aren't used. If the platform's list changes so that your server is no longer allowed, its next check fails with "Address not allowed".
+
+## Editing and deleting
+
+The server's **Settings** tab changes everything except the slug. Some changes have side effects, and the form warns before you save:
+
+- **A URL change** reads the capabilities again from the new URL at once and clears the stored health checks. On a published server under **Approval required**, it sends the server back to review.
+- **Changing the authentication** of a published server to OAuth, to another authorization server, or to wider scopes sends it back to review under **Approval required**. A URL change, another authorization server or another client ID signs everyone out of an OAuth server (their tokens are erased; they sign in again). Leaving OAuth mode deletes the connections and revokes them where possible.
+- **Delete** (owners and admins) removes the server and its capabilities and, for an OAuth server, revokes and deletes everyone's connections to it. Its call records are kept.
+
+Every change is in the team's audit log; header values and secrets never are.

@@ -1,0 +1,92 @@
+---
+title: The MCP endpoint
+description: "Open MCP Portal's /mcp/{slug} endpoint: transport, authentication, supported methods and protocol versions, exposed names, HTTP statuses and JSON-RPC error codes."
+---
+
+Every gateway is served at `<APP_URL>/mcp/{slug}`, for example `https://mcp.example.com/mcp/support`.
+
+## Transport
+
+- **Streamable HTTP, stateless.** Only `POST`; `GET` and `DELETE` are `405`. No MCP session is kept between requests and no session ID is issued; any replica can answer.
+- **Responses are JSON.** Notifications get `202`.
+- **JSON-RPC batches** are `400`.
+- **Protocol versions** negotiated on `initialize`: `2025-11-25`, `2025-06-18`, `2025-03-26` and `2024-11-05`. An `MCP-Protocol-Version` header outside these (and older than `2026-07-28`) is `400`. `server/discover` (2026-07-28) is "method not found", so newer clients fall back to `initialize`.
+- **Origin.** A browser request with a foreign `Origin` is `403`.
+- **Size.** Requests and responses are at most 1 MiB.
+
+## Authentication
+
+`Authorization: Bearer <credential>`, one of:
+
+- an OAuth access token (`ompat_…`) issued by the portal for **this** gateway (see [OAuth endpoints](/docs/api/oauth-endpoints));
+- a personal API key (`omp_…`);
+- a service account key (`omp_sa_…`).
+
+Without a valid credential, the answer is `401` with a challenge pointing at the gateway's protected-resource metadata, which is how MCP clients discover OAuth sign-in:
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp/support"
+```
+
+An OAuth token for another gateway gets `401` with `error="invalid_token"` and that gateway's challenge.
+
+## Methods
+
+| Method | Served from |
+|---|---|
+| `initialize`, `ping` | The portal. `initialize` advertises `tools` and `prompts`, and `resources` (`subscribe: false`, `listChanged: false`) only when the gateway selects a resource or template |
+| `tools/list`, `prompts/list`, `resources/list`, `resources/templates/list` | The portal's stored, approved definitions, filtered for the caller, paged (512 KiB per page) with an opaque cursor. Servers aren't contacted |
+| `tools/call`, `prompts/get`, `resources/read` | Checked, then forwarded to the server with the [identity token](/docs/server-authors/identity-token) |
+
+`resources/subscribe` and `resources/unsubscribe` are "method not found". Sampling, elicitation and roots aren't supported. A client's cancellation isn't recorded as an error.
+
+## Names
+
+- Tools and prompts: `{server-slug}__{name}`, for example `status__check_outage`.
+- Resources: `omp://{server-slug}/{uri}`, for example `omp://status/status://services`. Templates get the same prefix, so their variables are unchanged: `omp://status/status://services/{service}`.
+
+A `resources/read` must name a selected resource's URI exactly, or match a selected template (simple `{var}` and reserved `{+var}` expressions; no empty values, and no `.` or `..` path segments, also when percent-encoded). The `contents[].uri` of a result are rewritten to the exposed form.
+
+## HTTP statuses
+
+| Status | When |
+|---|---|
+| `200` | A JSON-RPC answer (results and JSON-RPC errors alike) |
+| `202` | A notification |
+| `400` | A malformed request, a batch, an unsupported `MCP-Protocol-Version` |
+| `401` | No valid credential: missing, wrong, revoked or expired; a suspended person; a service account that's turned off, deleted or whose team is archived; an OAuth token for another gateway |
+| `403` | A foreign `Origin` |
+| `404` | The gateway doesn't exist, is turned off, or its team is archived; or the caller can't use it, including a key limited to other gateways. All look the same |
+| `405` | `GET` or `DELETE` |
+| `429` | A rate limit, with `Retry-After` and `-32029` in the body |
+
+Counted responses carry `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` for the caller's own tightest limit.
+
+## JSON-RPC errors
+
+| Code | Meaning | `data` |
+|---|---|---|
+| `-32602` | `Unknown tool` / `Unknown prompt`: not on this gateway for this caller now (not selected, unavailable, a role too low). Also invalid params | |
+| `-32002` | `Resource not found`: a read the caller may not make, or the server's own "not found" | |
+| `-32042` | `URLElicitationRequiredError`: the person must connect an account, or sign in to an OAuth-protected server. The message also contains the link | `elicitations[0]`: `mode: "url"`, `elicitationId`, `url`, `message` |
+| `-32010` | Refused with a reason the caller may know | `reason`: `service_account`, `provider_disabled`, `provider_unavailable` or `insufficient_scope`; `provider` |
+| `-32029` | Rate limit exceeded | `reason: "rate_limited"`, `limit`, `limitPerMinute`, `retryAfterSeconds` |
+| `-32001` | An HTTP-level refusal (with `401` or `404`), such as "Gateway not found" | |
+| `-32601` | Method not found | |
+
+A `-32042` answer, for example:
+
+```json
+{"jsonrpc": "2.0", "id": 7, "error": {"code": -32042,
+ "message": "github-tools__create_issue needs your GitHub account (repo). Open https://mcp.example.com/connect/github?request=Zk3… to connect it, then try again.",
+ "data": {"elicitations": [{"mode": "url", "elicitationId": "Zk3…",
+   "url": "https://mcp.example.com/connect/github?request=Zk3…",
+   "message": "Connect your GitHub account (repo) to use github-tools__create_issue in the support gateway."}]}}}
+```
+
+The portal is stateless, so it never sends `notifications/elicitation/complete`: the person runs the tool again after connecting. Errors from the MCP server pass through; a tool's own failure is a normal result with `isError: true`.
+
+## Results
+
+Results are relayed with `_meta["io.modelcontextprotocol/serverInfo"]` removed and `structuredContent` dropped when it isn't an object. When a server in OAuth mode echoes the caller's token, it's replaced with `[REDACTED]` before the result reaches the client.

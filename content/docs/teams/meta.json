@@ -1,0 +1,20 @@
+{
+  "title": "Teams",
+  "description": "Registering MCP servers, publishing them and building gateways",
+  "root": true,
+  "pages": [
+    "index",
+    "---MCP servers---",
+    "register-a-server",
+    "capabilities",
+    "user-authorization",
+    "publishing",
+    "---Gateways---",
+    "gateways",
+    "service-accounts",
+    "---Records and settings---",
+    "activity-and-usage",
+    "payload-capture",
+    "team-settings"
+  ]
+}

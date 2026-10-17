@@ -1,0 +1,24 @@
+---
+title: Publishing policy
+description: "Choose how teams' MCP servers reach the Open MCP Portal company catalog: Approval required or Self-publish, with per-team overrides."
+---
+
+**Admin › Publishing** sets the **Default policy** for every team without its own:
+
+- **Approval required** (the default): a platform admin reviews each server, and each changed capability, before it reaches the company catalog. See [Catalog review](/docs/administer/catalog-review).
+- **Self-publish**: each team's owners and admins publish servers and approve changed capabilities themselves, without a review.
+
+A **team override** gives one team a different policy, for example letting a trusted platform team self-publish while everyone else needs approval. Set it on the team's admin page (**Admin › Teams** › the team › **Settings** › **Publishing**). Team-private servers never need approval for the team's own gateways, whatever the policy.
+
+<Screenshot slot="admin-publishing" />
+
+## What a change does
+
+Changing the default or an override **never changes any server's state**:
+
+- Servers waiting for review stay waiting until a platform admin reviews them or their team withdraws them. Under a new **Self-publish** policy, their owners and admins can simply publish them.
+- Moving back to **Approval required** leaves published servers published.
+
+The policy in force when something happens is the one that applies: a URL change on a published server, for example, sends it back to review only if its team is under **Approval required** at that moment.
+
+Both settings are revisioned: if someone else saved first, you're asked to reload. Changes are audited as `settings.publishing_update` and `team.publishing_override`.
