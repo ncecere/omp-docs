@@ -19,6 +19,16 @@
     "width": 1440,
     "height": 900
   },
+  "admin-automation-token-created": {
+    "src": "/images/admin-automation-token-created.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-automation-tokens": {
+    "src": "/images/admin-automation-tokens.webp",
+    "width": 1440,
+    "height": 900
+  },
   "admin-calls": {
     "src": "/images/admin-calls.webp",
     "width": 1440,
@@ -36,6 +46,16 @@
   },
   "admin-limits": {
     "src": "/images/admin-limits.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-notifications": {
+    "src": "/images/admin-notifications.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-overview": {
+    "src": "/images/admin-overview.webp",
     "width": 1440,
     "height": 900
   },
@@ -99,6 +119,11 @@
     "width": 1440,
     "height": 900
   },
+  "connect-allow-server": {
+    "src": "/images/connect-allow-server.webp",
+    "width": 1440,
+    "height": 900
+  },
   "connect-confirm": {
     "src": "/images/connect-confirm.webp",
     "width": 1440,
@@ -154,6 +179,16 @@
     "width": 1440,
     "height": 900
   },
+  "notification-preferences": {
+    "src": "/images/notification-preferences.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "notifications-inbox": {
+    "src": "/images/notifications-inbox.webp",
+    "width": 1440,
+    "height": 900
+  },
   "oauth-consent": {
     "src": "/images/oauth-consent.webp",
     "width": 1440,
@@ -179,6 +214,11 @@
     "width": 1440,
     "height": 900
   },
+  "server-protocol": {
+    "src": "/images/server-protocol.webp",
+    "width": 1440,
+    "height": 900
+  },
   "server-sign-in-card": {
     "src": "/images/server-sign-in-card.webp",
     "width": 1440,
@@ -201,6 +241,21 @@
   },
   "sign-in": {
     "src": "/images/sign-in.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "team-attention": {
+    "src": "/images/team-attention.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "team-automation-tokens": {
+    "src": "/images/team-automation-tokens.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "team-notifications": {
+    "src": "/images/team-notifications.webp",
     "width": 1440,
     "height": 900
   },

@@ -261,66 +261,66 @@
     "files": [
       "admin-overview"
     ],
-    "alt": "Admin \u203a Overview for Example Corp, viewed as Morgan Lee: stat cards (people, teams, servers, published, gateways), the last-24-hours strip with calls, error rate and rate-limited calls and its \"as of\" time, and a Needs attention list grouped by severity with items such as a failing server, a server with changes held back, a review waiting and keys expiring, each with a button that opens it."
+    "alt": "Admin \u203a Overview for Example Corp, viewed as Morgan Lee: the Needs attention list grouped by severity: Critical (Status failing its health checks since yesterday), Warnings (two servers waiting for review, the oldest for 4 days; a notification destination failing; a capability change held back from the catalog) and For your information (a personal key, a publisher token and a service account key expiring within 14 days; calls refused by a rate limit in the last 24 hours), each with a button that opens where it is dealt with. The stat cards and the last-24-hours strip follow below the list."
   },
   "admin-notifications": {
     "files": [
       "admin-notifications"
     ],
-    "alt": "Admin \u203a Notifications: the Email card (status, From address, host, port and mode, and a Send test email button), the delivery queue card, and the platform webhook destinations with their health badges, events, and the Add, Test and Rotate secret actions."
+    "alt": "Admin \u203a Notifications, scrolled to the Email card: \"Email is set up\" with the From address, the server (smtp.corp.example.com:25), the encryption mode and the last 24 hours, a Send test email button, the Delivery card (when the dispatcher last ran, what waits, failed in 24 hours) and the start of the Platform webhooks table: the Slack destination IT alerts and the JSON destination Ops event relay, both healthy, showing only their host."
   },
   "admin-automation-tokens": {
     "files": [
       "admin-automation-tokens"
     ],
-    "alt": "Admin \u203a Automation tokens: the list of platform tokens with name, prefix (ompadm_ and eight characters), scopes, status, created by, expiry and last used, one row marked as blocked because its creator is no longer a platform admin, the Create button, and the banner that tokens never work on the MCP endpoint."
+    "alt": "Admin \u203a Automation tokens: the platform-admin tokens with name, prefix (ompadm_ and eight characters, shown as fake values), kind, scope, created by, expiry, last used and status: provisioning (platform:write) marked Blocked because its creator is no longer a platform admin, inventory-sync revoked, and monitoring active; the Create token button and the note that tokens never work on the MCP endpoint."
   },
   "admin-automation-token-created": {
     "files": [
       "admin-automation-token-created"
     ],
-    "alt": "The show-once panel after creating a platform token: the secret as a fake value starting ompadm_0000, a copy button, and the curl and GitHub Actions snippets, with the note that it can't be shown again."
+    "alt": "The \"Token created\" dialog after creating a platform token: the warning to copy it now because it won't be shown again, the secret as a fake value starting ompadm_0000 with a copy button, the line \"Starts with ompadm_\u2026\", and a curl example that reads the token from an environment variable, over the token table."
   },
   "team-attention": {
     "files": [
       "team-attention"
     ],
-    "alt": "The team overview of Support Tools as Priya Shah: the Attention card above the page's content, listing a failing server since a time, a server with changes held back from the catalog and a publisher token expiring, each with a button that opens it."
+    "alt": "The overview of Support Tools as Priya Shah, with the Needs attention card above the page's content, grouped by severity: Status failing its health checks since yesterday (Critical), a capability change held back from the catalog (Warning) and a publisher token expiring within 14 days (For your information), each with a button that opens it."
   },
   "team-notifications": {
     "files": [
       "team-notifications"
     ],
-    "alt": "Team settings \u203a Notifications for Support Tools, as team owner: webhook destinations with health badges and the events each receives, and the Add, Test, Rotate secret, delivery log and enable or disable actions."
+    "alt": "Team settings \u203a Notifications for Support Tools, as team owner: two webhook destinations, Service desk automation (JSON, signed) Healthy with its last delivery, and Support alerts (Slack) Failing, 3 in a row because the destination had an error (5xx); each shows only its host, its number of events, an on/off switch and an actions menu, with the Add destination button."
   },
   "team-automation-tokens": {
     "files": [
       "team-automation-tokens"
     ],
-    "alt": "Team settings \u203a Automation tokens for Support Tools, as team owner: publisher tokens with name, prefix (omppub_ and eight characters), scopes servers:read and servers:write, status, created by, expiry and last used, and the Create button, with the note that a token can publish but not approve or delete."
+    "alt": "Team settings \u203a Automation tokens for Support Tools, as team owner: publisher tokens with name, prefix (omppub_ and eight characters, shown as fake values), kind, scope servers:write, created by, expiry, last used and status: github-actions active and expiring in 10 days, and release-2026q3 expired 5 days ago; the Create token button, and the note that a token can publish but not approve or delete."
   },
   "notifications-inbox": {
     "files": [
       "notifications-inbox"
     ],
-    "alt": "The Notifications inbox for Sam Ortiz: the All and Unread tabs, rows with a title and a line of detail, some unread, and the bell in the top bar with its unread count."
+    "alt": "The Inbox of Sam Ortiz, admin of Support Tools: five notifications newest first, three unread (a blue dot; the bell shows 3): two decisions on the Runbooks server (approved, rejected, each with the note), \"Status\" is still unhealthy (failing for 26 hours), and two already read: Shared mailbox was approved and Capabilities changed on Status; with the Unread only switch and Mark all read."
   },
   "notification-preferences": {
     "files": [
       "notification-preferences"
     ],
-    "alt": "Account \u203a Notifications: the events Sam Ortiz can receive, each with an In-app and an Email switch, all on by default."
+    "alt": "Account \u203a Notifications: the seven events Sam Ortiz can receive as a team admin (a server is failing, recovered, capabilities changed, a review was decided, a connected account needs signing in again, a server's sign-in lapsed, a key or token expires soon), each with who it is sent to and an In the portal and an Email switch, all on by default; the note that email goes to his profile address."
   },
   "connect-allow-server": {
     "files": [
       "connect-allow-server"
     ],
-    "alt": "The connect confirm page asking Sam Ortiz to allow a server: \"Allow Mail (Support Tools)\" naming the server and its team, the provider Google and the scope, shown as already allowed on the account, with Allow and Cancel and no step to the provider."
+    "alt": "The connect page asking Sam Ortiz to allow a server: \"Allow Shared mailbox (Support Tools) to use your Google account\", naming the server and its team, the request (the tool, the gateway, Google, his connected account sam.ortiz@example.com), the scope gmail.readonly marked Already granted, the note that nothing is sent to Google, and the buttons Cancel and Allow Shared mailbox."
   },
   "server-protocol": {
     "files": [
       "server-protocol"
     ],
-    "alt": "A server's Overview tab for Status, showing the protocol line \"Protocol 2026-07-28 (modern), negotiated a few minutes ago\" beside the server's health."
+    "alt": "A server's Overview tab for Status in Support Tools, with a Published badge and a \"1 change waiting\" notice: the Connection card with the Upstream row \"Protocol 2026-07-28 (modern), negotiated 32 seconds ago\" above the Healthy badge in the Health row."
   }
 }
