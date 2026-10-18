@@ -10,6 +10,8 @@ Open MCP Portal stands between AI clients and your teams' MCP servers. Its job i
 - **People** sign in to the web app through your OpenID Connect provider (authorization code with PKCE and a nonce). Browser sessions are server-side; the cookie holds a random secret whose SHA-256 digest is stored. Writes need a CSRF token and a same-origin `Origin`.
 - **MCP clients** sign in with the portal's own OAuth 2.1 authorization server: PKCE S256 only, exact redirect URI matching, a token bound to one gateway (`resource`), consent per person, client and gateway, refresh tokens rotated on every use with reuse detection. Client ID Metadata Documents are fetched through the address guard (at most 16 KiB, no redirects). Self-registered clients are marked unverified and can never be trusted to skip consent.
 - **Keys** (personal and service account) always expire (at most 365 days) and can be limited to some gateways.
+- **Automation tokens** (`ompadm_`, `omppub_`) let CI call part of the management API. They are separate from MCP credentials in both directions: they never work on `/mcp`, and `omp_`, `omp_sa_` and OAuth tokens never work on `/v1`. They expire (at most 365 days), show once, and are created and revoked only in a browser session, never with a token. A platform token stops working if its creator is no longer a platform admin. What they may do is fixed by the OpenAPI description, and they can't approve, delete, change roles or read recorded call contents. Every action is audited as the token. See [Automation tokens](/docs/administer/automation-tokens).
+- **A redirect after sign-in** goes only to a path on the portal itself: control characters, `//` and backslashes in the `next` value are refused.
 
 ## Every request is authorized again
 
@@ -20,14 +22,15 @@ Tool annotations and model output are never used for authorization. Definitions 
 ## What servers receive
 
 - The caller's own credential is **never** forwarded. Each call carries an ES256 identity token for that server only (`aud` = the server's URL), valid for 5 minutes, with keys rotating every 30 days and published at `/.well-known/jwks.json`. A team can stop sending it to servers outside the company.
-- A person's provider token goes only to the registered URL of a server whose requirement for that capability names that provider; never on lists, discovery, tests or health checks.
+- A person's provider token goes only to a server whose requirement for that capability names that provider **and that the person allowed**, at the address (scheme, host and port) it had when they allowed it; never on lists, discovery, tests or health checks. Moving a server to another host, or making it require another provider, ends everyone's permission. The token still holds every scope the person granted that provider, so a server they allowed receives all of them.
+- A server's stored header value never follows a change of URL to another origin: the edit is refused unless it supplies a new value or removes the header.
 - A person's token for an OAuth-protected server goes only to that server's URL, which must equal its metadata's `resource`, and to its own token and revocation endpoints.
 - Header names `MCP-Gateway-Identity`, `MCP-Gateway-Provider` and `MCP-Gateway-Provider-Token` are reserved, so a team can't forge them with a static header.
 
 ## Credentials at rest
 
-- API keys, service account keys and OAuth tokens are stored only as HMAC-SHA256 digests under `API_KEY_PEPPER`; a key is shown once.
-- Server header values, client secrets, provider tokens, signing keys' private keys, PKCE verifiers, consent links and recorded call contents are encrypted with AES-256-GCM under `ENCRYPTION_KEY`, each bound to its row.
+- API keys, service account keys, automation tokens and OAuth tokens are stored only as HMAC-SHA256 digests under `API_KEY_PEPPER`; a key is shown once.
+- Server header values, client secrets, provider tokens, signing keys' private keys, PKCE verifiers, consent links, recorded call contents and webhook destinations' URLs and signing secrets are encrypted with AES-256-GCM under `ENCRYPTION_KEY`, each bound to its row.
 - Secrets are never returned by the API (only "configured" and a short hint), logged, audited, put in call records or health checks, or captured. Tests check this with sentinel values across responses, logs, the audit log, call records and recorded contents.
 
 See [Secrets and key rotation](/docs/operate/secrets-and-key-rotation).
@@ -36,9 +39,15 @@ See [Secrets and key rotation](/docs/operate/secrets-and-key-rotation).
 
 Every connection to an MCP server, an auth provider's token, revocation or userinfo endpoint, a client metadata document or an OAuth-protected server's metadata goes through one address guard: public addresses over https; internal ones only where a platform admin allowed them; never loopback, link-local (including cloud metadata), unspecified, multicast or broadcast, whatever the list says. Every resolved address is checked and the connection pinned to it (no DNS rebinding), redirects are never followed and proxy settings are ignored. See [Internal networks](/docs/administer/internal-networks).
 
+**Webhooks** use the same guard but **not** the allowlist of internal networks: a team owner chooses a webhook's URL, and with that list a team owner could make the portal send requests into your network. Webhooks reach public https addresses only, unless the operator lists a network in `NOTIFY_WEBHOOK_ALLOWED_NETWORKS`. See [Notifications](/docs/administer/notifications).
+
 ## Consent links
 
 A `-32042` consent link contains only an opaque ID: no personal data, and it signs nobody in. It works only in the browser session of the person whose call created it, once, for 10 minutes. The confirm page shows every scope before the provider is contacted. The OAuth `state` is bound to that session, person, provider and request (stopping login CSRF and mix-up), and redirects after the callback go only to same-origin paths.
+
+## Approvals
+
+A platform admin's approval of a server or capability names what the reviewer saw: the review dialog sends a digest of the server's definitions (or a capability's fingerprint), and an approval of something that changed in between is refused with `409 changed_since_review`. A team's own servers need no approval for the team's own gateways: review protects other teams.
 
 ## Records
 
