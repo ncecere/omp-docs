@@ -77,6 +77,7 @@ What v0.1.0 doesn't verify yet:
 - Delegated credentials against a real Google or Microsoft provider: providers were run only against a fake OAuth provider. The presets were checked against the providers' documentation.
 - VS Code and Cursor beyond their configuration snippets: neither has been signed in to a gateway, and upstream servers that use Client ID Metadata Documents or dynamic registration haven't been tried in practice.
 - A smoke test of the Kubernetes manifests on a real cluster (they are only rendered and schema-checked).
+- Redaction of provider tokens in recorded call contents: it has unit tests, but no end-to-end test through a server that uses a provider token.
 
 What it doesn't do yet: streaming responses through to the client (calls are buffered, up to 1 MiB), resource subscriptions, and forwarding of sampling, elicitation and roots. There is no Helm chart. It is pre-1.0 and hasn't run in production.
 
