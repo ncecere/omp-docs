@@ -3,7 +3,7 @@ title: Internal networks
 description: Allow teams' MCP servers on internal networks and hosts in Open MCP Portal, optionally over plain http, and check a URL against the rules.
 ---
 
-Out of the box, Open MCP Portal connects only to MCP servers at **public** addresses over https. **Admin › Internal networks** lists the internal networks (CIDRs) and host names that teams' servers may also use. The same rules apply to auth providers' token, revocation and userinfo endpoints, to OAuth client metadata documents, and to the discovery of OAuth-protected servers.
+Out of the box, Open MCP Portal connects only to MCP servers at **public** addresses over https. **Admin › Internal networks** lists the internal networks (CIDRs) and host names that teams' servers may also use. The same rules apply to auth providers' token, revocation and userinfo endpoints, to OAuth client metadata documents, and to the discovery of OAuth-protected servers. It does **not** apply to [notification webhooks](/docs/administer/notifications#where-a-webhook-may-point): those reach public https addresses only, unless the operator lists a network in `NOTIFY_WEBHOOK_ALLOWED_NETWORKS`.
 
 <Screenshot slot="admin-internal-networks" />
 
