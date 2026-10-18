@@ -227,7 +227,7 @@ For servers in Sign-in with OAuth mode ([OAuth-protected servers](/docs/server-a
 - A response is one JSON object of at most 1 MiB, except a `tools/call` with a progress token from a client that accepts `text/event-stream`, which is streamed. There is no `subscriptions/listen`, no tasks extension and no relay of `notifications/message`.
 - The gateway originates input requests for consent and relays your server's elicitation; never sampling or roots.
 - No `completion/complete`, logging, sampling or roots, and `ping` answers only for legacy clients.
-- Real Claude Code, VS Code and Cursor haven't been tried against the 2026-07-28 revision yet: it was exercised by the conformance suite, curl and the Go SDK.
+- Claude Code 2.1.280 has been run against a gateway on the 2026-07-28 revision (API-key authentication): discovery, the lists, tool calls and the consent link all worked. It declares form-mode elicitation only, so it gets the consent link as a tool error. Not tried: its OAuth sign-in on the new revision, a client that declares URL elicitation (the `input_required` result), VS Code and Cursor. The rest was exercised by the conformance suite, curl and the Go SDK.
 
 ## Deviations from the specification
 
