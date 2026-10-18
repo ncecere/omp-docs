@@ -90,6 +90,8 @@ GitHub's server needs some tool arguments as HTTP headers too; the portal sends 
 
 **Send identity token** (on by default) adds the portal's signed identity token to every call: the caller's name, email and teams, the gateway and the tool. Turn it off for servers run outside your company, such as GitHub's hosted server, so that personal data isn't sent to a third party. The server then gets no identity token on any call. Turning it off isn't a review trigger: it sends less.
 
+The token travels as `Authorization: Bearer …`. Some public servers refuse any request that carries an Authorization header. DeepWiki's public endpoint (`https://mcp.deepwiki.com/mcp`) is one: it answers "Authentication is not allowed on the public DeepWiki endpoint". Adding such a server and reading its tools works, because discovery, **Test connection** and refresh send no identity token, and then the first real call fails. If a tool of a public server fails like that, turn **Send identity token** off for the server and try again.
+
 ## Internal servers
 
 Out of the box, servers must be at **public** addresses over https. A server on your internal network is refused with "The portal won't connect to this internal (private) address" until a platform admin allows its network or host name in **Admin › [Internal networks](/docs/administer/internal-networks)**, optionally with plain http. Loopback, link-local and cloud metadata addresses are never allowed, whatever the list says.
