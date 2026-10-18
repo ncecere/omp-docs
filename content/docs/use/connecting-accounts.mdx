@@ -3,7 +3,7 @@ title: Connecting accounts
 description: Tools that act as you on GitHub, Google or another service, the consent link they answer with (JSON-RPC -32042), MCP servers you sign in to, and My connections.
 ---
 
-Some tools act **as you** on another service: create a GitHub issue as you, search your Gmail, read your Google Drive. Others belong to an MCP server that is OAuth-protected itself, such as GitHub's hosted MCP server, where each person signs in to the server's own service. In both cases Open MCP Portal needs your account on that service once. It keeps the token, refreshes it, and sends it only to the server that needs it. Your AI client and its model never see it.
+Some tools act **as you** on another service: create a GitHub issue as you, search your Gmail, read your Google Drive. Others belong to an MCP server that is OAuth-protected itself, such as GitHub's hosted MCP server, where each person signs in to the server's own service. In both cases Open MCP Portal needs your account on that service once. It keeps the token, refreshes it, and sends it only to a server **you have allowed** to use it. Your AI client and its model never see it.
 
 ## The first call: a link instead of a result
 
@@ -14,16 +14,38 @@ github-tools__create_issue needs your GitHub account (repo). Open
 https://mcp.example.com/connect/github?request=Zk3… to connect it, then try again.
 ```
 
-Clients that support URL elicitation show the link as a prompt; others show the error message, which contains the link. Open it in your browser:
+What your client receives depends on its MCP version:
+
+- **Most clients** get the JSON-RPC error above (`-32042`), and clients that support URL elicitation show the link as a prompt; others show the message, which contains the link.
+- A client using the **2026-07-28** revision that supports URL elicitation gets the link as a question it can answer (an `input_required` result), and retries the call with the state it was given.
+- A **2026-07-28** client that doesn't support URL elicitation gets a tool error with the link in its text ("… Open <link> to connect it, then try again."), because that revision forbids `-32042` for such a client. A prompt or a resource read gets error `-32010` with the link in the message.
+
+In every case it is the same link. Open it in your browser:
 
 1. If you aren't signed in to the portal, you sign in first. The sign-in page says "A tool needs one of your accounts".
-2. The confirm page shows who you're signed in as, the tool that asked, the gateway, the service (or the MCP server and its team), the account connected now, and **each permission (scope)** asked for, marked as already allowed or new. Nothing has been sent to the service yet.
-3. Choose **Continue to &lt;service&gt;** (for an MCP server, **Continue to sign in**) and approve at the service. Or **Cancel**: nothing is connected.
+2. The confirm page shows who you're signed in as, the tool that asked, the gateway, the service, the **MCP server and its team** that will receive your account, the account connected now, and **each permission (scope)** asked for, marked as already allowed or new. Nothing has been sent to the service yet.
+3. Choose **Continue to &lt;service&gt;** (for an MCP server in OAuth mode, **Continue to sign in**) and approve at the service. Or **Cancel**: nothing is connected. If your account already has every permission the server needs, the page asks only **Allow &lt;server&gt; (&lt;team&gt;)**: confirming records your permission and doesn't go to the service.
 4. The result page says whether it worked. Go back to your AI client and **run the tool again**.
 
 <Screenshot slot="connect-confirm" />
 
 The link works **only for you** (it isn't a sign-in link: it needs your own browser session with the portal), **only once**, and for **10 minutes**. Opened by someone else, it shows "This link was made for someone else". Expired or used, it shows "This link expired": run the tool again for a new one. Calling the same tool again while a link is still valid returns the same link.
+
+## Allowing a server
+
+Since v0.2.0, a connected account isn't sent to every server that names the service. **Each person allows each server once.** The consent page names the server and the team that runs it ("Allow Mail (Support Tools) to use your Google account"), so you can tell whether you know and trust it.
+
+<Screenshot slot="connect-allow-server" />
+
+Only then does that server receive your token for the service, at the address it had when you allowed it, for the permissions the page showed.
+
+- **First call to a new server:** the call asks for your permission with a link, the same way as the first connection (the reason behind it is `server_not_allowed`). Nothing was forwarded.
+- **Your connection lists the servers you allowed**, with the team and the address. See My connections below.
+- **If a server moves to another host or port, or starts requiring another service, your permission for it ends**, and the next call asks again. A change that only touches the path doesn't. Disconnecting a service ends your permissions for all its servers.
+- **After the upgrade to v0.2.0** nobody had allowed any server, on purpose, so you are asked once per server. A link made before the upgrade is refused as expired: run the tool again.
+- A link is made for **one server**: it can't allow another. If the server moved or changed service after the link was made, the link is refused and nothing is recorded; run the tool again.
+
+Allowing a server gives it your token for the service, which holds **every permission you have ever granted that service**, not only the ones this server asked for. Allow only servers you trust. The portal doesn't narrow the token per call yet.
 
 ### When the result page says something else
 
@@ -47,13 +69,13 @@ You don't have to wait for a tool to ask:
 
 ## My connections
 
-Account › **My connections** lists your connected accounts: the service (or MCP server, with an "MCP server" badge and its team), the account it is (such as your GitHub login), the permissions granted, the status, when it was last used and when the token expires. From there you can **Connect**, **Reconnect** and **Disconnect**.
+Account › **My connections** lists your connected accounts: the service (or MCP server, with an "MCP server" badge and its team), the account it is (such as your GitHub login), the permissions granted, the **servers you allowed** to use it (name, team and address; read-only), the status, when it was last used and when the token expires. From there you can **Connect**, **Reconnect** and **Disconnect**.
 
 <Screenshot slot="my-connections" />
 
 - One connection per service. Connecting again asks for everything granted before plus anything new, so a new token never loses permissions.
 - The portal refreshes tokens shortly before they expire. If a refresh is refused (for example you revoked the app at the service), the connection shows that it needs you to connect again, and the next call answers with a new link.
-- **Disconnect** erases the tokens at once and, where the service supports it, revokes them there too.
+- **Disconnect** erases the tokens and your permissions for servers at once and, where the service supports it, revokes the tokens there too.
 - Leaving a team doesn't change your connections: they are yours. If you're suspended, they're kept but every request you make is refused.
 
 Platform admins can see the metadata of anyone's connections (never the tokens) and disconnect them; auditors can see them.

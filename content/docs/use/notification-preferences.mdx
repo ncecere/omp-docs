@@ -1,0 +1,58 @@
+---
+title: Notification preferences
+description: "Open MCP Portal's bell and inbox, and how to choose per event whether you get a notification in the portal, by email, or both."
+---
+
+Open MCP Portal tells you when something that concerns you happens: a server your team runs is down, a review you asked for was decided, a key of yours is about to expire. You see these in the portal, and by email if your organisation has set that up. You choose which ones.
+
+## The bell and the inbox
+
+The **bell** in the top bar shows how many notifications you haven't read. Open it to see the latest eight, **Mark all read**, or **View all**.
+
+**Inbox** (`/notifications`) lists them all, with **All** and **Unread** tabs. Each row has a short title and a line of detail, and opening it takes you to the screen it is about (a server, the review queue, your connections) and marks it read. Read marks are yours alone. Notifications stay in your inbox for 90 days, read or not.
+
+<Screenshot slot="notifications-inbox" />
+
+## Choose what you get
+
+Account › **Notifications** (`/settings/notifications`, in the menu under your name) lists the events you can receive, with two switches for each:
+
+- **In-app**: whether it appears in your bell and inbox.
+- **Email**: whether it is also sent to you by email.
+
+<Screenshot slot="notification-preferences" />
+
+Both are **on** by default. A switch applies to notifications from then on: turning one off doesn't remove what you already have. You only see the events that can reach you: your role decides which ones those are.
+
+| Event | Who can receive it |
+|---|---|
+| A server became unhealthy (`server.unhealthy`), and when it recovered (`server.recovered`) | Owners, admins and editors of the team |
+| A capability changed and is held back (`capability.changed`) | Owners, admins and editors of the team |
+| A server's setup sign-in lapsed (`upstream_signin.lapsed`) | Owners, admins and editors of the team |
+| A server was approved or rejected (`publish.decided`) | Owners and admins of the team |
+| A server is waiting for review (`publish.requested`) | Platform admins |
+| A key or token is about to expire (`key.expiring`) | You, for your own personal API keys. Owners and admins of the team, for its service account keys and publisher tokens. Platform admins, for platform tokens |
+| One of your connections needs you to connect again (`connection.needs_reconsent`) | You, about your own connections |
+
+A key or token notice is sent once, when a key that lasted more than 7 days is within 7 days of expiring.
+
+Preferences are only about **you**. Team and platform **webhooks**, which send events to a chat channel or another tool, are set up by the team's owners and admins or by platform admins, and aren't affected by your switches. Events about your own connections never go to webhooks.
+
+## Email
+
+Email works only when **all** of these are true:
+
+- Your organisation's operator has set up email (`SMTP_HOST`). If not, the **Email** column on this page is greyed out with a notice, and you get everything in the inbox.
+- The identity provider you sign in with reported your email address as **verified**. The portal records that at each sign-in, so after the upgrade to v0.2.0 **you get no email until you have signed in once**. Your inbox works in the meantime.
+- Your **Email** switch for the event is on.
+
+Email goes to the address on your profile, the one your identity provider gave the portal. It carries the notification, a link into the portal, and a note on why you got it and where to change it. You can't get more than 30 emails an hour; beyond that, the inbox still has everything.
+
+## If you expected one and didn't get it
+
+- Check your switches for the event, and that your role can receive it.
+- Check that you have signed in since the upgrade, and that your address is verified at your identity provider.
+- Suspended people, and the members of an archived team, get nothing.
+- You aren't notified about an action you took yourself.
+
+Ask a platform admin if email never arrives for anyone: [Notifications](/docs/administer/notifications) explains how delivery is monitored.

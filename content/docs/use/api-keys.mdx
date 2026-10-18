@@ -3,7 +3,7 @@ title: API keys
 description: "Personal API keys for scripts and MCP clients that can't sign in with a browser: creating, limiting to gateways, using and revoking them in Open MCP Portal."
 ---
 
-A personal API key (`omp_…`) lets a script, `curl` or an MCP client that can't open a browser call your gateways. It **acts as you**: it reaches the gateways you can use, with your access, checked on every request. For interactive clients, prefer [OAuth sign-in](/docs/get-started/connect-your-client); for automation that mustn't depend on you, use a team [service account](/docs/teams/service-accounts).
+A personal API key (`omp_…`) lets a script, `curl` or an MCP client that can't open a browser call your gateways. It **acts as you**: it reaches the gateways you can use, with your access, checked on every request. For interactive clients, prefer [OAuth sign-in](/docs/get-started/connect-your-client); for automation that mustn't depend on you, use a team [service account](/docs/teams/service-accounts). These keys, like service account keys, only work on gateways (`/mcp`): they can't call the management API. CI that registers or publishes a team's servers uses a team admin's [publisher token](/docs/teams/publisher-tokens) instead.
 
 Your keys are under Account › **API keys** (the menu under your name).
 

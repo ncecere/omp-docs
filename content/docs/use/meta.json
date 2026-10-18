@@ -2,5 +2,5 @@
   "title": "Use",
   "description": "Gateways, connected accounts, API keys and connected apps",
   "root": true,
-  "pages": ["index", "my-gateways", "connecting-accounts", "api-keys", "connected-apps", "troubleshooting"]
+  "pages": ["index", "my-gateways", "connecting-accounts", "api-keys", "connected-apps", "notification-preferences", "troubleshooting"]
 }
