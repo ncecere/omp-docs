@@ -39,7 +39,7 @@
     "files": [
       "server-overview"
     ],
-    "alt": "Team › MCP servers › Status › Overview: Published, its capability counts, and the Connection card (URL https://status.corp.example.com/mcp, Streamable HTTP, None authentication, 30 s timeout, Enabled, Healthy, last checked) with Test connection and Refresh capabilities."
+    "alt": "Team › MCP servers › Status › Overview: Published, its capability counts, and the Connection card (URL https://status.corp.example.com/mcp, Streamable HTTP, an Upstream row reading Protocol 2026-07-28 (modern), negotiated a few minutes ago, None authentication, 30 s timeout, Enabled, Healthy, last checked) with Test connection and Refresh capabilities."
   },
   "server-capabilities": {
     "files": [
@@ -135,7 +135,7 @@
     "files": [
       "connect-confirm"
     ],
-    "alt": "The connect confirm page \"Connect your Google account\": signed in as sam.ortiz@example.com, asked by mail__search_messages, gateway Support, provider Google, connected now: no account, and the scope gmail.readonly marked New, with Cancel and Continue to Google."
+    "alt": "The connect confirm page \"Connect your Google account\": signed in as sam.ortiz@example.com, asked by mail__search_messages, gateway Support, server Mail (Support Tools), provider Google, connected now: no account, and the scope gmail.readonly marked New, a note that the portal sends the token only to servers the person allows (starting with Mail) and only while they stay at their current address, with Cancel and Continue to Google."
   },
   "connect-done": {
     "files": [
@@ -147,7 +147,7 @@
     "files": [
       "my-connections"
     ],
-    "alt": "Account › My connections: the MCP server Code search (\"MCP server\" badge, team data-platform, scopes code:read, repo:read and user:read) and Google (account sam.ortiz@example.com, scopes gmail.readonly and gmail.compose), both Active, with when each was connected and last used."
+    "alt": "Account › My connections: the MCP server Code search (\"MCP server\" badge, team data-platform, scopes code:read, repo:read and user:read) and Google (account sam.ortiz@example.com, scopes gmail.readonly and gmail.compose), both Active, with an Allowed servers column (Code search: that server only; Google: Mail (Support Tools)) and when each was connected and last used."
   },
   "team-usage": {
     "files": [
