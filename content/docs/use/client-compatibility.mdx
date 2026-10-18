@@ -41,7 +41,7 @@ You need a gateway you can use (any team gateway of a team you're on will do) an
 ## Behaviour worth knowing
 
 - **The consent answer depends on what the client declares.** A client that declares URL elicitation gets the link as a question it can show; any other client of the new revision gets a tool error with the link in its text; older clients get the JSON-RPC error `-32042` with the link. All three carry the same link.
-- **Public servers that refuse an Authorization header** fail on their first call while **Send identity token** is on: see [Troubleshooting](/docs/use/troubleshooting).
+- **Public servers that refuse an Authorization header** can fail on a call while **Send identity token** is on, even when **Test connection** passed: Test catches a server that refuses the token with `401` or `403`, not one that refuses only when a tool runs. See [Troubleshooting](/docs/use/troubleshooting).
 - **Tool names** are `{server-slug}__{name}`; some clients shorten or sanitize long names, which is theirs to explain.
 
 ## Report a result

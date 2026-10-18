@@ -17,7 +17,7 @@ Your MCP server keeps running where your team runs it. Open MCP Portal connects 
 ## What your server receives
 
 - **Discovery.** When the server is registered, refreshed or its URL changes, the portal opens a session (it tries the 2026-07-28 revision first and falls back to `initialize` for an older server; see [MCP protocol support](/docs/server-authors/mcp-protocol#era-negotiation)) and lists every kind of capability you advertise: tools, prompts, resources and resource templates, page by page (at most 500 per kind). It never calls a tool to discover it.
-- **Health checks.** Every few minutes (5 by default), an MCP exchange to see that you answer. Plus a check whenever someone presses **Test connection** or **Refresh capabilities**.
+- **Health checks.** Every few minutes (5 by default), an MCP exchange to see that you answer. Plus a check whenever someone presses **Test connection** or **Refresh capabilities**. A manual Test carries an identity token for the editor who pressed it ([what a Test sends](/docs/server-authors/identity-token#what-a-test-sends)); refresh and the scheduled checks carry none.
 - **Calls.** `tools/call`, `prompts/get` and `resources/read`, only for capabilities a gateway selected and a caller was allowed to use. Lists never reach you: clients get the definitions the portal stored and approved.
 
 The portal is stateless: it keeps no session with you between calls. To an older server, each call is its own MCP session with a new `initialize` handshake; to a 2026-07-28 server, each call is one request. Answer in JSON or as an SSE stream; the portal reads either. If you send `notifications/progress` for the call's progress token, the portal can stream it to a client that asked for it.

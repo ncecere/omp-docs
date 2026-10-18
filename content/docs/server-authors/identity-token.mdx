@@ -18,7 +18,7 @@ The caller is either a **person** (with a personal API key, or through an MCP cl
 
 With no static header, your server can act as an ordinary OAuth resource server that accepts bearer tokens signed with the portal's keys. The header names keep `Gateway`: they describe what reaches your server, a call relayed through a gateway, and they won't change. Teams can't register a static header named `MCP-Gateway-Identity`, `MCP-Gateway-Provider` or `MCP-Gateway-Provider-Token`.
 
-**Send identity token** is on by default. Teams are advised to turn it off for servers run outside the company, so that people's names, emails and teams aren't sent to a third party. The identity token is sent only with calls: not with discovery, tests or health checks.
+**Send identity token** is on by default. Teams are advised to turn it off for servers run outside the company, so that people's names, emails and teams aren't sent to a third party. The identity token is sent with calls and with an editor's manual **Test connection** ([below](#what-a-test-sends)); discovery, refresh and scheduled health checks send none.
 
 ## What to check
 
@@ -62,6 +62,20 @@ A service account's token, for example:
  "gateway": "support", "tool": "status__check_outage", "client": "deploy", "jti": "…",
  "iat": 1760650000, "nbf": 1760649970, "exp": 1760650300}
 ```
+
+## What a Test sends
+
+An editor's **Test connection** behaves like a call for a server whose **Send identity token** is on: it does the handshake (`initialize` or `server/discover`) and the lists with an identity token for **the person who pressed the button**, in the same header a call uses (see [Where it arrives](#where-it-arrives)). It calls no tool. The token is the same kind as a call's, with these values where a call names a gateway and a tool:
+
+| Claim | In a Test |
+|---|---|
+| `principal_type`, `sub`, `email`, `name`, `teams` | The editor, as for a call from them |
+| `aud` | Your server's URL, as registered |
+| `gateway` | `omp:test`. No gateway slug can look like this (slugs are lowercase letters, digits and hyphens), so a server that decides by gateway can't mistake a test for traffic |
+| `tool`, `prompt`, `resource` | None of them is set (a call sets exactly one) |
+| `client` | `Test connection` (no `client_verified`) |
+
+If your server answers a Test's request with `401` or `403` but accepts the same request without the token, the portal reports that the server refuses the identity token, and says to turn **Send identity token** off or to accept it. A public server that refuses any `Authorization` header is the usual case. This catches only a server that refuses at the HTTP level: one that accepts the request and rejects the token when a tool runs still passes a Test. Refresh, discovery and the scheduled health checks send no identity token, and a Test run with an automation token has no person to name, so it sends none either.
 
 ## Python (PyJWT)
 

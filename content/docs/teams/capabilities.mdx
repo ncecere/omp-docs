@@ -41,7 +41,7 @@ Who approves: a platform admin under **Approval required**; the team's owners an
 Each server's health comes from checks:
 
 - **Scheduled**: every `HEALTH_CHECK_INTERVAL` (5 minutes by default), the portal checks every enabled server of every active team, four at a time, on one replica.
-- **Test connection** on the Overview tab runs a check now.
+- **Test connection** on the Overview tab runs a check now. When the server's **Send identity token** is on, it sends the identity token of the editor who pressed it, and fails with a specific message if the server refuses it with `401` or `403` but accepts the request without it. Scheduled checks and refresh send no token. See [Send identity token](/docs/teams/register-a-server#send-identity-token) for what a Test can't catch.
 - Every **Refresh capabilities** also stores a check.
 
 The **Health** tab lists the latest 100 checks: ok or failed, latency, what triggered it, the HTTP status and a short message with secrets redacted. A failing server shows since when, on the team's [attention card](/docs/teams/attention-and-notifications), and, after three failed checks in a row, in a notification to the team's owners, admins and editors.
