@@ -8,7 +8,7 @@ Open MCP Portal stands between AI clients and your teams' MCP servers. Its job i
 ## Callers
 
 - **People** sign in to the web app through your OpenID Connect provider (authorization code with PKCE and a nonce). Browser sessions are server-side; the cookie holds a random secret whose SHA-256 digest is stored. Writes need a CSRF token and a same-origin `Origin`.
-- **MCP clients** sign in with the portal's own OAuth 2.1 authorization server: PKCE S256 only, exact redirect URI matching, a token bound to one gateway (`resource`), consent per person, client and gateway, refresh tokens rotated on every use with reuse detection. Client ID Metadata Documents are fetched through the address guard (at most 16 KiB, no redirects). Self-registered clients are marked unverified and can never be trusted to skip consent.
+- **MCP clients** sign in with the portal's own OAuth 2.1 authorization server: PKCE S256 only, exact redirect URI matching, a token bound to one gateway (`resource`), consent per person, client and gateway, refresh tokens rotated on every use with reuse detection. Client ID Metadata Documents are fetched through the address guard (at most 16 KiB, no redirects). Self-registered clients are marked unverified and can never be trusted to skip consent, and since v0.2.1 the portal keeps at most `OAUTH_MAX_REGISTERED_CLIENTS` of them at once (1,000 by default; see [Hardening status](#hardening-status)).
 - **Keys** (personal and service account) always expire (at most 365 days) and can be limited to some gateways.
 - **Automation tokens** (`ompadm_`, `omppub_`) let CI call part of the management API. They are separate from MCP credentials in both directions: they never work on `/mcp`, and `omp_`, `omp_sa_` and OAuth tokens never work on `/v1`. They expire (at most 365 days), show once, and are created and revoked only in a browser session, never with a token. A platform token stops working if its creator is no longer a platform admin. What they may do is fixed by the OpenAPI description, and they can't approve, delete, change roles or read recorded call contents. Every action is audited as the token. See [Automation tokens](/docs/administer/automation-tokens).
 - **A redirect after sign-in** goes only to a path on the portal itself: control characters, `//` and backslashes in the `next` value are refused.
@@ -21,7 +21,7 @@ Tool annotations and model output are never used for authorization. Definitions 
 
 ## What servers receive
 
-- The caller's own credential is **never** forwarded. Each call carries an ES256 identity token for that server only (`aud` = the server's URL), valid for 5 minutes, with keys rotating every 30 days and published at `/.well-known/jwks.json`. A team can stop sending it to servers outside the company.
+- The caller's own credential is **never** forwarded. Each call carries an ES256 identity token for that server only (`aud` = the server's URL), valid for 5 minutes, with keys rotating every 30 days and published at `/.well-known/jwks.json`. A team can stop sending it to servers outside the company. It also goes with an editor's manual **Test connection**, for that editor and with the gateway `omp:test`, so that a server that refuses it shows up at Test; refresh and scheduled checks send none.
 - A person's provider token goes only to a server whose requirement for that capability names that provider **and that the person allowed**, at the address (scheme, host and port) it had when they allowed it; never on lists, discovery, tests or health checks. Moving a server to another host, or making it require another provider, ends everyone's permission. The token still holds every scope the person granted that provider, so a server they allowed receives all of them.
 - A server's stored header value never follows a change of URL to another origin: the edit is refused unless it supplies a new value or removes the header.
 - A person's token for an OAuth-protected server goes only to that server's URL, which must equal its metadata's `resource`, and to its own token and revocation endpoints.
@@ -59,6 +59,15 @@ The audit log and call records are append-only (database triggers refuse changes
 - The image is distroless and runs as a non-root user with a read-only filesystem; the Kubernetes base meets the `restricted` Pod Security Standard and ships default-deny NetworkPolicies.
 - The metrics listener has no authentication: keep it on a separate port reachable only by monitoring.
 - Put the ingress's own rate limits in front of unauthenticated traffic.
+
+## Hardening status
+
+The repository's [threat model](https://github.com/ncecere/open-mcp-portal/blob/v0.2.1/docs/threat-model.md#9-hardening-ideas-not-findings) keeps a list of hardening ideas, numbered H-1 onward, which are suggestions rather than known vulnerabilities, and a table of where each stands (reviewed 2026-10-18, for v0.2.1). Two of them changed in v0.2.1:
+
+- **H-4, open client registration: the cap is done.** `POST /oauth/register` is open to anyone who can reach the portal, so `OAUTH_MAX_REGISTERED_CLIENTS` (default 1,000, `0` for no cap) bounds the registered clients used in the last 30 days; over it the portal answers `503 temporarily_unavailable` and stores nothing. Clients that use a metadata document aren't counted. See [Configuration](/docs/operate/configuration#oauth-clients). **What remains:** the only per-address limit is the existing 10 registrations a minute, and behind an ingress without `TRUSTED_PROXIES` every caller shares one address, so one caller can fill the cap and block new registrations until others expire. There is no browser-only or admin-toggle requirement, and a refusal is logged, not audited.
+- **H-2, `sendIdentity` on by default: partly addressed.** The switch's help text now says what is sent and that some public servers refuse any `Authorization` header, and a manual Test sends the editor's token, so a server that refuses it with `401` or `403` shows up at Test instead of on the first call. **Still open:** the default itself, and a server that accepts the request and refuses only when a tool runs (DeepWiki's public endpoint) still passes Test. Turn **Send identity token** off for servers outside your company ([Send identity token](/docs/teams/register-a-server#send-identity-token)).
+
+The other ideas are open or partly done; the repository's table says why and what each needs. This page doesn't repeat it.
 
 ## What the portal doesn't do
 
