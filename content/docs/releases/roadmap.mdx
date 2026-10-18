@@ -1,9 +1,11 @@
 ---
 title: Roadmap
-description: What Open MCP Portal plans after v0.2.0, in order, and what it will not do.
+description: What Open MCP Portal plans after v0.2.1, in order, with an issue and implementation plan for each item, and what it will not do.
 ---
 
-This is the plan after [v0.2.0](/docs/releases/v0-2-0): an order of work, not a schedule. The detailed version, with the decisions behind it, is the repository's [roadmap](https://github.com/ncecere/open-mcp-portal/blob/main/docs/roadmap.md). Plans change; each release's notes are the record of what shipped.
+This is the plan after [v0.2.1](/docs/releases/v0-2-1): an order of work, not a schedule, for one maintainer. Every item is an open
+GitHub issue with its implementation plan (data model, API, the code to change, tests, acceptance criteria and open questions), grouped
+into [milestones](https://github.com/ncecere/open-mcp-portal/milestones). The repository's [roadmap](https://github.com/ncecere/open-mcp-portal/blob/main/docs/roadmap.md) has the same plan with each item's summary and dependencies.
 
 ## What it is, and what it is not
 
@@ -15,33 +17,107 @@ Also decided against:
 - **Sampling, roots and logging.** The MCP 2026-07-28 revision deprecates them, so new work does not add them.
 - **The old HTTP+SSE transport** for upstream servers, deprecated by the same revision.
 
-## v0.2: MCP 2026-07-28 and a team pilot
+## Where things stand
 
-Released as [v0.2.0](/docs/releases/v0-2-0) on 2026-10-18:
+- **[v0.1.0](/docs/releases/v0-1-0)** (2026-10-17): registry and catalog, gateways, OAuth for MCP clients, service accounts, delegated credentials, per-person OAuth to upstream servers, operations.
+- **[v0.2.0](/docs/releases/v0-2-0)** (2026-10-18): MCP 2026-07-28 next to every earlier revision, an admin overview, notifications, automation tokens, and fixes from the threat model.
+- **[v0.2.1](/docs/releases/v0-2-1)** (2026-10-18): Test connection exercises the identity token, a cap on open client registration, and a Kubernetes smoke test in CI.
 
-- **MCP 2026-07-28 alongside the earlier revisions**, chosen per request, toward clients and toward your servers (era negotiation, relaying a server's elicitation requests, streaming progress, trace context), with the conformance suite's results. See [MCP protocol support](/docs/server-authors/mcp-protocol).
-- **Pilot readiness:** the [admin overview](/docs/administer/overview), [notifications](/docs/administer/notifications) and scoped [automation tokens](/docs/administer/automation-tokens), and fixes from a security review.
+Proven on a real deployment (Authentik sign-in, a database with continuous archiving and daily backups, a restore tested twice): Claude Code over OAuth and an API key on
+the 2026-07-28 revision, per-person OAuth to GitHub's hosted MCP server, and DeepWiki through a gateway. Not proven yet: VS Code and Cursor, a real Google or Microsoft
+provider, a real Slack webhook and mail provider, and a pilot with a real team. Each is an issue below; the [client compatibility](/docs/use/client-compatibility) page says what has been run.
 
-A real deployment is done on one cluster (Authentik sign-in, a database with continuous archiving and daily backups, and a tested restore). Still open from this stage: a written compatibility matrix tried with real VS Code and Cursor against the 2026-07-28 revision (Claude Code has been run), and a feedback channel for the pilot.
+## How the work is ordered
+
+1. **Decide, verify and pilot first.** Three small product decisions ([#5](https://github.com/ncecere/open-mcp-portal/issues/5), [#6](https://github.com/ncecere/open-mcp-portal/issues/6), [#7](https://github.com/ncecere/open-mcp-portal/issues/7)), the real-client checks, and a pilot with one team ([#20](https://github.com/ncecere/open-mcp-portal/issues/20)). What the pilot finds decides the order inside v0.3.
+2. **v0.3 starts with what is independent and low-risk** (allow-lists for provider tokens, tracing, more credential shapes) while the pilot runs, and holds the large tool-policy work until there is feedback.
+3. **Governance builds on classification.** Scopes, argument constraints and approvals all use the read, write or destructive class of a tool ([#28](https://github.com/ncecere/open-mcp-portal/issues/28)), so it comes first.
+4. **Operations before scale.** CI that proves upgrades, ingress and restores ([#43](https://github.com/ncecere/open-mcp-portal/issues/43)) comes before the Helm chart ([#42](https://github.com/ncecere/open-mcp-portal/issues/42)).
+
+## v0.2.x: pilot follow-ups
+
+Patch releases: decisions, the hardening ideas from the [threat model](https://github.com/ncecere/open-mcp-portal/blob/main/docs/threat-model.md#9-hardening-ideas-not-findings) that are still open, real-world verification and the pilot.
+
+| Issue | Item | Size |
+| --- | --- | --- |
+| [#5](https://github.com/ncecere/open-mcp-portal/issues/5) | Decide the default of "Send identity token" for public servers (needs a decision) | S |
+| [#6](https://github.com/ncecere/open-mcp-portal/issues/6) | Decide whether trusted clients with loopback redirects need a first-use notice (needs a decision) | S |
+| [#7](https://github.com/ncecere/open-mcp-portal/issues/7) | Decide an absolute lifetime for OAuth refresh tokens (needs a decision) | S |
+| [#8](https://github.com/ncecere/open-mcp-portal/issues/8) | Fetch a client's metadata document only after sign-in (H-3) | S |
+| [#9](https://github.com/ncecere/open-mcp-portal/issues/9) | Add controls for open client registration beyond the cap (H-4) | S |
+| [#10](https://github.com/ncecere/open-mcp-portal/issues/10) | Use a __Host- OIDC state cookie and warn when TRUSTED_PROXIES is unset (H-7) | S |
+| [#11](https://github.com/ncecere/open-mcp-portal/issues/11) | Pin the Dockerfile base images by digest (H-9) | S |
+| [#12](https://github.com/ncecere/open-mcp-portal/issues/12) | Add an end-to-end test that a provider token echoed by a server is redacted | S |
+| [#13](https://github.com/ncecere/open-mcp-portal/issues/13) | Commission an independent security review of the portal (needs a real client, account or team) | M |
+| [#14](https://github.com/ncecere/open-mcp-portal/issues/14) | Test VS Code against a gateway and report the result (needs a real client, account or team) | S |
+| [#15](https://github.com/ncecere/open-mcp-portal/issues/15) | Test Cursor against a gateway and report the result (needs a real client, account or team) | S |
+| [#16](https://github.com/ncecere/open-mcp-portal/issues/16) | Find and test a real client that declares URL elicitation (needs a real client, account or team) | S |
+| [#17](https://github.com/ncecere/open-mcp-portal/issues/17) | Verify that real clients refresh their access token after an hour (needs a real client, account or team) | S |
+| [#18](https://github.com/ncecere/open-mcp-portal/issues/18) | Verify delegated credentials with real Google and Microsoft Entra ID providers (needs a real client, account or team) | M |
+| [#19](https://github.com/ncecere/open-mcp-portal/issues/19) | Verify notifications with a real Slack webhook and a real SMTP provider over TLS (needs a real client, account or team) | S |
+| [#20](https://github.com/ncecere/open-mcp-portal/issues/20) | Run a pilot with a real team and define when the portal is ready for wider use (needs a real client, account or team) | M |
+| [#21](https://github.com/ncecere/open-mcp-portal/issues/21) | Write the triage and support policy (labels, expectations, supported versions) | S |
 
 ## v0.3: credentials and tool policy
 
-- **Credentials for every kind of server:** per-person API keys or tokens, more header and query-string shapes, Basic auth, machine OAuth, mTLS, and shared team connections that service accounts can use.
-- **Tool policy:** tools classified as read, write or destructive; credentials, grants and clients limited by class or by named tool; argument constraints and renamed or re-described tools per gateway; **approval before sensitive calls**; requests for gateway access.
-- **Reliability and observability:** per-server limits, retries, failover across several URLs, OpenTelemetry tracing, dashboards and alert rules, and long-running tools through the tasks extension.
+Making "all MCP servers" true, then governing what runs: per-person secrets and more credential shapes, shared connections for service accounts, classifying tools, limiting credentials by class or tool, argument constraints, approval before sensitive calls, and the reliability and observability work.
 
-## v0.4: identity lifecycle, compliance and scale
+| Issue | Item | Size |
+| --- | --- | --- |
+| [#22](https://github.com/ncecere/open-mcp-portal/issues/22) | Add per-person secrets as an upstream auth mode for MCP servers | L |
+| [#23](https://github.com/ncecere/open-mcp-portal/issues/23) | Support several headers, query keys and Basic auth for a server's own credential | M |
+| [#24](https://github.com/ncecere/open-mcp-portal/issues/24) | Add OAuth client credentials for servers that authenticate the portal itself | M |
+| [#25](https://github.com/ncecere/open-mcp-portal/issues/25) | Add mTLS client certificates and a per-server CA for upstream connections | M |
+| [#26](https://github.com/ncecere/open-mcp-portal/issues/26) | Add team service connections so service accounts can call credentialed tools | L |
+| [#27](https://github.com/ncecere/open-mcp-portal/issues/27) | Add a per-provider allow-list and narrower delegated tokens (H-5) | M |
+| [#28](https://github.com/ncecere/open-mcp-portal/issues/28) | Let server owners classify each tool as read, write or destructive | M |
+| [#29](https://github.com/ncecere/open-mcp-portal/issues/29) | Limit keys, OAuth grants, service accounts and grants by tool class or name | L |
+| [#30](https://github.com/ncecere/open-mcp-portal/issues/30) | Constrain, rename and re-describe tools per gateway | L |
+| [#31](https://github.com/ncecere/open-mcp-portal/issues/31) | Require approval before sensitive tool calls | L |
+| [#32](https://github.com/ncecere/open-mcp-portal/issues/32) | Let people request access to a gateway and owners approve it | M |
+| [#33](https://github.com/ncecere/open-mcp-portal/issues/33) | Add per-server quotas, concurrency caps, retries, a circuit breaker and failover | L |
+| [#34](https://github.com/ncecere/open-mcp-portal/issues/34) | Add OpenTelemetry tracing, Grafana dashboards and Prometheus alert rules | M |
+| [#35](https://github.com/ncecere/open-mcp-portal/issues/35) | Support the io.modelcontextprotocol/tasks extension for long-running tools | L |
 
-SCIM and SSO-group mapping so leavers lose access automatically; audit streaming to a SIEM, call-log export, legal holds, and per-person data export and deletion; server governance (owner, data sensitivity, re-review dates, deprecation); secrets-manager and KMS support; a Helm chart, autoscaling, HA PostgreSQL guidance and a backup runbook; and `subscriptions/listen` for list-change notifications.
+## v0.4: identity lifecycle and scale
+
+Leavers lose access automatically (SCIM), sessions can be listed and expire, the audit trail can leave the database, and operating at scale is tested.
+
+| Issue | Item | Size |
+| --- | --- | --- |
+| [#36](https://github.com/ncecere/open-mcp-portal/issues/36) | Add SCIM 2.0 provisioning and SSO-group to team-role mapping | L |
+| [#37](https://github.com/ncecere/open-mcp-portal/issues/37) | Add session list, sign out everywhere and an idle timeout | S |
+| [#38](https://github.com/ncecere/open-mcp-portal/issues/38) | Stream the audit log to a SIEM with gap detection and tamper evidence | M |
+| [#39](https://github.com/ncecere/open-mcp-portal/issues/39) | Add legal holds and per-person data export and erasure | M |
+| [#40](https://github.com/ncecere/open-mcp-portal/issues/40) | Add server owner, on-call contact, sensitivity label, re-review and sunset | M |
+| [#41](https://github.com/ncecere/open-mcp-portal/issues/41) | Wrap stored secrets with OpenBao, Vault or a cloud KMS using envelope encryption | M |
+| [#42](https://github.com/ncecere/open-mcp-portal/issues/42) | Publish a Helm chart with autoscaling, backup job and restore runbook | L |
+| [#43](https://github.com/ncecere/open-mcp-portal/issues/43) | Extend the kind smoke test with upgrade, ingress, OIDC, restore and load | L |
+| [#44](https://github.com/ncecere/open-mcp-portal/issues/44) | Split migration-owner and runtime database roles | M |
+| [#45](https://github.com/ncecere/open-mcp-portal/issues/45) | Implement subscriptions/listen for list-changed notifications | M |
 
 ## v0.5: developer experience and catalog
 
-A command-line tool, a GitHub Action and a Terraform provider, a try-a-tool console for server authors, a better catalog (categories, icons, per-server README, verified badge, search across tools), tool search for large catalogs, and chargeback reports.
+A command-line tool, configuration as code, a try-a-tool console for server authors, a better catalog, tool search for large catalogs, and usage reports per team.
+
+| Issue | Item | Size |
+| --- | --- | --- |
+| [#46](https://github.com/ncecere/open-mcp-portal/issues/46) | Add an omp command line for connect snippets, keys and CI publishing | M |
+| [#47](https://github.com/ncecere/open-mcp-portal/issues/47) | Add a GitHub Action and a Terraform provider for server and gateway config | M |
+| [#48](https://github.com/ncecere/open-mcp-portal/issues/48) | Add a try-a-tool console that shows the exact request and response | M |
+| [#49](https://github.com/ncecere/open-mcp-portal/issues/49) | Improve the catalog: categories, icons, README, verified badge, search | M |
+| [#50](https://github.com/ncecere/open-mcp-portal/issues/50) | Add a gateway tool-search mode with find and call tools | M |
+| [#51](https://github.com/ncecere/open-mcp-portal/issues/51) | Add exportable usage and chargeback reports per team and gateway | M |
 
 ## Later
 
-Scanning of tool arguments and results for prompt injection and data loss is wanted but not scheduled.
+Not scheduled.
 
-## Still to verify from v0.1.0
+| Issue | Item | Size |
+| --- | --- | --- |
+| [#52](https://github.com/ncecere/open-mcp-portal/issues/52) | Write the design for content scanning of tool definitions, results and arguments | M |
+| [#53](https://github.com/ncecere/open-mcp-portal/issues/53) | Explore multiple IdPs, client mTLS and DPoP-bound tokens | S |
 
-Real Google and Microsoft providers for delegated credentials, VS Code and Cursor over OAuth, and the Kubernetes manifests on a real cluster. See the [v0.2.0 notes](/docs/releases/v0-2-0#known-limitations).
+## Help
+
+The most useful contributions are not code: try a client that has not been run (VS Code, Cursor), run the portal with a real team, or answer one of the decision issues with your use case. See [Client compatibility](/docs/use/client-compatibility), the [issue forms](https://github.com/ncecere/open-mcp-portal/issues/new/choose) and [Discussions](https://github.com/ncecere/open-mcp-portal/discussions).
