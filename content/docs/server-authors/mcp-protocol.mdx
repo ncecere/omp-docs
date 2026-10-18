@@ -1,0 +1,246 @@
+---
+title: MCP protocol support
+description: "Which MCP revisions Open MCP Portal speaks, how it picks one per request, what it sends to clients, and how it talks to your server: era negotiation, elicitation, streaming progress and trace context."
+---
+
+Open MCP Portal speaks the MCP **2026-07-28** revision and every older one it supported before (**2025-11-25, 2025-06-18, 2025-03-26 and 2024-11-05**), on the same gateway URL. The revision is chosen **per request**: nothing about it is remembered between requests, so one gateway serves old and new clients at once.
+
+Two directions are covered here. **Toward clients**: what a gateway at `/mcp/{slug}` accepts and returns. **Toward your server**: how the portal, as an MCP client, talks to the MCP servers your team registers. For the HTTP details of the endpoint itself, see [The MCP endpoint](/docs/api/mcp-endpoint).
+
+<Callout title="What changes for a client that speaks an older revision: nothing" type="info">
+An older client sends no new header, has none validated, and gets byte-for-byte the results it got before. It opens with `initialize`, as always.
+</Callout>
+
+## The two eras
+
+The 2026-07-28 revision is stateless: no `initialize` handshake, no session, metadata on every request. The portal calls the older revisions the **legacy** era and 2026-07-28 the **modern** era.
+
+| | Legacy (2024-11-05 to 2025-11-25) | Modern (2026-07-28) |
+|---|---|---|
+| Opens with | `initialize` | Nothing; `server/discover` is optional |
+| Every request carries | Nothing required | `_meta` with `io.modelcontextprotocol/protocolVersion` and `io.modelcontextprotocol/clientCapabilities`, and the headers `MCP-Protocol-Version`, `Mcp-Method` and, for calls and reads, `Mcp-Name` |
+| Results | As before | `resultType`, and `_meta` with `io.modelcontextprotocol/serverInfo`; lists and reads also `ttlMs` and `cacheScope` |
+| `ping`, `logging/setLevel`, session IDs | `ping` answers; the portal never issues sessions | Removed |
+| "Connect your account" | JSON-RPC error `-32042` | An `input_required` result for clients with URL elicitation; otherwise a tool error or `-32010` with the link in the message |
+
+### Which era a request is
+
+A request is **modern** when its `params._meta` has a `protocolVersion` that isn't a legacy version (so `2026-07-28`, or a version the portal doesn't have, which is then refused), or, with no such `_meta`, when its `MCP-Protocol-Version` header is a date of 2026-07-28 or later. Everything else is **legacy**: `initialize` (whatever it carries), notifications, responses, and requests without those signs. A bare `server/discover` (no `_meta` and no header) is "method not found", as it always was.
+
+In both eras: `GET` and `DELETE` are `405`; `Mcp-Session-Id` and `Last-Event-ID` are ignored; JSON-RPC batches are `400`; a foreign `Origin` is `403`; the body is at most 1 MiB; and authentication is the same (API key, OAuth token or service account key).
+
+## What the portal sends to a client
+
+### Checks on modern requests
+
+Modern requests are checked, in this order, before anything else. Each refusal is a JSON-RPC error with the request's ID.
+
+| Problem | HTTP | Code |
+|---|---|---|
+| `_meta` lacks `protocolVersion` or `clientCapabilities` (or the capabilities aren't an object) | 400 | `-32602` |
+| `MCP-Protocol-Version` is missing or differs from `_meta` | 400 | `-32020` (HeaderMismatch) |
+| A version the portal doesn't serve | 400 | `-32022` (UnsupportedProtocolVersion), with `data.supported` and `data.requested` |
+| `Mcp-Method` is missing or differs from `method` | 400 | `-32020` |
+| `Mcp-Name` is missing or differs from `params.name` (`tools/call`, `prompts/get`) or `params.uri` (`resources/read`) | 400 | `-32020` |
+| `Mcp-Name` or `Mcp-Param-*` with characters a header can't carry, or invalid base64 | 400 | `-32020` |
+| A tool with `x-mcp-header` arguments: a present argument without its `Mcp-Param-<Name>` header, a different value, or a header for an absent or null argument | 400 | `-32020` |
+| A method the portal doesn't implement, including `ping`, `logging/setLevel`, `subscriptions/listen`, `resources/subscribe`, and `resources/*` on a gateway with no resources | 404 | `-32601` |
+
+`Mcp-Name` is the **exposed** name (`server__tool`, or the `omp://…` URI of a resource). Calls to your server use the original name. The supported versions, newest first, are `2026-07-28, 2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05`. See [Parameter headers](/docs/server-authors/parameter-headers) for `Mcp-Param-*`.
+
+### `server/discover`
+
+Modern requests only, with the same authentication as everything else:
+
+```json
+{
+  "resultType": "complete",
+  "supportedVersions": ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"],
+  "capabilities": {
+    "tools": { "listChanged": false },
+    "prompts": { "listChanged": false },
+    "resources": { "listChanged": false, "subscribe": false }
+  },
+  "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "<gateway slug>", "title": "<gateway name>", "version": "<build version>" } },
+  "ttlMs": 30000,
+  "cacheScope": "private"
+}
+```
+
+`resources` appears only when the gateway selects a resource or template the caller can see. There are no subscriptions, no list-changed notifications and no `instructions`.
+
+### Results, caching and order
+
+Every modern result has `resultType: "complete"` and the portal's identity in `_meta["io.modelcontextprotocol/serverInfo"]`. Your server's own `serverInfo` is removed, as before; other `_meta` entries stay. The four list methods and `server/discover` also carry:
+
+- `ttlMs: 30000`: short, because grants and selections change at any time and the portal sends no change notifications.
+- **`cacheScope: "private"`, always.** What a person sees depends on their role and grants, so a shared cache must never serve it to someone else. The HTTP response is also `Cache-Control: no-store`.
+
+`resources/read` results carry `ttlMs: 0` and `cacheScope: "private"`: the contents come live from your server. Call and prompt results carry no cache hints. Lists are sorted by exposed name (a resource's URI), so the order is stable across requests and pages (512 KiB per page, with an opaque cursor).
+
+**Schemas.** The modern era allows any JSON Schema as `outputSchema` and any JSON value as `structuredContent`, and the portal passes them through untouched. For legacy clients it still drops an `outputSchema` that isn't `"type": "object"` (strict clients reject the whole list otherwise) and a `structuredContent` that isn't an object; the same data is in the text content.
+
+**Errors.** A resource that isn't found is `-32602` in the modern era (`-32002` in the legacy one). A rate limit answers HTTP `429` and, for modern requests, code `429` in the JSON-RPC error instead of `-32029` (see [Deviations](#deviations-from-the-specification)).
+
+### "Connect your account" as a question
+
+When a call needs the person's account on another service (a delegated provider, a server the person must allow, or a per-person sign-in to an OAuth-protected server), what the client receives depends on the client. These are the three answer shapes:
+
+<Tabs items={['Modern, with URL elicitation', 'Modern, without it', 'Legacy']}>
+<Tab value="Modern, with URL elicitation">
+
+A modern request whose `clientCapabilities.elicitation` has a `url` key (an empty `elicitation: {}` means form mode only) gets HTTP 200 and an `input_required` result, on `tools/call`, `prompts/get` and `resources/read`:
+
+```json
+{
+  "resultType": "input_required",
+  "inputRequests": {
+    "connect_github": {
+      "method": "elicitation/create",
+      "params": {
+        "mode": "url",
+        "url": "https://mcp.example.com/connect/github?request=Zk3…",
+        "message": "Connect your GitHub account (repo) to use github__create_issue in the Support gateway."
+      }
+    }
+  },
+  "requestState": "…",
+  "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "support", "title": "Support", "version": "0.2.0" } }
+}
+```
+
+The `url` is the same opaque link the other shapes carry; it signs nobody in, and the page needs the asking person's own browser session. The message names the service or the server's own sign-in, the scopes, the capability and the gateway. The call is recorded as needing authorization and nothing reaches your server.
+
+</Tab>
+<Tab value="Modern, without it">
+
+The 2026-07-28 revision says implementations must not send `-32042`, so there is none. A `tools/call` gets a normal result with `isError: true` and the link in its text ("… Open `<link>` to connect it, then try again."). `prompts/get` and `resources/read`, which have no tool result, get the JSON-RPC error `-32010` with `data.reason` (`not_connected`, `missing_scopes`, `needs_reconsent` or `server_not_allowed`), `data.provider`, and the link in the message.
+
+</Tab>
+<Tab value="Legacy">
+
+Every legacy request gets the JSON-RPC error `-32042` with the link in `data.elicitations` and in the message, exactly as before.
+
+</Tab>
+</Tabs>
+
+The person opens the link, then the client **retries the original request** with `requestState` echoed back and `inputResponses`. The portal verifies the state and then re-runs every normal check, so the call either goes through (the person is connected now) or answers with a new `input_required`, the same link and a fresh state. A `decline` or `cancel` on a verified state ends the attempt: a tool call returns the tool error "authorization declined", and a prompt or a read the refusal `-32010` with `data.reason: "authorization_declined"`. Nothing is forwarded.
+
+**`requestState`** is sealed with AES-256-GCM under a key derived from `ENCRYPTION_KEY` (and `ENCRYPTION_KEY_PREVIOUS`, so a key rotation doesn't strand someone mid-consent), so the client can neither read nor change it. It is bound to the person, the gateway, the method, the exposed name, a digest of the request's parameters (so a retry may change the JSON-RPC ID, `_meta` and key order, but not the arguments), and an expiry of 10 minutes. It holds no credential, no URL and nothing about the provider. A state that was altered, is for another person, expired or is for another request is refused with `-32602` and a message that says what to do, without saying whose it was. It isn't single use (a retry only re-runs the checks) and is never logged.
+
+### Authorization
+
+The gateway's OAuth endpoints follow the 2026-07-28 authorization pages: protected resource metadata (RFC 9728) with `WWW-Authenticate: resource_metadata` on `401`, authorization server metadata (RFC 8414), Client ID Metadata Documents (preferred), `iss` in authorization responses (RFC 9207), resource indicators (RFC 8707), and PKCE S256 for public clients. Dynamic Client Registration is kept for compatibility and is deprecated by the revision: it now accepts and echoes `application_type` (`web` or `native`). See [OAuth endpoints](/docs/api/oauth-endpoints). Gateway tokens carry no scopes: access is decided per call from the person's grants.
+
+## How the portal talks to your servers
+
+Where the portal reaches **your** MCP server (discovery, refresh, tests, health checks and every call a gateway forwards), it is an MCP client and speaks whichever era your server speaks. All of it goes through the same guarded transport as before: the address rule, no redirects, no proxy from the environment, the response bound (1 MiB, or 4 MiB for a streamed call) and your server's own timeout.
+
+### Era negotiation
+
+The era is a property of your server, so the portal learns it and remembers it, following the specification's backward-compatibility rules. It tries the modern era first and decides from the answer to one `server/discover` request (sent with the modern headers and `_meta`, version `2026-07-28`):
+
+| Your server answers | The portal concludes |
+|---|---|
+| `200` with a discovery result | **Modern**, at the newest version both sides speak, from your `supportedVersions`. A list with only older versions means **legacy** at the newest of them |
+| `400` with a **recognized modern JSON-RPC error** (`-32020`, `-32021` or `-32022`) | **Modern**, never a fallback. For `-32022` it tries the newest modern version you list that it speaks (once more if you reject a version you list); a list with only older versions means legacy. The others are an error with your message |
+| `404` with a JSON-RPC `-32601` | **Modern**, a server without the optional `server/discover` |
+| `400`, `404` or `405` with an empty, plain text, HTML or not-recognized body; or a `200` that isn't a discovery result | **Legacy**: `initialize` follows. If that also gets `404` or `405`, the error stays what it always was: the deprecated HTTP+SSE transport isn't supported |
+| `401`, `403`, `408`, `429`, `5xx`, a timeout, or a blocked address | An error, as ever. **Never** a reason to fall back |
+
+The portal prefers the newest version both sides support. A legacy server is opened with `initialize` offering `2025-11-25`, and your server answers with what it speaks.
+
+**The fallback rule.** The portal falls back to `initialize` only in the cases above, by the specification's rule. A server that returns an error for any other reason isn't treated as legacy, so a down or rate-limited modern server isn't misread as an old one.
+
+**Cache.** The learned era is kept in memory per replica, keyed by your server's ID and URL, for **5 minutes**, so a call doesn't probe again; a changed URL is a different key. If a call made on a remembered era gets an answer its era doesn't give (a `400`, `404`, `405`, `406` or `415` without a modern error, or a modern error to `initialize`), the portal forgets the entry, learns the era again and goes on, **once**, and only when the call can't have run. A call is never repeated for anything else.
+
+**You can see it.** A refresh, a test or a health check that reads your server stores the era, the version and the time, and your server's Overview tab shows, for example, "Protocol 2026-07-28 (modern), negotiated 5 minutes ago". A failed check leaves what was stored, and a new URL clears it. A scheduled check of a server in OAuth mode (a probe that only looks for the sign-in challenge) records nothing.
+
+A modern server **must implement `server/discover` to be read**: the portal needs its result to list your capabilities. Calls to a modern server don't need it.
+
+### What a forwarded call looks like
+
+- **To a modern server:** one `POST` per call with `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name` (the original tool, prompt or URI, in base64 when it can't be a plain header value), the tool's `Mcp-Param-*` headers, and `_meta` with the protocol version, `clientInfo` (the portal), `clientCapabilities` (below), trace context and the progress token. The JSON-RPC `id` is fresh for every request, a retry included. It accepts a JSON or an SSE answer. The result may be `complete` or `input_required`.
+- **To a legacy server:** one session per call (`initialize`, the call, close), declaring **no capability**, so your server can't ask for sampling, roots or elicitation.
+
+### Elicitation relay
+
+A modern server may answer `tools/call`, `prompts/get` or `resources/read` with `resultType: "input_required"`. What the portal does depends on the **client**:
+
+- **A modern client that declared elicitation:** the portal declares to your server **exactly the modes the client declared, per request** (no other capability, ever) and returns `input_required` to the client, with your elicitation requests as `inputRequests` and a `requestState` of the portal's own.
+- **A legacy client, or a modern one that declared none:** your server is told it can't ask. If it asks anyway, the call fails with a tool error ("this server asked for input, which your client can't give…"; for prompts and reads, `-32010` with `data.reason: input_required`).
+- **Sampling and roots** requests (deprecated) are never relayed, alone or beside an elicitation: the call fails with a tool error.
+
+What is relayed is validated and then **rebuilt** with only `method`, `mode`, `message` and `requestedSchema` or `url`: your `_meta`, `elicitationId` and any other field are dropped. A request that doesn't pass fails the call as a bad response from your server (`-32603`), and nothing of it reaches the client.
+
+| Limit | Value |
+|---|---|
+| Requests per result | At most 8; keys unique, 1 to 128 characters, no control characters |
+| Size | At most 16 KiB of `inputRequests`; a message at most 4 KiB; your `requestState` at most 8 KiB |
+| Mode | Only a mode the client declared |
+| Form | `requestedSchema` is an object of `type: object` whose properties are objects |
+| URL | An absolute `https` URL with a host, no user info, no spaces, at most 2 KiB. Plain `http` only to a loopback host in development |
+
+The portal's `requestState` is the same sealed envelope as for consent (10 minutes), bound to the person, the gateway, the method, the exposed name, a digest of the parameters, **your server's ID**, the keys that were relayed, and your own `requestState`, which the client can neither read nor change. It holds no credential. On the **retry**, the portal verifies every binding, re-runs every normal check, and calls your server again with the **original parameters**, your own `requestState` and the client's `inputResponses`, only for the keys that were relayed, each shaped like an elicitation result (`action` of `accept`, `decline` or `cancel`, `content` an object). A decline goes to your server, which decides what it means. Your server may answer with another `input_required`: a new state is sealed and relayed again.
+
+A relayed call is recorded as `ok` with the error class `input_required`.
+
+### Streaming progress
+
+A `tools/call` whose `_meta.progressToken` is a string (up to 256 bytes) or an integer, from a client whose `Accept` lists `text/event-stream` (either era), is answered as a **server-sent event stream**: `200`, `Content-Type: text/event-stream`, `X-Accel-Buffering: no`, then one `event: message` per `notifications/progress` your server sends for that token (relayed under the client's own token), then the JSON-RPC response as the last event, and the stream closes. A `: keep-alive` comment is written every 15 seconds while the call waits. Every other call stays one buffered JSON object.
+
+- The stream starts when the call is about to reach your server. Refusals before that (unknown tool, denied, rate limited, consent needed, bad request) are the JSON answers they always were.
+- `notifications/message` (logging, deprecated) and every other notification aren't relayed.
+- **Closing the connection cancels the call to your server**, and the call is recorded as an upstream error with the class `client_cancelled`.
+- Bounds: at most 64 progress events and 4 MiB per call (further progress is dropped, the call goes on); progress that doesn't increase or isn't a finite number is dropped; a message is cut to 1,000 bytes. The response is at most 1 MiB, and your total (progress and response) at most 4 MiB. Your server's timeout applies as always.
+- A call is recorded once, at the end, and rate limits count it as one request.
+
+The proxy in front of the portal must not buffer or cut these responses: see [Ingress](/docs/operate/kubernetes#ingress).
+
+### Trace context
+
+`traceparent`, `tracestate` and `baggage` in the client request's `params._meta` (either era) are passed to your server's `_meta` when they are well formed (W3C Trace Context and Baggage): `traceparent` exactly `vv-<32 hex>-<16 hex>-<2 hex>` in lower case, not version `ff`, not all-zero IDs; `tracestate` at most 512 characters and 32 members, and only with a valid `traceparent`; `baggage` at most 2,048 characters and 64 members. Anything else is dropped, and when the client sent none, none is sent. No other client `_meta` entry is passed on. The portal's own tracing isn't built yet.
+
+### Authorization of servers that run their own OAuth
+
+For servers in Sign-in with OAuth mode ([OAuth-protected servers](/docs/server-authors/oauth-servers)): the client credentials the portal holds for a server belong to the **authorization server's issuer** they were registered at. When your resource metadata names another authorization server, saving the server's sign-in registers the portal's client at the new one, resets people's connections and sends the server back to review (a client entered by hand or taken from a platform provider asks for a new client instead). The portal's dynamic registration says `application_type: "web"`. Client ID Metadata Documents are still preferred when your authorization server supports them and `APP_URL` is public https.
+
+### Not supported toward your server
+
+- The deprecated HTTP+SSE transport (a server that answers `404` or `405` to `POST` is an error), and stdio. The portal doesn't run servers: bridge a stdio server and register the bridge.
+- Sampling and roots (deprecated), in either era, and server-to-client requests from a legacy server. Logging notifications. `subscriptions/listen` and list-changed notifications (the portal re-reads on refresh).
+- A modern server that doesn't implement `server/discover` can't be discovered (calls to it work).
+- Tasks and completion.
+
+## What this means for a server author
+
+- **Nothing breaks.** A legacy server keeps working, opened with `initialize`. A modern server is detected from one `server/discover` request.
+- If you serve **both eras**, the portal uses the modern one, at the newest version you both speak.
+- Implement `server/discover` on a modern server, so it can be read.
+- To ask the person something mid-call, return `input_required` with URL or form elicitation requests (`https` URLs only); the portal relays it to clients that can answer, and refuses it to those that can't.
+- To report progress, send `notifications/progress` for the `progressToken` you were given.
+- Pass `traceparent`, `tracestate` and `baggage` from `_meta` into your own tracing, if you want to.
+- Verify the [identity token](/docs/server-authors/identity-token) in either era: it is sent in both.
+
+## Limits and what isn't done
+
+- A response is one JSON object of at most 1 MiB, except a `tools/call` with a progress token from a client that accepts `text/event-stream`, which is streamed. There is no `subscriptions/listen`, no tasks extension and no relay of `notifications/message`.
+- The gateway originates input requests for consent and relays your server's elicitation; never sampling or roots.
+- No `completion/complete`, logging, sampling or roots, and `ping` answers only for legacy clients.
+- Real Claude Code, VS Code and Cursor haven't been tried against the 2026-07-28 revision yet: it was exercised by the conformance suite, curl and the Go SDK.
+
+## Deviations from the specification
+
+- **Rate limit.** `-32029` (legacy) is inside the range the specification reserves in 2026-07-28, so modern requests get code `429` (the HTTP status) instead. The status, `Retry-After` and `data` are the same.
+- **Refusals** keep the portal's established codes `-32001` (HTTP-level refusals) and `-32010` (a refusal with a reason), in the legacy range that the specification tolerates but discourages.
+- **A dual-era server accepts `initialize`.** One conformance scenario expects `initialize` to be "method not found", which assumes a modern-only server.
+- **`Accept` need not list `text/event-stream`.** The answer is JSON unless the call asks for progress.
+
+## Conformance
+
+The MCP project's conformance suite (`@modelcontextprotocol/conformance` 0.2.0-alpha.12, with `--spec-version 2026-07-28 --suite all`, and 2025-11-25) was run against a gateway over the portal's fake MCP server, with a small proxy adding the bearer key because the runner can't send one.
+
+- **Pass:** `caching` (8 of 8), `http-header-validation` (14 of 14), `http-custom-header-server-validation` (10 of 10), `sep-2164-resource-not-found`, the list scenarios, `server-sse-multiple-streams`, the `input-required` scenarios on missing input, unsupported methods, extra parameters and input validation, `server-stateless` (20 of 25 checks) and the wire schema checks everywhere. For 2025-11-25: `server-initialize`, `ping` and the list scenarios.
+- **Can't pass, by design or fixture.** A gateway isn't the suite's "everything server". Scenarios that call named fixtures (`test_simple_text`, `test_input_required_*`, …) fail with "Unknown tool", because exposed names are `server__tool` and the gateway originates no input requests of its own. `completion/complete`, logging, sampling, subscriptions and some SSE scenarios test features the portal doesn't offer. One scenario expects a modern-only server, and one sends an `Origin` that isn't the portal's `APP_URL`, which the portal refuses.
+
+**As a client.** The suite's client scenarios for 2026-07-28 were run against the portal's upstream client through a small development tool (not part of the portal): `tools_call`, `request-metadata`, `http-standard-headers`, `http-custom-headers`, `http-invalid-tool-headers`, `sep-2322-client-request-state`, `json-schema-ref-no-deref` and `json-schema-2020-12-preservation` all pass. The suite found two bugs, both fixed before the release: a retry reused the first request's JSON-RPC ID, and a server that rejects a version it lists was an error on the first rejection instead of being retried once. **Not run:** the interactive `auth/*` client scenarios, which drive a browser sign-in with a person; their parts are covered by the portal's own tests instead.

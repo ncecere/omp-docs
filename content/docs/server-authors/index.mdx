@@ -6,6 +6,7 @@ description: What an MCP server behind Open MCP Portal receives, which requests 
 Your MCP server keeps running where your team runs it. Open MCP Portal connects to it as an MCP client over **Streamable HTTP**, reads its capabilities, and forwards the calls people and agents make through gateways. These pages are about what reaches your server and how to trust it.
 
 <Cards>
+  <Card title="MCP protocol support" href="/docs/server-authors/mcp-protocol">The 2026-07-28 revision and every older one: how the portal negotiates with your server, relays its questions, streams progress and passes trace context.</Card>
   <Card title="The identity token" href="/docs/server-authors/identity-token">The signed JWT that says who is calling, and how to verify it against the portal's JWKS.</Card>
   <Card title="Provider tokens" href="/docs/server-authors/provider-tokens">The person's own token for GitHub, Google or another service, and the checks to make before you use it.</Card>
   <Card title="OAuth-protected servers" href="/docs/server-authors/oauth-servers">What the portal expects from a server that runs its own OAuth sign-in.</Card>
@@ -15,11 +16,11 @@ Your MCP server keeps running where your team runs it. Open MCP Portal connects 
 
 ## What your server receives
 
-- **Discovery.** When the server is registered, refreshed or its URL changes, the portal sends `initialize` and lists every kind of capability you advertise: tools, prompts, resources and resource templates, page by page (at most 500 per kind). It never calls a tool to discover it.
+- **Discovery.** When the server is registered, refreshed or its URL changes, the portal opens a session (it tries the 2026-07-28 revision first and falls back to `initialize` for an older server; see [MCP protocol support](/docs/server-authors/mcp-protocol#era-negotiation)) and lists every kind of capability you advertise: tools, prompts, resources and resource templates, page by page (at most 500 per kind). It never calls a tool to discover it.
 - **Health checks.** Every few minutes (5 by default), an MCP exchange to see that you answer. Plus a check whenever someone presses **Test connection** or **Refresh capabilities**.
 - **Calls.** `tools/call`, `prompts/get` and `resources/read`, only for capabilities a gateway selected and a caller was allowed to use. Lists never reach you: clients get the definitions the portal stored and approved.
 
-The portal is stateless: each call is its own MCP session, so it performs the `initialize` handshake again before each call. Answer in JSON or as an SSE stream; the portal reads either.
+The portal is stateless: it keeps no session with you between calls. To an older server, each call is its own MCP session with a new `initialize` handshake; to a 2026-07-28 server, each call is one request. Answer in JSON or as an SSE stream; the portal reads either. If you send `notifications/progress` for the call's progress token, the portal can stream it to a client that asked for it.
 
 Every forwarded call carries the [identity token](/docs/server-authors/identity-token) (unless your team turned off **Send identity token**), your static header if you registered one, and where relevant a [provider token](/docs/server-authors/provider-tokens) or, for an [OAuth-protected server](/docs/server-authors/oauth-servers), the person's own bearer token. The caller's own API key or OAuth token **never** reaches you.
 
@@ -29,7 +30,7 @@ Every forwarded call carries the [identity token](/docs/server-authors/identity-
 - `_meta["io.modelcontextprotocol/serverInfo"]` is removed from results: clients talk to the portal, and your server's name and version aren't theirs to see. Other `_meta` entries pass through.
 - `structuredContent` that isn't a JSON object is dropped from results, and an `outputSchema` that isn't an object is dropped from tool lists, as the MCP schema requires.
 - Requests and responses are limited to 1 MiB, and every exchange to your server's timeout (1 to 120 seconds, set by your team).
-- Redirects are never followed, and the portal never sends sampling, elicitation or roots requests to you or relays yours.
+- Redirects are never followed. The portal never offers you sampling or roots, and never relays yours. It declares elicitation to a 2026-07-28 server only when the calling client did, and then relays your `input_required` questions to that client. See [MCP protocol support](/docs/server-authors/mcp-protocol#elicitation-relay).
 
 ## Definitions are reviewed
 

@@ -79,7 +79,8 @@ Tools and prompts are named `{server-slug}__{name}`, so tools of different serve
 - **Stateless.** The portal keeps no MCP session between requests, and any replica can answer. It answers `POST` only (`GET` and `DELETE` are `405`); the SDKs handle that.
 - **Lists come from the portal.** `tools/list`, `prompts/list`, `resources/list` and `resources/templates/list` are served from the definitions the portal approved, without contacting the MCP servers. Calls are forwarded.
 - **Limits.** Requests and responses are at most 1 MiB. A call waits at most the server's timeout (up to 120 seconds).
-- **No sampling, elicitation or roots** are forwarded to your client.
+- **No sampling or roots** are forwarded to your client. A server's elicitation questions reach only a 2026-07-28 client that declared elicitation. See [MCP protocol support](/docs/server-authors/mcp-protocol#elicitation-relay).
+- **Streaming.** A `tools/call` with a progress token from a client that accepts `text/event-stream` is answered as a stream of progress events and then the result. Other calls are one JSON response.
 
 ## Errors to handle
 
@@ -89,7 +90,7 @@ Tools and prompts are named `{server-slug}__{name}`, so tools of different serve
 | HTTP `404` | The gateway doesn't exist, is turned off, or this key can't use it (including a key limited to other gateways) | Check the URL and the key's gateways |
 | HTTP `429`, JSON-RPC `-32029` | A rate limit; `Retry-After` says how many seconds to wait | Wait and retry |
 | JSON-RPC `-32602` "Unknown tool" | The tool isn't on this gateway for this key now: not selected, a higher team role needed, or its server unavailable | List again |
-| JSON-RPC `-32042` | The tool needs the person's account on another service. The error's message and `data.elicitations[0].url` carry a link the person opens in their browser | Show the link to the person, then retry |
+| JSON-RPC `-32042` | The tool needs the person's account on another service, or their permission for this server to use it. The error's message and `data.elicitations[0].url` carry a link the person opens in their browser. A 2026-07-28 client gets the same link as an `input_required` result, or as a tool error | Show the link to the person, then retry |
 | JSON-RPC `-32010` | Refused for a stated reason in `data.reason`: for example `service_account` (service accounts can't use tools that act as a person), `provider_disabled` or `provider_unavailable` | Don't retry blindly |
 
 A tool's own failure comes back as a normal result with `isError: true`, as MCP specifies. Every code is described in [The MCP endpoint](/docs/api/mcp-endpoint).

@@ -1,6 +1,6 @@
 ---
 title: The MCP endpoint
-description: "Open MCP Portal's /mcp/{slug} endpoint: transport, authentication, supported methods and protocol versions, exposed names, HTTP statuses and JSON-RPC error codes."
+description: "Open MCP Portal's /mcp/{slug} endpoint: transport, authentication, supported methods and protocol versions (2026-07-28 and older), exposed names, HTTP statuses and JSON-RPC error codes."
 ---
 
 Every gateway is served at `<APP_URL>/mcp/{slug}`, for example `https://mcp.example.com/mcp/support`.
@@ -8,9 +8,9 @@ Every gateway is served at `<APP_URL>/mcp/{slug}`, for example `https://mcp.exam
 ## Transport
 
 - **Streamable HTTP, stateless.** Only `POST`; `GET` and `DELETE` are `405`. No MCP session is kept between requests and no session ID is issued; any replica can answer.
-- **Responses are JSON.** Notifications get `202`.
+- **Responses are JSON.** Notifications get `202`. The one exception is a `tools/call` that carries `_meta.progressToken` from a client that accepts `text/event-stream`: it is answered as a server-sent event stream of progress events and then the result (see [MCP protocol support](/docs/server-authors/mcp-protocol#streaming-progress)).
 - **JSON-RPC batches** are `400`.
-- **Protocol versions** negotiated on `initialize`: `2025-11-25`, `2025-06-18`, `2025-03-26` and `2024-11-05`. An `MCP-Protocol-Version` header outside these (and older than `2026-07-28`) is `400`. `server/discover` (2026-07-28) is "method not found", so newer clients fall back to `initialize`.
+- **Protocol versions** `2026-07-28`, `2025-11-25`, `2025-06-18`, `2025-03-26` and `2024-11-05`, chosen **per request**. An older client negotiates on `initialize` as before. A 2026-07-28 request carries `_meta` with its protocol version and capabilities and the `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` headers, which the portal checks against the body. A request that is neither valid legacy nor valid modern is `400`. See [MCP protocol support](/docs/server-authors/mcp-protocol).
 - **Origin.** A browser request with a foreign `Origin` is `403`.
 - **Size.** Requests and responses are at most 1 MiB.
 
@@ -35,11 +35,12 @@ An OAuth token for another gateway gets `401` with `error="invalid_token"` and t
 
 | Method | Served from |
 |---|---|
-| `initialize`, `ping` | The portal. `initialize` advertises `tools` and `prompts`, and `resources` (`subscribe: false`, `listChanged: false`) only when the gateway selects a resource or template |
+| `initialize`, `ping` (legacy requests) | The portal. `initialize` advertises `tools` and `prompts`, and `resources` (`subscribe: false`, `listChanged: false`) only when the gateway selects a resource or template |
+| `server/discover` (2026-07-28 requests) | The portal: the supported versions, the same capabilities, and its identity. Results are cacheable only privately |
 | `tools/list`, `prompts/list`, `resources/list`, `resources/templates/list` | The portal's stored, approved definitions, filtered for the caller, paged (512 KiB per page) with an opaque cursor. Servers aren't contacted |
 | `tools/call`, `prompts/get`, `resources/read` | Checked, then forwarded to the server with the [identity token](/docs/server-authors/identity-token) |
 
-`resources/subscribe` and `resources/unsubscribe` are "method not found". Sampling, elicitation and roots aren't supported. A client's cancellation isn't recorded as an error.
+`resources/subscribe` and `resources/unsubscribe` are "method not found", and so are `ping` and `logging/setLevel` for 2026-07-28 requests. Sampling and roots aren't supported. The portal asks the client a question (a URL elicitation, to connect an account) only as the consent answers described below, and relays a server's own elicitation to a client that can answer it. A client's cancellation isn't recorded as an error.
 
 ## Names
 
@@ -54,12 +55,13 @@ A `resources/read` must name a selected resource's URI exactly, or match a selec
 |---|---|
 | `200` | A JSON-RPC answer (results and JSON-RPC errors alike) |
 | `202` | A notification |
-| `400` | A malformed request, a batch, an unsupported `MCP-Protocol-Version` |
+| `400` | A malformed request, a batch, an unsupported `MCP-Protocol-Version`, or a 2026-07-28 request whose `_meta` or headers are missing or don't match the body (`-32602`, `-32020`, `-32022`) |
 | `401` | No valid credential: missing, wrong, revoked or expired; a suspended person; a service account that's turned off, deleted or whose team is archived; an OAuth token for another gateway |
 | `403` | A foreign `Origin` |
 | `404` | The gateway doesn't exist, is turned off, or its team is archived; or the caller can't use it, including a key limited to other gateways. All look the same |
 | `405` | `GET` or `DELETE` |
-| `429` | A rate limit, with `Retry-After` and `-32029` in the body |
+| `404` (2026-07-28 requests) | Also a method the portal doesn't implement, with `-32601` |
+| `429` | A rate limit, with `Retry-After`. The JSON-RPC code is `-32029` for older clients and `429` for 2026-07-28 requests |
 
 Counted responses carry `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` for the caller's own tightest limit.
 
@@ -67,10 +69,13 @@ Counted responses carry `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-
 
 | Code | Meaning | `data` |
 |---|---|---|
-| `-32602` | `Unknown tool` / `Unknown prompt`: not on this gateway for this caller now (not selected, unavailable, a role too low). Also invalid params | |
-| `-32002` | `Resource not found`: a read the caller may not make, or the server's own "not found" | |
-| `-32042` | `URLElicitationRequiredError`: the person must connect an account, or sign in to an OAuth-protected server. The message also contains the link | `elicitations[0]`: `mode: "url"`, `elicitationId`, `url`, `message` |
-| `-32010` | Refused with a reason the caller may know | `reason`: `service_account`, `provider_disabled`, `provider_unavailable` or `insufficient_scope`; `provider` |
+| `-32602` | `Unknown tool` / `Unknown prompt`: not on this gateway for this caller now (not selected, unavailable, a role too low). Also invalid params, an invalid `requestState`, and, for 2026-07-28 requests, a resource that isn't found | |
+| `-32002` | `Resource not found` for older clients: a read the caller may not make, or the server's own "not found" | |
+| `-32020` | HeaderMismatch (2026-07-28): a required header is missing, differs from the body, or can't be carried | |
+| `-32022` | UnsupportedProtocolVersion (2026-07-28) | `supported`, `requested` |
+| `-32603` | The MCP server's answer was invalid (for example a malformed elicitation request) | |
+| `-32042` | `URLElicitationRequiredError`: the person must connect an account, allow a server to use it, or sign in to an OAuth-protected server. The message also contains the link. Sent to older clients only; a 2026-07-28 client gets an `input_required` result or a tool error instead | `elicitations[0]`: `mode: "url"`, `elicitationId`, `url`, `message` |
+| `-32010` | Refused with a reason the caller may know. A prompt or resource read from a 2026-07-28 client that can't take URL elicitation gets this for "connect your account", with the link in the message | `reason`: `service_account`, `provider_disabled`, `provider_unavailable`, `insufficient_scope`, `not_connected`, `missing_scopes`, `needs_reconsent`, `server_not_allowed`, `authorization_declined` or `input_required`; `provider` |
 | `-32029` | Rate limit exceeded | `reason: "rate_limited"`, `limit`, `limitPerMinute`, `retryAfterSeconds` |
 | `-32001` | An HTTP-level refusal (with `401` or `404`), such as "Gateway not found" | |
 | `-32601` | Method not found | |
@@ -85,7 +90,9 @@ A `-32042` answer, for example:
    "message": "Connect your GitHub account (repo) to use github-tools__create_issue in the support gateway."}]}}}
 ```
 
-The portal is stateless, so it never sends `notifications/elicitation/complete`: the person runs the tool again after connecting. Errors from the MCP server pass through; a tool's own failure is a normal result with `isError: true`.
+The portal is stateless, so it never sends `notifications/elicitation/complete`: the person runs the tool again after connecting, or the client retries with the `requestState` it was given.
+
+What a client receives when a call needs the person's account depends on its revision and capabilities: `-32042` (older clients), an `input_required` result with a URL elicitation and a sealed `requestState` (2026-07-28 clients that declared URL elicitation), or a tool error with the link in its text (2026-07-28 clients that didn't). See [MCP protocol support](/docs/server-authors/mcp-protocol#connect-your-account-as-a-question). Errors from the MCP server pass through; a tool's own failure is a normal result with `isError: true`.
 
 ## Results
 

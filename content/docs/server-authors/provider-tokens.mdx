@@ -18,7 +18,9 @@ and the [identity token](/docs/server-authors/identity-token) gains `"provider":
 
 Calls without a requirement (or with the override **No account**) never get these headers or the claim, and neither do discovery, tests or health checks. Service accounts can't call such capabilities: the portal refuses them before they reach you. The client and the model never see the token.
 
-The token is sent only to your server's registered URL, and only for capabilities whose requirement names that provider. One provider per call.
+The token is sent only to your server's registered URL, only for capabilities whose requirement names that provider, and **only if the person allowed your server** to use their account. Each person allows each server once, on a consent page that names your server and your team, and the permission is for the address (scheme, host and port) your server had then: if you move it to another host or port, or change the provider it requires, everyone is asked again and nothing is sent in the meantime. One provider per call.
+
+The token holds every scope the person has granted that provider, which can be more than your requirement asks for. Use only what you need.
 
 ## Checks to make
 
