@@ -110,7 +110,7 @@ export default function HomePage() {
 
       <p className="mt-12 text-sm text-fd-muted-foreground">
         Open MCP Portal is pre-1.0 development software. These docs describe {productVersion},
-        the first release ({productReleaseDate}). More about
+        released on {productReleaseDate}. More about
         the project is on{' '}
         <a className="text-brand-link underline" href={productSite}>
           its website

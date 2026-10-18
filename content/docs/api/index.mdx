@@ -16,20 +16,38 @@ Open MCP Portal serves three HTTP surfaces from one origin, its `APP_URL`:
 
 ## The management API
 
-The management API serves the web app. It authenticates **browser sessions only**: a request with an `Authorization` header is refused (`401`), so API keys and OAuth tokens can't call it. It **may change between releases** before 1.0.
+The management API serves the web app, and, for a limited set of operations, CI and scripts. It **may change between releases** before 1.0.
 
 Conventions:
 
+- **Authentication.** Browser sessions (a cookie) call every operation. [Automation tokens](#automation-tokens) (`ompadm_…` and `omppub_…`) call only the operations marked for them. Personal API keys (`omp_…`), service account keys (`omp_sa_…`) and OAuth tokens are MCP credentials: they are refused here with `401 invalid_token`.
 - **Responses** are `{"data": ...}` on success and `{"error": {"code": "...", "message": "...", "details": ...}}` on failure. Every response carries `X-Request-ID`.
-- **Writes** need the session's CSRF token in `X-CSRF-Token` (from `GET /v1/me`) and a same-origin `Origin`. JSON bodies are decoded strictly: unknown fields are refused.
+- **Writes from a browser session** need the session's CSRF token in `X-CSRF-Token` (from `GET /v1/me`) and a same-origin `Origin`. Token requests need neither. JSON bodies are decoded strictly: unknown fields are refused.
 - **Edits** use revisions: objects carry a `revision` and an `ETag`, and updates send `If-Match`. A missing `If-Match` is `428`, a stale one `412`.
+- **Approvals name what was reviewed.** Approving a server sends the `expectedDigest` from `McpServer.reviewDigest`; approving a capability sends its `expectedFingerprint`. Without it the answer is `400 expected_digest_required` or `400 expected_fingerprint_required`; if the server or capability changed since, `409 changed_since_review` and nothing is approved. Publishing may send `expectedDigest` too.
 - **Lists** use cursors (`cursor`, `limit`, 50 by default, at most 200) and search with `q`.
 - **IDs** are UUIDs; teams, servers and gateways also have immutable slugs.
 - **Not allowed and not found look alike**: people outside a team get `404` for its objects.
-- **Rate limit**: `REQUESTS_PER_MINUTE` per person (600 by default), `429` with `Retry-After`.
+- **Rate limit**: `REQUESTS_PER_MINUTE` per person or per token (600 by default), `429` with `Retry-After`.
 
-The tags group the routes: sign-in, me, teams, MCP servers, catalog, gateways and calls, API keys, OAuth consent and connected apps, service accounts, auth providers, connections, limits, retention, usage and admin.
+The tags group the routes: sign-in, me, teams, MCP servers, catalog, gateways and calls, API keys, OAuth consent and connected apps, service accounts, auth providers, connections, limits, retention, usage, notifications, automation tokens and admin. New in v0.2.0: `GET /v1/admin/overview` ([Admin overview](/docs/administer/overview)), `GET /v1/teams/{team}/attention` ([Team attention](/docs/teams/attention-and-notifications)), the notification operations (inbox, preferences, destinations, deliveries; see [Notifications](/docs/administer/notifications)), the automation token operations, and `POST /v1/connect/requests/{requestId}/confirm` ([Connecting accounts](/docs/use/connecting-accounts)).
+
+## Automation tokens
+
+An automation token authenticates a request to `/v1` with `Authorization: Bearer <token>`:
+
+```sh
+curl -H "Authorization: Bearer $OMP_TOKEN" https://mcp.example.com/v1/token
+```
+
+- A request with an `Authorization` header is treated as a token request and only that: a cookie sent with it is ignored. It must be exactly `Bearer <token>`.
+- A token works only on operations whose OpenAPI description carries `x-omp-token-scopes`, and only if it holds one of the scopes listed there (a write scope includes its read scope). Any other operation answers `403 token_not_allowed`. The four operations that create or revoke tokens answer `403 session_required`: a token can never make or end tokens.
+- **Platform tokens** (`ompadm_`, scopes `platform:read` and `platform:write`) read the platform's state and provision teams, gateways, grants and limits. **Team publisher tokens** (`omppub_`, scopes `servers:read` and `servers:write`) work on one team's servers; on another team's path they get `404 team_not_found`.
+- `GET /v1/token` returns the calling token's kind, name, scopes, team and expiry, which helps when debugging a pipeline.
+- Tokens never work on `/mcp/{slug}`.
+
+See [Automation tokens](/docs/administer/automation-tokens) (platform) and [Publisher tokens](/docs/teams/publisher-tokens) (team) for creating and using them.
 
 ## Keeping the reference current
 
-The reference is generated at build time from `openapi/open-mcp-portal.yaml` in this documentation's repository, a copy of `api/openapi.yaml` from the Open MCP Portal release these docs describe (v0.1.0). The product repository's copy is the source of truth.
+The reference is generated at build time from `openapi/open-mcp-portal.yaml` in this documentation's repository, a copy of `api/openapi.yaml` from the Open MCP Portal release these docs describe (v0.2.0). The product repository's copy is the source of truth.

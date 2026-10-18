@@ -1,9 +1,9 @@
 ---
 title: Roadmap
-description: What Open MCP Portal plans after v0.1.0, in order, and what it will not do.
+description: What Open MCP Portal plans after v0.2.0, in order, and what it will not do.
 ---
 
-This is the plan after [v0.1.0](/docs/releases/v0-1-0): an order of work, not a schedule. The detailed version, with the decisions behind it, is the repository's [roadmap](https://github.com/ncecere/open-mcp-portal/blob/main/docs/roadmap.md). Plans change; each release's notes are the record of what shipped.
+This is the plan after [v0.2.0](/docs/releases/v0-2-0): an order of work, not a schedule. The detailed version, with the decisions behind it, is the repository's [roadmap](https://github.com/ncecere/open-mcp-portal/blob/main/docs/roadmap.md). Plans change; each release's notes are the record of what shipped.
 
 ## What it is, and what it is not
 
@@ -17,13 +17,12 @@ Also decided against:
 
 ## v0.2: MCP 2026-07-28 and a team pilot
 
-**MCP 2026-07-28 alongside the earlier revisions.** The 2026-07-28 revision is stateless: no `initialize` handshake, per-request metadata, required `Mcp-Method` and `Mcp-Name` headers, cacheable list results, and multi-round-trip requests in place of server-initiated calls. The portal will serve both eras at once, chosen per request, so existing clients keep working.
+Released as [v0.2.0](/docs/releases/v0-2-0) on 2026-10-18:
 
-- **For your clients:** `server/discover`, header validation, the new result shape, and list results marked private (they differ per person). The "connect your account" link becomes a native URL elicitation for clients that support it; other clients keep the current error with the link.
-- **For your MCP servers:** negotiate the era per server, relay a server's elicitation requests to the client, stream progress for long calls, and pass trace context both ways.
-- **Proof:** conformance tests for both eras, SDK clients in both modes, and a tested matrix of real clients.
+- **MCP 2026-07-28 alongside the earlier revisions**, chosen per request, toward clients and toward your servers (era negotiation, relaying a server's elicitation requests, streaming progress, trace context), with the conformance suite's results. See [MCP protocol support](/docs/server-authors/mcp-protocol).
+- **Pilot readiness:** the [admin overview](/docs/administer/overview), [notifications](/docs/administer/notifications) and scoped [automation tokens](/docs/administer/automation-tokens), and fixes from a security review.
 
-**Pilot readiness.** An admin overview page, email and webhook notifications, scoped automation tokens so CI can register and publish servers, a real deployment with a tested backup and restore, and a threat model.
+Still open from this stage: a written compatibility matrix tried with real Claude Code, VS Code and Cursor against the 2026-07-28 revision, and a real deployment with a tested backup and restore.
 
 ## v0.3: credentials and tool policy
 
@@ -45,4 +44,4 @@ Scanning of tool arguments and results for prompt injection and data loss is wan
 
 ## Still to verify from v0.1.0
 
-Real Google and Microsoft providers for delegated credentials, VS Code and Cursor over OAuth, and the Kubernetes manifests on a real cluster. See the [v0.1.0 notes](/docs/releases/v0-1-0#known-limitations).
+Real Google and Microsoft providers for delegated credentials, VS Code and Cursor over OAuth, and the Kubernetes manifests on a real cluster. See the [v0.2.0 notes](/docs/releases/v0-2-0#known-limitations).

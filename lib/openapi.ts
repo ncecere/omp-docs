@@ -42,6 +42,8 @@ export const tagLabels: Record<string, string> = {
   limits: 'Limits',
   retention: 'Retention',
   usage: 'Usage',
+  notifications: 'Notifications',
+  'automation-tokens': 'Automation tokens',
 };
 
 /**

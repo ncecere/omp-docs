@@ -1,0 +1,96 @@
+---
+title: v0.2.0
+description: "Open MCP Portal v0.2.0 (2026-10-18): the MCP 2026-07-28 revision next to every older one, an admin overview, notifications, automation tokens, and fixes from a security review of v0.1.0."
+---
+
+**Released 2026-10-18.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.2.0) · image `ghcr.io/ncecere/open-mcp-portal:v0.2.0` · migrations `00014` to `00017` (after v0.1.0's `00001` to `00013`).
+
+v0.2.0 adds support for the MCP 2026-07-28 revision, the pieces a pilot needs to run the portal day to day (an admin overview, notifications and automation tokens), and fixes from a security review of v0.1.0. Read [Upgrading](#upgrading) first.
+
+## MCP 2026-07-28, and every older revision
+
+Gateways at `/mcp/{slug}` now speak the 2026-07-28 revision next to 2024-11-05, 2025-03-26, 2025-06-18 and 2025-11-25. The revision is chosen **per request**, so one gateway serves old and new clients at once, and an older client sees exactly what it saw before. See [MCP protocol support](/docs/server-authors/mcp-protocol).
+
+- **Toward clients.** `server/discover`; the required `_meta` and the `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name` and `Mcp-Param-*` headers checked against the body; `resultType`, `ttlMs` and `cacheScope: "private"` on results (lists differ per person, so they are never shared); lists in a fixed order.
+- **"Connect your account" as a question, not an error.** A client that declares URL elicitation gets the consent link as an `input_required` result, with a sealed `requestState` it echoes back on retry. A 2026-07-28 client that does not declare it gets a tool error with the link in the text (the revision forbids `-32042` for such a client), and older clients keep `-32042`.
+- **Toward your servers.** The portal tries 2026-07-28 first and falls back to `initialize` only by the specification's rule, remembers the answer for five minutes and shows it on the server's page ("Protocol 2026-07-28 (modern), negotiated 5 minutes ago"). It relays an upstream server's elicitation requests to a client that can answer them, streams a call's progress as server-sent events when the client asks for it (and cancels the upstream call when the client disconnects), and passes `traceparent`, `tracestate` and `baggage` through. Streaming needs [ingress settings](/docs/operate/kubernetes#ingress).
+- **Conformance.** The official `@modelcontextprotocol/conformance` suite was run against a gateway: the caching, header and custom-header scenarios pass in full, and the remaining failures are by design (scenarios that need fixtures only that suite's server has, features this stateless portal does not offer, its modern-only assumption). Its client scenarios were run against the portal's upstream client; all pass except the interactive `auth/*` ones. The details are in [MCP protocol support](/docs/server-authors/mcp-protocol#conformance).
+
+## For the pilot
+
+- **Admin overview and team attention.** Platform admins land on an Overview of what needs attention across the portal (failing servers, held-back changes, reviews waiting, expiring keys, lapsed sign-ins) with the numbers that matter. Each team has the same for itself. Every item opens the screen where it is dealt with. See [Admin overview](/docs/administer/overview) and [Team attention and notifications](/docs/teams/attention-and-notifications).
+- **Notifications.** A bell and inbox in the portal, email through your SMTP server (off until you set `SMTP_HOST`; verified addresses only), and webhooks: signed JSON for your own receiver, or Slack-compatible. Eight events, personal preferences per event and channel, team webhooks managed by team owners and admins, platform webhooks by platform admins. Webhook URLs are stored encrypted and shown as a host only; webhooks reach public https addresses unless the operator lists a network in `NOTIFY_WEBHOOK_ALLOWED_NETWORKS`. See [Notifications](/docs/administer/notifications) and [Notification preferences](/docs/use/notification-preferences).
+- **Automation tokens.** Platform tokens (`ompadm_`, read or provision) and team publisher tokens (`omppub_`, register, refresh and publish a team's servers) for the management API under `/v1`, for CI. They expire, are revoked in one click, show who made them and when they were last used, are audited as the token, and are created and revoked only in a browser session. They never work on `/mcp`, and MCP credentials never work on `/v1`. See [Automation tokens](/docs/administer/automation-tokens) and [Publisher tokens](/docs/teams/publisher-tokens).
+
+## Security fixes
+
+A review of v0.1.0 (the [threat model](https://github.com/ncecere/open-mcp-portal/blob/v0.2.0/docs/threat-model.md)) found four issues, all fixed here:
+
+- **F-1** Changing a server's URL to another origin no longer sends its stored header value to the new host. The change is refused unless the same request supplies a new value (or removes the header), and OAuth servers go back to sign-in.
+- **F-2** Approving a server or a capability is bound to what the reviewer saw. The review dialog sends the digest it displayed, and an approval of something that changed in between is refused (`409 changed_since_review`). **This changes the API:** scripts that approve must send `expectedDigest` or `expectedFingerprint`. See [Publishing and review](/docs/teams/publishing#approvals-name-what-was-reviewed).
+- **F-3** A platform provider's token (GitHub, Google, ...) used to go to whichever server required the provider, at whatever URL it had, so a team editor could make a server require a provider, or re-point one, and receive teammates' tokens with no prompt. The token now goes only to a server the person **allowed**, at the address (scheme, host, port) it had when they allowed it. Moving a server to another host, or making it require another provider, ends its permissions. **Every person consents once per server after upgrading** (deliberately no backfill, which would grandfather any malicious server); when their account already has the scopes, the consent page asks only "Allow &lt;server&gt; (&lt;team&gt;)" and does not go to the provider. The token still holds every scope the person granted that provider; narrowing it per call is not done. See [Connecting accounts](/docs/use/connecting-accounts#allowing-a-server).
+- **F-4** A crafted sign-in `next` value could redirect to another site after sign-in.
+
+Also: the portal refuses to start with an `ENCRYPTION_KEY` equal to the `API_KEY_PEPPER`; the HTTP listener has header and idle timeouts; CI now runs `govulncheck` and `npm audit` (nothing reported).
+
+## Upgrading
+
+- **Migrations** `00014` to `00017` run with `migrate` (or `MIGRATE_ON_START`). Run `migrate` once, then start every replica on v0.2.0 **before creating any automation token** (an older replica does not know the new prefixes).
+- **Email needs one sign-in.** Email goes only to addresses the identity provider reported as verified, recorded at sign-in. People who have not signed in since the upgrade get notifications in the portal but no email until they do.
+- **People consent once per server** the first time they call a tool that uses a connected account (F-3 above). A consent link issued before the upgrade is refused as expired: run the tool again.
+- **Scripts that approve** servers or capabilities must send the digest or fingerprint (F-2).
+- **`API_KEY_PEPPER_PREVIOUS`** now also covers automation tokens, so a pepper rotation keeps them working.
+- **New settings,** all optional: `SMTP_*`, `NOTIFICATION_INTERVAL`, `NOTIFY_WEBHOOK_ALLOWED_NETWORKS`. See [Configuration](/docs/operate/configuration).
+
+The steps in order are in [Upgrading from v0.1.0](/docs/operate/migrations-and-upgrades#upgrading-from-v010).
+
+## Verification
+
+What was run before this release:
+
+- **Browser walkthrough against a real stack** (Postgres, the portal built from this tree, a fake MCP server, a fake OAuth provider, an SMTP sink and a webhook receiver): the admin overview and team attention card; a test email and a webhook test (the signature verified against the secret the screen showed); a publish request raising an in-portal notification, an email and a webhook, with hostile text in the note rendered inert in each; the review and approval with the digest; the decision notification reaching the team owner; creating a platform token and calling the API with it (allowed, refused and wrong-surface calls); the preferences page.
+- **F-3 against a real flow** (the Gmail example behind a fake OAuth provider): consent names the server and team; the call works; moving the server to another origin deletes the grant (audited with the old and new origin) and the next call asks again without forwarding anything; allowing the moved server records a grant for the new origin without a provider round trip.
+- **Both protocol eras** against one gateway with curl and the Go SDK client (legacy and modern initialization, lists, discovery, header mismatch), and the conformance suite as above.
+- **Tests.** Go unit and integration tests, including a route test and an authorization matrix over every operation (now including token access), and the web UI's Vitest suite; `make k8s-validate` and `actionlint`.
+
+## Known limitations
+
+Not verified yet (carried over from v0.1.0 unless marked new):
+
+- **Real Claude Code, VS Code and Cursor against the 2026-07-28 revision (new).** The modern era was exercised by the conformance suite, curl and the Go SDK, not by those clients.
+- **A real Google or Microsoft delegated-credentials provider.** Only GitHub has run end to end.
+- **Kubernetes on a cluster.** The manifests are validated, not applied to kind or a real cluster.
+- **Email over TLS to a real mail provider (new).** Tested against a local sink and a fake that refuses without STARTTLS.
+- **Provider-token redaction** in captured payloads has unit tests but no end-to-end test.
+
+Product limits:
+
+- **Remote servers only** (no stdio).
+- **A person's provider token still carries every scope they granted that provider.** F-3 limits which *servers* receive it, not which scopes. Narrowing per call and a per-provider list of servers allowed to use a provider are planned.
+- **Notifications** are delivered by one loop on one replica at a time; a destination's status is kept, never the response.
+- **Streaming** is for progress on `tools/call`; there is no server-pushed `listChanged` and no resource subscriptions.
+- **No sampling or roots relay.**
+- **Rate limits,** token refresh and deployment gaps are as in v0.1.0.
+- Development software: it has not run in production.
+
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.2.0` is a distroless, multi-arch image (linux/amd64 and linux/arm64), also tagged `latest`, signed with cosign keyless signing by the repository's `image.yml` workflow, with SBOM and provenance attestations. Its digest is:
+
+```text
+sha256:54033a775d1f15748588de86d57ed3c4c09a28e372d77105003c273210a82541
+```
+
+Check the signature with **cosign v3.0 or newer**, then pin the image by that digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:54033a775d1f15748588de86d57ed3c4c09a28e372d77105003c273210a82541 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.2.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+`open-mcp-portal version` in the image prints `open-mcp-portal 0.2.0 (<commit>)`. See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/open-mcp-portal/issues](https://github.com/ncecere/open-mcp-portal/issues). Report security problems privately, as [`SECURITY.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.2.0/SECURITY.md) describes.
