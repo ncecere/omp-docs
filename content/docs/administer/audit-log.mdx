@@ -9,7 +9,7 @@ description: Open MCP Portal's append-only record of every administrative and me
 
 ## What's recorded
 
-Each entry has the time, the actor (a person, the system, or a person acting through an OAuth client, marked `via: oauth`), the action, the target with a live label, the team when there is one, before-and-after values where something changed, and the request ID and client address. Secrets, header values and tokens are never recorded: only that they changed (`authValueChanged`, `clientSecretChanged`).
+Each entry has the time, the actor (a person, the system, an [automation token](/docs/administer/automation-tokens) shown by its name and kind, or a person acting through an OAuth client, marked `via: oauth`), the action, the target with a live label, the team when there is one, before-and-after values where something changed, and the request ID and client address. Secrets, header values and tokens are never recorded: only that they changed (`authValueChanged`, `clientSecretChanged`).
 
 Areas include:
 
@@ -21,7 +21,9 @@ Areas include:
 | Gateways and keys | `gateway.create`, `.update`, `.delete`, `.capabilities_set`, `.grant_add`, `.grant_remove`, `api_key.create`, `.revoke`, `.pepper_rehash` |
 | Service accounts | `service_account.create`, `.update`, `.delete`, `service_account_key.create`, `.revoke` |
 | OAuth clients | `oauth.client_register`, `oauth.consent`, `oauth.token_issue`, `oauth.revoke` |
-| Delegated credentials | `auth_provider.create`, `.update`, `.delete`, `provider_connection.create`, `.refresh_failed`, `.revoke` |
+| Delegated credentials | `auth_provider.create`, `.update`, `.delete`, `provider_connection.create`, `.refresh_failed`, `.revoke`, `provider_connection.server_allow` (a person allowed a server to use their account), `mcp_server.provider_grants_reset` (permissions ended because a server moved to another origin, now requires another provider, or was deleted; in the team's log) |
+| Automation tokens | `automation_token.create`, `.revoke`, `.pepper_rehash`, `.request` |
+| Notifications | `notification_destination.create`, `.update`, `.delete`, `.test`, `.rotate_secret`, `.disable`, `settings.notifications_test_email` |
 | Settings | `settings.publishing_update`, `settings.network_update`, `settings.oauth_clients_update`, `settings.limits_update`, `settings.capture_update`, `settings.retention_update` |
 | Records and operations | `mcp_call.payload_view`, `retention.purge`, `platform.secrets_reencrypt`, `platform.key_rotation` |
 
@@ -29,7 +31,7 @@ Areas include:
 
 ## Filters and export
 
-Filter by area or action (type one), target type, actor and date range. Sign-ins are hidden by default; turn off **Hide sign-ins** to see them. **Export CSV** downloads the entries that match the filters.
+Filter by area or action (type one), target type, actor, actor kind (a person, the system or an automation token) and date range. Sign-ins are hidden by default; turn off **Hide sign-ins** to see them. **Export CSV** downloads the entries that match the filters.
 
 ## Append-only
 

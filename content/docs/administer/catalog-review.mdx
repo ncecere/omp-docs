@@ -24,14 +24,24 @@ Then, on the server's **Company catalog** card:
 
 <Screenshot slot="admin-server-review-dialog" />
 
+### You approve what you read
+
+The review dialog sends the server's **review digest** (a SHA-256 over its URL, auth mode, user authorization requirement and every listed capability's kind, name and fingerprint) that it showed you when it opened. If the server changed in between (an editor refreshed it after you started reading), the approval is refused with **"changed since review"** (`409 changed_since_review`) and nothing is approved: reload the server, read what changed and approve again. A refresh of a server that is waiting for review is still allowed; it changes the digest.
+
 A published server can be taken off the catalog the same way: rejecting a published server removes it from the catalog and marks it rejected, with your note.
 
 ## Approve changed capabilities
 
-When a published server's capability changes, or a new one appears, it stays out of the catalog until approved, while the rest of the server stays published. The server's pending-changes count and the **changes** filter find them. On the Capabilities tab, read the new definition and **Approve change**. Under **Self-publish**, the team's owners and admins approve their own changes.
+When a published server's capability changes, or a new one appears, it stays out of the catalog until approved, while the rest of the server stays published. The server's pending-changes count and the **changes** filter find them. On the Capabilities tab, read the new definition and **Approve change**. The approval names the capability's **fingerprint** you read; if the definition changed again before you approved, it is refused with the same "changed since review" answer. Under **Self-publish**, the team's owners and admins approve their own changes.
 
 ## What comes back for review
 
 Under **Approval required**, a published server returns to **Waiting for review** on its own when its URL changes, when it switches to OAuth mode, to another authorization server or to new scopes, or when a capability's user authorization requirement widens. It leaves the catalog until you review it again. The team's note and the history say why it's back.
 
-Every decision is in the audit log (`mcp_server.publish`, `mcp_server.reject`, `mcp_capability.approve`).
+Every decision is in the audit log (`mcp_server.publish`, `mcp_server.reject`, `mcp_capability.approve`); the approval of a server records the digest.
+
+Platform admins get a notification when a server enters review (`publish.requested`), and the team's owners and admins get one when you decide (`publish.decided`): see [Notifications](/docs/administer/notifications). The [overview](/docs/administer/overview) lists servers waiting for review, with the age of the oldest request.
+
+### Scripts that approve
+
+Approving through the management API must say what was reviewed. `adminReviewMcpServer` with `approve` needs `expectedDigest` (the server's `reviewDigest`), and `adminApproveMcpCapability` needs `expectedFingerprint`, or the answer is `400 expected_digest_required` or `400 expected_fingerprint_required`. [Automation tokens](/docs/administer/automation-tokens) can't approve at all: the review gate stays with a person.

@@ -3,7 +3,7 @@ title: Auth providers
 description: Configure the OAuth apps (GitHub, Google, Microsoft Entra ID, Atlassian, Slack, GitLab or your own) that let Open MCP Portal tools act as the person calling.
 ---
 
-An **auth provider** is an OAuth app on another service that people connect their own accounts with, so a server's tools can act as them: create a GitHub issue, read a Google Drive file. Platform admins configure each provider once in **Admin › Auth providers**; teams then choose a provider and scopes on their servers ([user authorization](/docs/teams/user-authorization)). The portal keeps each person's tokens, encrypted, and sends each one only to the server that needs it. Auditors can read the configuration.
+An **auth provider** is an OAuth app on another service that people connect their own accounts with, so a server's tools can act as them: create a GitHub issue, read a Google Drive file. Platform admins configure each provider once in **Admin › Auth providers**; teams then choose a provider and scopes on their servers ([user authorization](/docs/teams/user-authorization)). The portal keeps each person's tokens, encrypted, and sends each one only to a server the person has **allowed** to use their account. Auditors can read the configuration.
 
 <Screenshot slot="admin-auth-providers" />
 
@@ -39,6 +39,16 @@ Register the redirect URI at the provider before people connect: they can't unti
 - **Turning it off** refuses calls that need it (`-32010`, `provider_disabled`) and new connections. Existing connections are kept.
 - **Delete this provider** is refused while any server requires it (the dialog lists them). Otherwise it erases every connection and revokes it at the provider where it can.
 
+## Which servers get a token
+
+Since v0.2.0, a person's token for a platform provider goes only to a **server that person allowed**, at the address (scheme, host and port) the server had when they allowed it, for the scopes they were shown. Without that permission a call asks the person to allow the server (`server_not_allowed`) and nothing is forwarded. Why: before v0.2.0 a team editor could make a server require a provider, or re-point one, and receive teammates' tokens without any prompt.
+
+- Each person allows each server **once**. After the upgrade nobody has any permission, deliberately: a backfill would have grandfathered any malicious server. People allow each server the first time they call it.
+- A server's permissions end when its URL moves to another host, scheme or port, when it requires another provider (or none), or when it is deleted. A change that only touches the path keeps them. They end too when the person disconnects, or you delete the provider or the person.
+- When a person's account already has the scopes the server needs, the consent page asks only "Allow &lt;server&gt; (&lt;team&gt;)" and doesn't go to the provider.
+
+What hasn't changed: the connection is still one token per person and provider, holding **every scope** the person has granted that provider, so an allowed server receives all of them. And any team editor can still name any enabled provider on a server (there is no per-provider list of teams or servers allowed to use it): the person's consent, which names the server and its team, is the check. Narrowing scopes per call and a per-provider allowlist are planned.
+
 ## How tokens are handled
 
 - People connect through a consent link the first time a tool needs the provider, or ahead of time from My connections or My gateways. See [Connecting accounts](/docs/use/connecting-accounts).
@@ -47,7 +57,7 @@ Register the redirect URI at the provider before people connect: they can't unti
 - Tokens and the client secret are never returned, logged, audited, recorded in calls or captured.
 - The portal doesn't check that the provider account belongs to the person (for example by email). The account label is informational.
 
-Audit: `auth_provider.create`, `.update` (with `clientSecretChanged` and `connectionsReset`), `.delete`, and `provider_connection.create`, `.refresh_failed`, `.revoke`.
+Audit: `auth_provider.create`, `.update` (with `clientSecretChanged` and `connectionsReset`), `.delete`, and `provider_connection.create`, `.refresh_failed`, `.revoke`, `.server_allow` (a person allowed a server, with the server and its address), and, in the server's team log, `mcp_server.provider_grants_reset`.
 
 ## OAuth-protected MCP servers
 

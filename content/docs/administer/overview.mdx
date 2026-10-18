@@ -1,0 +1,44 @@
+---
+title: Overview
+description: "Admin › Overview in Open MCP Portal: what needs attention across the platform, with the last day's calls and errors, and where each item leads."
+---
+
+**Admin › Overview** is where platform admins and auditors land (`/admin`, the first item of the admin sidebar). It answers one question: **what needs me?** It is read-only: it shows data the portal already has, changes nothing, and adds no background work. Auditors see the same page, and the buttons lead to screens that are read-only for them.
+
+<Screenshot slot="admin-overview" />
+
+## What's on it
+
+- **Counts:** people, teams, servers, published servers and gateways. People and teams are the active ones; gateways are the platform gateways plus those of active teams.
+- **The last 24 hours:** calls, the error rate, calls refused by a rate limit, and an "as of" time. The figures come from the hourly usage rollups, so they trail the call log by a few minutes. **Errors** are every outcome but `ok` (so refused, rate-limited and needs-authorization calls count), the same definition as [Usage and calls](/docs/administer/usage-and-calls), so the two pages agree. The error rate is empty when there were no calls, and the page raises no alert of its own on it: it is shown, not judged.
+- **Needs attention:** items grouped by severity (critical, warning, information). Each shows what happened, the team, how long ago ("since 3 d") and a button that opens the screen where it is dealt with. When nothing needs you, it says "Nothing needs attention".
+
+The page refetches when you return to it and every 60 seconds while it is visible. If it can't load, it shows an error with **Retry**, and the rest of the page keeps working.
+
+## What counts as needing attention
+
+An **active** team is one that isn't archived. Archived teams' servers are unavailable everywhere, so nothing about them is listed. Each kind lists at most 20 items, ordered by severity, then oldest first; when a kind is cut, the page says how many more there are ("and 12 more servers: see Admin › Servers") and the totals stay exact.
+
+| What | Listed when | Severity | Opens |
+|---|---|---|---|
+| **Failing servers** | A **published**, enabled server of an active team whose latest health check failed. One item per server, "failing since" its first failed check | Warning; critical after 24 hours | The server |
+| **Lapsed sign-in** | A published, enabled server in Sign-in with OAuth mode whose setup sign-in needs a new consent | Warning | The server |
+| **Reviews waiting** | One item: servers waiting for review in active teams, with the oldest request's age | Information; warning when the oldest has waited over 3 days | The review queue |
+| **Capability changes held back** | A published, enabled server with changed or new capabilities that aren't approved, so they're held back from the catalog. One item per server, with the count | Warning | The server |
+| **Personal keys expiring** | One item: people's API keys expiring within 14 days | Information; warning within 3 days | Nothing: keys belong to individuals and staff can't open them |
+| **Service account keys expiring** | One item per team (at most 20 teams): its keys expiring within 14 days | As above | The team's service accounts |
+| **Automation tokens expiring** | One item for platform tokens, and one per team for publisher tokens, within 14 days | As above | The token list |
+| **Connections needing reconsent** | One item: people's connections that need a new consent. A server's setup sign-in is listed as "lapsed sign-in", not counted twice | Information | Auth providers |
+| **Gateways switched off** | One item: disabled platform gateways, and disabled team gateways of active teams | Information | Gateways |
+| **Rate limited** | One item when calls were refused by a rate limit in the last 24 hours | Information | Usage |
+| **Notification failures** | One item: webhook destinations that failed repeatedly or were stopped (platform and team), plus one if an email delivery failed in the last 24 hours | Warning | Notification settings |
+
+Nothing here reaches a secret: the page shows counts, names, times and error classes. Private and pending servers are left out of the platform view, which lists only published servers; teams see their own servers' state on their [attention card](/docs/teams/attention-and-notifications).
+
+## Over the API
+
+`GET /v1/admin/overview` returns the same data for scripts: counts, the 24-hour figures and the attention items, each with a one-line English `summary`, a severity, a `count` where it applies, a time and a link target. It is available to platform admins and auditors, and to a [platform token](/docs/administer/automation-tokens) with `platform:read`. It is computed per request and never cached. See the [API reference](/docs/api/reference/operations/adminGetOverview).
+
+## Notifications and the overview
+
+The overview shows what needs attention when someone looks. [Notifications](/docs/administer/notifications) tell people when it happens. Delivery problems never raise a notification of their own: they show here and in Admin › Notifications.

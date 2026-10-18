@@ -1,0 +1,99 @@
+---
+title: Automation tokens
+description: "Platform tokens (ompadm_) for Open MCP Portal's management API: create, scope and revoke them, what they can and can't do, and how they are audited."
+---
+
+An **automation token** lets a script or CI job call part of Open MCP Portal's management API (`/v1`) without a browser session. There are two kinds:
+
+- **Platform tokens** (`ompadm_…`), made by platform admins here. They read the platform's state (for monitoring and reports) and provision teams and gateways.
+- **Team publisher tokens** (`omppub_…`), made by a team's owners and admins, to register, refresh and publish that team's servers from a pipeline. See [Publisher tokens](/docs/teams/publisher-tokens).
+
+Tokens are **separate from MCP credentials in both directions**. A token never works on `/mcp/{slug}`, and a personal API key (`omp_…`), a service account key (`omp_sa_…`) or an OAuth token never works on `/v1`. A token can't make or revoke tokens, grant a platform role, approve a server, or read recorded call contents.
+
+<Callout type="warn" title="Create no token until every replica runs v0.2.0">
+An older replica doesn't know the new token prefixes. If you are upgrading, roll every replica first: see [Upgrading from v0.1.0](/docs/operate/migrations-and-upgrades#upgrading-from-v010).
+</Callout>
+
+## Create a platform token
+
+Platform admins open **Admin › Automation tokens** (`/admin/automation-tokens`) and choose **Create**. Auditors can read the list. Tokens are created and revoked **only in a browser session**: a token that tries gets `403 session_required`.
+
+<Screenshot slot="admin-automation-tokens" />
+
+- **Name**: 1 to 100 characters, such as `monitoring`.
+- **Scopes**: **`platform:read`** and/or **`platform:write`**. Write includes read.
+- **Expires after**: 1 to 365 days (90 by default). Tokens always expire.
+
+You can have up to 20 active platform tokens. The token is shown **once**, with a ready-to-copy `curl` and GitHub Actions snippet. Store it in your secrets store: it can't be shown again, and Open MCP Portal keeps only a digest.
+
+<Screenshot slot="admin-automation-token-created" />
+
+The list shows each token's name, prefix, scopes, status, who made it, when it expires and when it was last used (updated at most once a minute). Expired and revoked tokens stay listed for 30 days. **Revoke** ends a token on its next request.
+
+## Use one
+
+```sh
+export OMP_TOKEN=ompadm_…        # a placeholder: your token
+curl -H "Authorization: Bearer $OMP_TOKEN" https://mcp.example.com/v1/token
+curl -H "Authorization: Bearer $OMP_TOKEN" https://mcp.example.com/v1/admin/overview
+```
+
+```yaml
+# A GitHub Actions step, with the token in a repository secret
+- name: Platform overview
+  run: |
+    curl --fail -H "Authorization: Bearer ${{ secrets.OMP_PLATFORM_TOKEN }}" \
+      https://mcp.example.com/v1/admin/overview
+```
+
+`GET /v1/token` returns the token's kind, name, scopes, expiry and team, which helps when a pipeline fails. A request with an `Authorization` header is treated as a token request and only that: a cookie sent with it is ignored, and no CSRF token or `Origin` is needed. Each token is rate limited at `REQUESTS_PER_MINUTE`, and repeated failed attempts from one address are limited like failed sign-ins.
+
+Errors to know:
+
+| Answer | Means |
+|---|---|
+| `401 invalid_token` | Unknown, expired or revoked; the creator is no longer a platform admin; or the credential isn't a token (an MCP key or OAuth token, for example). One message for all of them |
+| `403 token_not_allowed` | This operation doesn't accept tokens, or the token's scopes don't cover it. The response says which scopes are needed and which the token holds |
+| `403 session_required` | Creating or revoking tokens needs a browser session |
+| `429 rate_limited` | The token's rate limit, with `Retry-After` |
+
+## What each scope allows
+
+**`platform:read`** acts as a platform auditor: it can call every read-only `GET /v1/admin/…` operation **except recorded call contents**. That covers users, teams, servers and their capabilities and health, publishing, network, limits, retention and capture settings, gateways and their grants, calls and usage, trusted clients, auth providers (without secrets), connections, the audit log, the [overview](/docs/administer/overview), notification settings, platform notification destinations and their deliveries, and the token list.
+
+**`platform:write`** acts as a platform admin, but only for provisioning that can be undone and doesn't change who is trusted:
+
+- create and update teams, and create and update gateways;
+- select a gateway's capabilities, and add or remove its grants;
+- change the platform's rate limits and a team's limits;
+- revoke a person's connected app or connection.
+
+Everything else answers `403 token_not_allowed`. Which operations accept tokens is part of the API description (the `x-omp-token-scopes` extension in the [API reference](/docs/api)), and a test in the product checks that exactly those operations accept them.
+
+### What a platform token can never do
+
+- Create or revoke tokens (so a token can't make more tokens).
+- Change a person: grant or remove `platform_admin`, suspend anyone, assign a team's owner, manage members, invites, service accounts and their keys. A platform token creates a team without an owner, and a person assigns the owner.
+- **Decide** anything: approve or reject servers, approve capabilities, set a capability's requirement. The review gate stays human.
+- Change settings that widen trust or touch data: the publishing policy and its overrides, internal networks, trusted clients, redaction patterns, retention, and auth providers.
+- Delete anything.
+- Read recorded call contents, anything under another person's account (`/v1/me/…`), a secret of any kind (header values, provider and token secrets, webhook secrets and URLs), or manage notifications.
+
+<Callout type="warn" title="platform:write is broad">
+`platform:write` still includes gateway grants and capability selection, rate limits and archiving a team. A leaked write token can therefore widen who can use a gateway. Every such change is audited as the token, and revocation applies on the next request. Prefer `platform:read` wherever a job only reads. The product plans a separate scope for grants and capability selection.
+</Callout>
+
+## A token is tied to its creator
+
+A platform token works only while **its creator is still an active platform admin**. If the creator is demoted or suspended, the token is refused (`401 invalid_token`) and shows as "blocked: creator is no longer a platform admin"; if they are restored, it works again.
+
+## Audit
+
+- `automation_token.create` and `automation_token.revoke` are recorded against the person who did it, with the token's name, kind, scopes and expiry (never a secret).
+- Every other audited action done with a token is recorded as done by **the token**: the entry shows the token's name and kind instead of a person. Filter [Admin › Audit log](/docs/administer/audit-log) by actor kind `automation_token`. A request that changes something but wrote no entry of its own is recorded as `automation_token.request`, with the route.
+- `automation_token.pepper_rehash` is the system moving a token to a new `API_KEY_PEPPER` ([key rotation](/docs/operate/secrets-and-key-rotation#rotating-api_key_pepper)).
+- A failed authentication isn't audited: it is rate limited and counted in `omp_automation_token_auth_total`.
+
+## Expiry
+
+A platform token that lasted more than 7 days raises `key.expiring` for platform admins 7 days before it expires ([Notifications](/docs/administer/notifications)), and the [overview](/docs/administer/overview) lists tokens expiring within 14 days. Create the replacement before the old one expires, update the pipeline, then revoke the old one.

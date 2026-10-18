@@ -4,6 +4,7 @@
   "root": true,
   "pages": [
     "index",
+    "overview",
     "first-run",
     "---People---",
     "users-and-teams",
@@ -15,10 +16,12 @@
     "platform-gateways",
     "trusted-clients",
     "auth-providers",
+    "automation-tokens",
     "---Records---",
     "audit-log",
     "usage-and-calls",
     "---Operations---",
+    "notifications",
     "limits",
     "retention",
     "payload-capture"

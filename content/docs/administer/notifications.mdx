@@ -1,0 +1,188 @@
+---
+title: Notifications
+description: "Open MCP Portal's notifications: the in-portal inbox, email through your SMTP server, and signed or Slack-compatible webhooks; the eight events, who gets them, delivery and retries, and platform webhooks."
+---
+
+Open MCP Portal tells the right people when something needs them: a server is down or changed, a review is waiting or decided, a sign-in lapsed, a key is about to expire. There are three channels:
+
+- **The inbox** in the web app (the bell in the top bar). It needs no setting.
+- **Email**, through your own SMTP server. It is off until the operator sets `SMTP_HOST`.
+- **Webhooks**: an HTTPS `POST` to a URL, as signed JSON for your own receiver or in a Slack-compatible format. Platform admins manage **platform** webhooks here; each team's owners and admins manage the team's, under [Team settings](/docs/teams/attention-and-notifications#team-webhooks).
+
+A notification never blocks or changes the thing it reports on. Everything about it lives under **Admin › Notifications** (`/admin/notifications`): platform admins change it, auditors read it.
+
+<Screenshot slot="admin-notifications" />
+
+## The events
+
+There are eight events. Recipients are worked out when the event is delivered, from people's **current** roles: suspended people and archived teams get nothing, and the person who caused a manual event doesn't get notified of their own action.
+
+| Event | Fires when | Inbox and email to | Webhooks |
+|---|---|---|---|
+| `server.unhealthy` | A server's last 3 health checks (scheduled or manual) all failed. Once per incident, then a reminder every 24 hours while it still fails | The team's owners, admins and editors | The team's; platform ones if they ask for team events |
+| `server.recovered` | The first successful check after an incident that raised `server.unhealthy` | The team's owners, admins and editors | The team's; platform ones if they ask for team events |
+| `capability.changed` | A refresh leaves a published server with changed or new capabilities that are held back from the catalog until approved | The team's owners, admins and editors | The team's; platform ones if they ask for team events |
+| `publish.requested` | A server enters review: first request, or sent back because its URL, upstream sign-in or requirement changed | Platform admins | Platform |
+| `publish.decided` | A platform admin approves or rejects a server | The team's owners and admins | The team's; platform ones if they ask for team events |
+| `connection.needs_reconsent` | A person's connection to a service needs a new consent (not a server's setup sign-in) | That person | Never |
+| `upstream_signin.lapsed` | The setup sign-in of a Sign-in with OAuth server needs a new consent | The team's owners, admins and editors | The team's; platform ones if they ask for team events |
+| `key.expiring` | A key or token that lasted more than 7 days is within 7 days of expiring | A personal key: the person. A service account key or publisher token: the team's owners and admins. A platform token: platform admins | Service account keys and publisher tokens: the team's, and platform ones if they ask for team events. Platform tokens: platform |
+
+Personal events (`connection.needs_reconsent`, and a personal key's `key.expiring` for the person) never go to webhooks. There is no event for creating a token; creation is in the [audit log](/docs/administer/audit-log). Delivery failures aren't an event either: they show in Admin › Notifications, on the destination, and on the [overview](/docs/administer/overview).
+
+Each person chooses, per event and channel, what they receive: see [Notification preferences](/docs/use/notification-preferences). By default the inbox and email are both on.
+
+## Email
+
+Set up by the operator: `SMTP_HOST`, `SMTP_FROM` and the rest of the `SMTP_*` settings ([Configuration](/docs/operate/configuration#notifications)). The **Email** card on this page shows whether email is on, the From address, host, port and mode, whether the portal authenticates, the last 24 hours' counts, and that the delivery loop is alive. It never shows the username or password.
+
+- **Send test email** sends a message to **your own address** only, and tells you whether it worked and, if not, the error class. It is limited to 5 per hour per admin.
+- Mail goes only to people's **verified** addresses: the identity provider's `email_verified` claim, recorded at each sign-in. After an upgrade, a person gets no email until they sign in once. Their inbox is unaffected.
+- One message per person, with a link into the portal and a footer saying why they got it and where to change it. It has a plain-text part and a simple HTML part, with no images, remote content or tracking. The subject is `[<instance name>] <title>`.
+- At most 30 emails per person per hour. Beyond that the portal skips email (the inbox still has the notification).
+- The connection to your server verifies its certificate. STARTTLS is required in the default mode: a server that doesn't offer it fails, and the portal never sends in plain text instead.
+
+`open-mcp-portal doctor` checks the SMTP connection without sending anything.
+
+## Webhooks
+
+A **destination** is a URL, a format and the events it receives. Up to 10 per team and 10 for the platform. Each has a health badge, a delivery log and a **Test** button.
+
+**Add** a platform destination on this page:
+
+1. A **name** (unique among platform destinations) and the **URL**.
+2. The **format**: **JSON (signed)** or **Slack**.
+3. The **events** it receives. A platform destination can also receive the non-personal events of **every team** (the "also every team's events" switch); without it, it gets only platform events (`publish.requested`, and platform tokens' `key.expiring`).
+4. For JSON, the **signing secret** is shown **once**, starting `ompwhs_`. Copy it into your receiver. The URL is stored encrypted and is never shown again, only its scheme and host: a Slack webhook URL is itself a credential.
+
+**Test** sends a test delivery to the destination and shows the result on screen. It isn't recorded in the delivery log, and is limited to 10 an hour per destination. Edit a destination to change its events, switch it off, or delete it. Creating, changing, testing, rotating and deleting are audited, without the URL or the secret.
+
+### Where a webhook may point
+
+Webhook URLs must be **https** at a **public** address. The portal checks the URL when you save it and again on **every delivery**, pinning the address it resolved, so a name that later resolves somewhere else is refused. Redirects are never followed, proxy settings are ignored and the receiver's response is never kept (only its status). Loopback, link-local and cloud-metadata addresses, and their IPv6 forms, are never allowed. A refused URL is `422 url_not_allowed` on save, and a blocked delivery always reports the same class (`not_allowed`), whatever the address, so a webhook can't be used to probe the network.
+
+**Webhooks never use the [Internal networks](/docs/administer/internal-networks) list.** That list says where teams' MCP servers may live, and any team owner can write a webhook URL: if webhooks used it, a team owner could make the portal send requests into your network. There is no development exception either.
+
+If a receiver has to be internal (a self-hosted chat bridge, say), **the operator** lists it in `NOTIFY_WEBHOOK_ALLOWED_NETWORKS` (empty by default): the same syntax as `UPSTREAM_ALLOWED_NETWORKS`, with `http:` before an entry to allow plain http. Loopback, link-local and metadata addresses can't be listed. Admins can't change this list from the web app. In Kubernetes the operator must also open the NetworkPolicy's egress to that address and port.
+
+### The signed JSON format
+
+Each delivery is a `POST` with a JSON body (at most 8 KiB) and these headers:
+
+| Header | Value |
+|---|---|
+| `Content-Type` | `application/json` |
+| `User-Agent` | `open-mcp-portal/<version>` |
+| `X-OMP-Event` | The event name, such as `server.unhealthy` |
+| `X-OMP-Event-Id` | A unique ID for the event. The same on every retry |
+| `X-OMP-Delivery` | The ID of this delivery |
+| `X-OMP-Attempt` | The attempt number |
+| `X-OMP-Timestamp` | Unix seconds when it was signed |
+| `X-OMP-Signature` | `v1=<hex>`: the HMAC-SHA256 of `<timestamp>.<raw body>`, in hex, keyed with the destination's secret |
+
+The body (an example; the values are made up):
+
+```json
+{
+  "version": 1,
+  "id": "0b6f3f0e-2b0a-4c53-9a9e-0d1a2f3b4c5d",
+  "type": "server.unhealthy",
+  "occurredAt": "2026-10-18T14:03:11Z",
+  "instance": { "name": "Example Corp MCP Portal", "url": "https://mcp.example.com" },
+  "team": { "id": "…", "slug": "support-tools", "name": "Support Tools" },
+  "url": "https://mcp.example.com/teams/support-tools/servers/…",
+  "data": {
+    "server": { "id": "…", "slug": "status", "name": "Status" },
+    "since": "2026-10-18T13:48:02Z",
+    "consecutiveFailures": 3,
+    "errorClass": "unavailable",
+    "reminder": false
+  }
+}
+```
+
+`team` is `null` for platform events. `url` is a link into the portal. `data` depends on the event, and never holds secrets, header values, call arguments or results, server URLs, health messages or email addresses:
+
+| Event | `data` |
+|---|---|
+| `server.unhealthy` | `server {id, slug, name}`, `since`, `consecutiveFailures`, `errorClass`, `httpStatus` (when there is one), `reminder`, `failingHours` (when there is one) |
+| `server.recovered` | `server`, `since`, `recoveredAt`, `downtimeSeconds` |
+| `capability.changed` | `server`, `changedCount`, `newCount`, `held: true`, up to 10 `capabilities {kind, name, change}`, `moreCount`. Platform destinations get the counts, not the capability names |
+| `publish.requested` | `server`, `reason`, `note` (up to 300 characters), `requestedBy {kind, name}` |
+| `publish.decided` | `server`, `decision`, `note` (up to 300 characters), `decidedBy {name}` |
+| `upstream_signin.lapsed` | `server`, `since`, `readAsName` (when known) |
+| `key.expiring` | `keyKind` (`service_account`, `publisher_token` or `platform_token`), `name`, `expiresAt`, `daysLeft`, `serviceAccount` (for a service account's key). Never a key's prefix |
+
+**Verify every request** before you trust it: compute the signature over the **raw** body bytes (not a re-serialised copy), compare in constant time, and reject a timestamp older than 5 minutes. Delivery is **at least once**: a crash between sending and recording repeats a delivery, so also de-duplicate on `X-OMP-Event-Id`.
+
+```python
+import hashlib, hmac, time
+
+SECRET = "ompwhs_…"          # the destination's signing secret, from your secrets store
+
+def verify(raw_body: bytes, headers: dict, tolerance_seconds: int = 300) -> bool:
+    timestamp = headers["X-OMP-Timestamp"]
+    if abs(time.time() - int(timestamp)) > tolerance_seconds:
+        return False
+    expected = hmac.new(
+        SECRET.encode(), timestamp.encode() + b"." + raw_body, hashlib.sha256
+    ).hexdigest()
+    # During a secret rotation the header holds two values: "v1=<new>, v1=<old>".
+    for part in headers["X-OMP-Signature"].split(","):
+        part = part.strip()
+        if part.startswith("v1=") and hmac.compare_digest(part[3:], expected):
+            return True
+    return False
+```
+
+The same in Node.js:
+
+```js
+import { createHmac, timingSafeEqual } from 'node:crypto';
+
+const SECRET = process.env.OMP_WEBHOOK_SECRET; // "ompwhs_…"
+
+export function verify(rawBody, headers, toleranceSeconds = 300) {
+  const timestamp = headers['x-omp-timestamp'];
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > toleranceSeconds) return false;
+  const expected = createHmac('sha256', SECRET).update(`${timestamp}.`).update(rawBody).digest('hex');
+  return headers['x-omp-signature'].split(',').some((part) => {
+    part = part.trim();
+    if (!part.startsWith('v1=')) return false;
+    const got = Buffer.from(part.slice(3));
+    const want = Buffer.from(expected);
+    return got.length === want.length && timingSafeEqual(got, want);
+  });
+}
+```
+
+#### Rotating the secret
+
+**Rotate secret** on a destination makes a new secret and shows it once. For a **grace period** you choose (24 hours by default, up to 72, or none), deliveries are signed with **both** the new and the old secret (`v1=<new>, v1=<old>`), so you can change the receiver without losing deliveries. Rotating is audited.
+
+### The Slack format
+
+A Slack destination gets `{"text": "<one line and a link>"}`: at most 3,000 characters, with `&`, `<` and `>` escaped and `@` mentions broken so a name can't ping people. The only link is the portal's. It is **not signed** (Slack's incoming webhooks don't verify one), so there is no secret and **Rotate secret** isn't offered (`409 not_signed`). The `X-OMP-*` headers other than the signature are still sent. Treat a Slack webhook URL as a secret.
+
+### Delivery and retries
+
+One loop on one replica at a time sends queued notifications every `NOTIFICATION_INTERVAL` (15 seconds by default). A webhook has 10 seconds to answer.
+
+- A failed delivery is tried again after 1 minute, 5 minutes, 30 minutes, 2 hours and 6 hours (six attempts in all), then marked failed. Anything undelivered 24 hours after it was created is failed too.
+- A permanent error fails at once: a webhook answering `4xx` other than `408` and `429`, or an SMTP `5xx`.
+- A destination with **20 failed attempts in a row is stopped**: it is switched off, with the reason "failures", an audit entry, and a banner on it. Switch it back on once the receiver is fixed. Deliveries to a switched-off or deleted destination are skipped.
+- To keep one slow receiver from delaying the others, a run takes at most 3 due deliveries per destination (or person) and sends a destination's deliveries one after another.
+
+A destination's **delivery log** shows its last 50 deliveries from the past 14 days: state (pending, sent, failed, skipped), attempts, the HTTP status and an error class. It never shows payloads or responses.
+
+## Retention
+
+Fixed, not a setting: inbox entries are kept 90 days, read or not; queued and delivered events and delivery records 14 days. [Retention](/docs/administer/retention) doesn't change this.
+
+## In the audit log
+
+`notification_destination.create`, `.update`, `.delete`, `.test` and `.rotate_secret` (with the destination's name, events and whether it is enabled; the team for a team destination; never the URL or the secret), `notification_destination.disable` (by the system, when a destination is stopped), and `settings.notifications_test_email`. Preferences and read marks are personal and aren't audited.
+
+## Over the API
+
+The notification operations (inbox and preferences for the signed-in person; destinations, tests, secret rotation, deliveries and settings for team admins and platform admins) are under the `notifications` tag in the [API reference](/docs/api). They need a browser session: [automation tokens](/docs/administer/automation-tokens) can't manage notifications, and platform tokens can read the settings and the platform destinations' state but never a URL or a secret.
