@@ -1,0 +1,93 @@
+---
+title: Publisher tokens
+description: "Team publisher tokens (omppub_) let CI register, refresh and publish a team's MCP servers through Open MCP Portal's management API. How to create one, a CI example, and what it can't do."
+---
+
+A **publisher token** (`omppub_…`) belongs to your team and lets a pipeline call the management API for **that team's servers only**: register a server, refresh its capabilities, test it, and ask for it to be published. It is for CI, so a deploy can keep the portal's copy of a server up to date without anyone signing in.
+
+It is **not** an MCP credential: it never works on `/mcp/{slug}`, and the personal keys, [service account](/docs/teams/service-accounts) keys and OAuth tokens that do work there are refused by the management API. A service account lets an agent *use* tools; a publisher token lets a pipeline *manage the team's servers*.
+
+<Callout type="warn" title="Create no token until every replica runs v0.2.0">
+If your platform was just upgraded from v0.1.0, ask the operator to confirm that every replica runs v0.2.0 before you create a token.
+</Callout>
+
+## Create one
+
+Team **owners and admins** open **Team settings › Automation tokens** and choose **Create**. A token is created and revoked only in a browser session, never with another token.
+
+<Screenshot slot="team-automation-tokens" />
+
+- **Name**: 1 to 100 characters, such as `github-actions`.
+- **Scopes**: **`servers:read`** (see the team's servers, capabilities, health and publishing policy) and/or **`servers:write`** (register, change, test, refresh and publish). Write includes read.
+- **Expires after**: 1 to 365 days (90 by default). Tokens always expire.
+
+A team can have up to 20 active tokens. The secret is shown **once**, with a `curl` and GitHub Actions snippet; store it in your CI's secret store. The list shows each token's name, prefix, scopes, status, who made it, when it expires and when it was last used. **Revoke** ends it on its next request.
+
+Unlike a platform token, a publisher token **doesn't depend on its creator**: it keeps working if the person who made it leaves the team or the company, for as long as the team exists and the token hasn't expired or been revoked. Review the list when people leave.
+
+## What it can do
+
+A token acts with **at most** the rights of a team role, and only on its own team:
+
+| Scope | Acts as | Operations |
+|---|---|---|
+| `servers:read` | A member | List and read the team's servers, their capabilities and health checks, and the team's publishing policy |
+| `servers:write` | An editor, and an admin for publishing | Create a server (`createTeamMcpServer`), change one (`updateTeamMcpServer`), test it, refresh its capabilities, detect its sign-in mode, **request publication** (`publishTeamMcpServer`) and withdraw it (`unpublishTeamMcpServer`) |
+
+Publishing follows the team's policy exactly as for a person. Under **Approval required**, `publish` sends the server to a platform admin for review. Under **Self-publish** it publishes at once. See [Publishing and review](/docs/teams/publishing). A token may send the `expectedDigest` it read, and the publish is refused with `409 changed_since_review` if the server changed since.
+
+On another team's path, a token gets `404 team_not_found`, the same answer as a non-member. On an **archived** team, reads work and writes answer `409 team_archived`.
+
+## A CI example
+
+Refresh a server's capabilities after each deploy, then ask for publication (replace the placeholders):
+
+```yaml
+# .github/workflows/publish-mcp-server.yml
+name: Publish the Status MCP server
+on:
+  push:
+    branches: [main]
+
+jobs:
+  portal:
+    runs-on: ubuntu-latest
+    env:
+      PORTAL: https://mcp.example.com
+      TEAM: support-tools
+      SERVER_ID: 00000000-0000-0000-0000-000000000000   # from GET $PORTAL/v1/teams/$TEAM/mcp-servers
+    steps:
+      - name: Refresh the server's capabilities
+        run: |
+          curl --fail-with-body -X POST \
+            -H "Authorization: Bearer ${{ secrets.OMP_PUBLISHER_TOKEN }}" \
+            "$PORTAL/v1/teams/$TEAM/mcp-servers/$SERVER_ID/refresh"
+
+      - name: Request publication
+        run: |
+          curl --fail-with-body -X POST \
+            -H "Authorization: Bearer ${{ secrets.OMP_PUBLISHER_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"note": "Deployed from main"}' \
+            "$PORTAL/v1/teams/$TEAM/mcp-servers/$SERVER_ID/publish"
+```
+
+Check what a token is and when it expires with `GET /v1/token`. The full list of operations is in the [API reference](/docs/api).
+
+## What it can't do
+
+- **Approve anything.** A token can't approve a server or a capability: the review stays with a platform admin (or, under Self-publish, with the team's owners and admins in the web app). A refresh never approves anything either.
+- **Delete a server**, or touch the team's gateways, members, invites, service accounts or settings.
+- **Create or revoke tokens**, of any kind.
+- **Change what a server's credentials go to.** On a server that already holds credentials, a token can't change its `url`, `authHeaderName`, `authValue`, `authMode`, `oauth` settings, user authorization `requirement` or `sendIdentity`: the answer is `403 token_not_allowed`, with the field named. A person makes these changes. This is why a leaked token can't redirect a server's stored secret.
+- **Switch call recording on.** Changing `capturePayloads` is `403 token_not_allowed`: only a person who accepted the notice may record call contents.
+- **Sign in to a server for the team** (the setup sign-in of a Sign-in with OAuth server needs a person).
+- **Read recorded call contents**, anything under another team, any secret (a server's header values, provider or webhook secrets), or anything under `/v1/me`.
+
+Detecting a server's sign-in mode with a token is limited to 10 requests a minute per token.
+
+## Audit and notices
+
+- Creating and revoking a token is audited against the person who did it. Everything a token does is audited as **the token**, with its name and kind rather than a person, and appears in the team's audit log: filter by actor kind `automation_token`.
+- The owners and admins are notified when a token that lasted more than 7 days is within 7 days of expiring (`key.expiring`), and the [attention card](/docs/teams/attention-and-notifications) lists tokens expiring within 14 days. Create the replacement, update the pipeline, then revoke the old token.
+- A leaked token: revoke it at once under **Team settings › Automation tokens**. It stops on its next request.

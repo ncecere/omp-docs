@@ -101,6 +101,7 @@ The check happens when you save (the URL's form and literal addresses), before e
 The server's **Settings** tab changes everything except the slug. Some changes have side effects, and the form warns before you save:
 
 - **A URL change** reads the capabilities again from the new URL at once and clears the stored health checks. On a published server under **Approval required**, it sends the server back to review.
+- **A URL on another origin never keeps the stored header value.** If the new URL has another scheme, host or port, the change is refused (`auth_value_required`) unless the same edit also supplies a new header value or removes the header, so a stored secret can't be sent to a new host by editing the URL. A server in OAuth mode loses everyone's connections and goes back to the setup sign-in. A change to the path, a trailing slash or letter case isn't another origin. The audit entry records the old and new origin.
 - **Changing the authentication** of a published server to OAuth, to another authorization server, or to wider scopes sends it back to review under **Approval required**. A URL change, another authorization server or another client ID signs everyone out of an OAuth server (their tokens are erased; they sign in again). Leaving OAuth mode deletes the connections and revokes them where possible.
 - **Delete** (owners and admins) removes the server and its capabilities and, for an OAuth server, revokes and deletes everyone's connections to it. Its call records are kept.
 

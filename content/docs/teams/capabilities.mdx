@@ -34,7 +34,7 @@ The portal stores each capability's definition as canonical JSON (sorted keys, w
 
 A refresh never approves anything. The server's pending-changes count covers changed and new capabilities. Each refresh reports how many were listed, added, changed and gone, and is recorded in the audit log.
 
-Who approves: a platform admin under **Approval required**; the team's owners and admins under **Self-publish** (**Approve change** on the capability, after reading its definition). Private servers need no approval for the team's own gateways: a team gateway serves the team's own servers' capabilities as they are now. See [Publishing and review](/docs/teams/publishing).
+Who approves: a platform admin under **Approval required**; the team's owners and admins under **Self-publish** (**Approve change** on the capability, after reading its definition). The approval names the fingerprint that was read: if the definition changed again before the button was pressed, it is refused (`changed_since_review`) and you read it again. Private servers need no approval for the team's own gateways: a team gateway serves the team's own servers' capabilities as they are now. See [Publishing and review](/docs/teams/publishing).
 
 ## Health
 
@@ -44,7 +44,13 @@ Each server's health comes from checks:
 - **Test connection** on the Overview tab runs a check now.
 - Every **Refresh capabilities** also stores a check.
 
-The **Health** tab lists the latest 100 checks: ok or failed, latency, what triggered it, the HTTP status and a short message with secrets redacted. A failing server shows since when.
+The **Health** tab lists the latest 100 checks: ok or failed, latency, what triggered it, the HTTP status and a short message with secrets redacted. A failing server shows since when, on the team's [attention card](/docs/teams/attention-and-notifications), and, after three failed checks in a row, in a notification to the team's owners, admins and editors.
+
+### The protocol it speaks
+
+The server's Overview tab shows the MCP protocol revision the portal last negotiated with it, for example "Protocol 2026-07-28 (modern), negotiated 5 minutes ago". A refresh, a test or a health check updates it, and a new URL clears it. See [MCP protocol support](/docs/server-authors/mcp-protocol#era-negotiation).
+
+<Screenshot slot="server-protocol" />
 
 <Screenshot slot="server-health" />
 

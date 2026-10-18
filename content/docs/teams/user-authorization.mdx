@@ -29,6 +29,15 @@ Removing the server's requirement, or changing its provider, resets every scope 
 
 The token goes to the **server**: overrides decide where consent is asked and which scopes are requested, not which part of your server's code can see a token. One provider per call.
 
+## Who receives the token: servers the person allowed
+
+A person's token for a platform provider is **not** sent to every server that names the provider. It goes only to a server **that person allowed**, at the address (scheme, host and port) the server had when they allowed it, for the scopes they were shown. Setting a requirement, or changing where a server lives, therefore never delivers anyone's token by itself: it makes people **asked**.
+
+- The first time someone calls a tool of your server, the call isn't forwarded and they get a consent link. The page names **your server and your team** ("Allow &lt;server&gt; (&lt;team&gt;)"), so use a server name people will recognise. Each person allows each server once. See [Connecting accounts](/docs/use/connecting-accounts#allowing-a-server).
+- If you **move the server to another host, scheme or port**, or make it require **another provider** (or none), everyone's permission for it ends, and they're asked again at the next call. A change that only touches the path keeps their permissions. Deleting the server ends them too.
+- After upgrading from v0.1.0 nobody has allowed anything: expect every person to be asked once per server.
+- A person who allows your server gives it a token that holds **every scope they have granted that provider**, not only the scopes your server asked for. Ask only for what your server needs, and treat the token with the care described in [Provider tokens](/docs/server-authors/provider-tokens).
+
 ## Review
 
 Under **Approval required**, a published server goes back to review when any capability's requirement **widens**: a provider where there was none, another provider, or a scope that wasn't in effect before. Removing or narrowing a requirement never needs review, because it sends less. Under **Self-publish** the server stays published. The form warns before you save a change that sends the server back.

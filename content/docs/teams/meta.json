@@ -9,10 +9,12 @@
     "capabilities",
     "user-authorization",
     "publishing",
+    "publisher-tokens",
     "---Gateways---",
     "gateways",
     "service-accounts",
     "---Records and settings---",
+    "attention-and-notifications",
     "activity-and-usage",
     "payload-capture",
     "team-settings"

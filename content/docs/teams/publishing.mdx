@@ -41,6 +41,14 @@ Owners and admins can make the server private again at any point: **Withdraw req
 
 A platform admin reviewing the server sees its URL, health, capabilities and their definitions, the auth mode and, for OAuth servers, the authorization server (highlighted when its host differs from the server's), registration and scopes, any user authorization requirement and overrides, and your note. They **Approve and publish** or **Reject**, with a note for the team (required to reject). See [Catalog review](/docs/administer/catalog-review).
 
+## Approvals name what was reviewed
+
+An approval applies to what the reviewer **saw**, not to whatever the server is by the time they press the button. The review dialog sends a **digest** of the server it showed (a SHA-256 over its URL, auth mode, user authorization requirement and every listed capability's kind, name and fingerprint), and approving a changed capability sends that capability's **fingerprint**. If an editor changed the server in between (a refresh that picked up new descriptions, a new URL, a changed requirement), the approval is refused with "changed since review" (`409 changed_since_review`) and nothing is approved. The reviewer reloads, reads what changed and approves again.
+
+For your team: refreshing a server that is waiting for review is still allowed, but it changes what the reviewer has to read, and an approval already in progress will be refused. Under **Self-publish** nobody reviews what you publish, so read the Capabilities tab first.
+
+**Scripts and CI.** A client of the management API that approves must say what it reviewed: approving a server needs `expectedDigest` (the server's `reviewDigest`) and approving a capability needs `expectedFingerprint`, otherwise `400 expected_digest_required` or `400 expected_fingerprint_required`. Publishing accepts an optional `expectedDigest`, checked when you send it, so a script can publish only what it read. A mismatch answers `409 changed_since_review` with the current value in `details`. [Publisher tokens](/docs/teams/publisher-tokens) can request publication but never approve.
+
 ## What sends a published server back to review
 
 Under **Approval required**, a published server goes back to **Waiting for review** (and leaves the catalog until it's reviewed) when:

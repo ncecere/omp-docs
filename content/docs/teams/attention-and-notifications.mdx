@@ -1,0 +1,68 @@
+---
+title: Team attention and notifications
+description: "The attention card on your team's page in Open MCP Portal, who gets which notification, and how owners and admins set up the team's webhooks."
+---
+
+A team's page used to say nothing about a server that had been down since Tuesday. Since v0.2.0 it does, in two ways: an **attention card** for whoever opens the page, and **notifications** that reach people when something happens.
+
+## The attention card
+
+The card sits at the top of the team's overview (`/teams/<team>`), above the rest of the page. It lists what in **this team** needs someone, and every item has a button that opens the screen where it is dealt with. It is read-only and refetches when you return to the page and every minute while you look at it.
+
+<Screenshot slot="team-attention" />
+
+What it can list, and who sees it:
+
+| Item | Listed when | Severity | Who sees it |
+|---|---|---|---|
+| **Server failing** | An enabled server of the team, **published or not**, whose latest health check failed. "Failing since" its first failed check | Warning; critical after 24 hours | Every member |
+| **Sign-in lapsed** | An enabled server in Sign-in with OAuth mode whose setup sign-in needs a new consent (re-authorize it on the server's page) | Warning | Every member |
+| **Review pending** | One item for the team's servers waiting for a platform admin's review | Information; warning when the oldest has waited over 3 days | Every member |
+| **Capability changes held back** | A published server with changed or new capabilities that aren't approved yet, so they're out of the catalog. Shows how many | Warning | Every member |
+| **Service account keys expiring** | Keys expiring within 14 days | Information; warning within 3 days | Owners and admins |
+| **Publisher tokens expiring** | The team's [publisher tokens](/docs/teams/publisher-tokens) expiring within 14 days | As above | Owners and admins |
+| **Notification failures** | The team's webhook destinations that keep failing or were stopped | Warning | Owners and admins |
+
+Members see what they can already open: the team's servers, review state and capability changes. Only **owners, admins and platform staff** see key and token expiries and notification problems, because only they can list those. Personal API keys and people's connections aren't on the team card: they belong to individuals.
+
+For members, the card is hidden when nothing needs the team. Owners and admins see **All clear**. An archived team shows only its archived notice. Each kind lists at most 20 items; when more are cut, the card says how many.
+
+## Who gets which notification
+
+Notifications reach people in the inbox (the bell), by email if the operator set it up, and through webhooks. Recipients are worked out from people's **current** roles when the notification is sent. Suspended people and archived teams get nothing, and you aren't notified of an action you took yourself.
+
+| Event | You get it when you are | What it says |
+|---|---|---|
+| `server.unhealthy` | An owner, admin or editor | The server's last 3 checks failed. Once per incident, then a reminder every 24 hours while it still fails |
+| `server.recovered` | An owner, admin or editor | The first successful check after such an incident |
+| `capability.changed` | An owner, admin or editor | A published server's definitions changed or new ones appeared, and are held back from the catalog |
+| `publish.decided` | An owner or admin | A platform admin approved or rejected a server |
+| `upstream_signin.lapsed` | An owner, admin or editor | A server's setup sign-in needs a new consent |
+| `key.expiring` | An owner or admin (for the team's service account keys and publisher tokens) | A key or token that lasted more than 7 days is within 7 days of expiring |
+
+You also get notifications about **your own** things, whatever your role: your personal API keys expiring and your connections needing a new consent. Each person turns events and channels on or off for themselves: see [Notification preferences](/docs/use/notification-preferences). Publication requests (`publish.requested`) go to platform admins, not to teams.
+
+Email goes only to your **verified** address, and only once you have signed in after the upgrade to v0.2.0. The inbox always works.
+
+## Team webhooks
+
+A **webhook destination** sends the team's events to a URL, such as a chat channel or an incident tool. Team **owners and admins** manage them under **Team settings › Notifications**; editors and members can't use it; platform staff can read it.
+
+<Screenshot slot="team-notifications" />
+
+**Add** a destination:
+
+1. A **name**, unique in the team. A team can have up to 10 destinations.
+2. The **URL**. It must be **https** at a **public** address. It is checked when you save it and again on every delivery.
+3. The **format**: **JSON (signed)** for your own receiver, or **Slack**.
+4. The **events** it should receive: `server.unhealthy`, `server.recovered`, `capability.changed`, `publish.decided`, `upstream_signin.lapsed` and `key.expiring` (for the team's keys and tokens).
+
+For a signed destination, the signing secret (`ompwhs_…`) is shown **once**: copy it into your receiver. The URL is stored encrypted and afterwards only its scheme and host are shown, because a Slack webhook URL is a credential. How to verify a signature, the payload for each event and the Slack format are in [Notifications](/docs/administer/notifications#the-signed-json-format).
+
+- **Test** sends a test delivery and shows the result on screen (up to 10 an hour per destination).
+- **Rotate secret** makes a new secret, shown once, and keeps signing with the old one too for a grace period you choose (24 hours by default, up to 72), so your receiver can switch without losing deliveries. Slack destinations aren't signed and have no secret to rotate.
+- The **delivery log** shows the destination's last 50 deliveries from the past 14 days: state, attempts, HTTP status and error class. It never shows payloads or your receiver's replies.
+- A destination is **stopped automatically** after 20 failed attempts in a row. It shows a banner and **Notification failures** appears on the attention card. Fix the receiver, then switch it back on.
+- Creating, changing, testing, rotating and deleting are audited in the team's log, never with the URL or the secret. On an archived team these changes are refused (`409 team_archived`).
+
+**If your receiver is inside your network:** webhooks reach public addresses only, and teams' webhooks don't use the Internal networks list that your MCP servers use, on purpose: otherwise any team owner could make the portal send requests into the company network. A platform operator can allow an internal receiver by listing it in `NOTIFY_WEBHOOK_ALLOWED_NETWORKS`. Ask them.
