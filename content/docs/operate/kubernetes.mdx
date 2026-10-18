@@ -3,23 +3,23 @@ title: Install on Kubernetes
 description: "Deploy Open MCP Portal with the repository's Kustomize base and example overlay: secrets, configuration, network policies, ingress and probes."
 ---
 
-The repository's [`deploy/kubernetes`](https://github.com/ncecere/open-mcp-portal/tree/v0.2.0/deploy/kubernetes) holds a Kustomize **base** and an **example overlay** (namespace, pinned image, settings, an NGINX Ingress or a Gateway API `HTTPRoute`, narrowed NetworkPolicies, and optional metrics). Copy the overlay into your own GitOps repository and replace every `example.org` value and the image digest. The image is `ghcr.io/ncecere/open-mcp-portal:v0.2.0`, signed with cosign; the overlay at the v0.2.0 tag carries a placeholder digest that you replace with the release's (below). Bring your own PostgreSQL 17 and backups: there is no in-cluster database component. `make k8s-validate` renders the base and overlay and checks them against the Kubernetes schemas.
+The repository's [`deploy/kubernetes`](https://github.com/ncecere/open-mcp-portal/tree/v0.2.1/deploy/kubernetes) holds a Kustomize **base** and an **example overlay** (namespace, pinned image, settings, an NGINX Ingress or a Gateway API `HTTPRoute`, narrowed NetworkPolicies, and optional metrics). Copy the overlay into your own GitOps repository and replace every `example.org` value and the image digest. The image is `ghcr.io/ncecere/open-mcp-portal:v0.2.1`, signed with cosign; the overlay at the v0.2.1 tag carries a placeholder digest that you replace with the release's (below). Bring your own PostgreSQL 17 and backups: there is no in-cluster database component. `make k8s-validate` renders the base and overlay and checks them against the Kubernetes schemas.
 
 ## The image
 
-The base and the overlay use `ghcr.io/ncecere/open-mcp-portal`. Check the signature of the release you deploy (cosign v3.0 or newer), then put its digest in the overlay's `images:`. The digest of v0.2.0 is `sha256:54033a775d1f15748588de86d57ed3c4c09a28e372d77105003c273210a82541`:
+The base and the overlay use `ghcr.io/ncecere/open-mcp-portal`. Check the signature of the release you deploy (cosign v3.0 or newer), then put its digest in the overlay's `images:`. The digest of v0.2.1 is `sha256:4e84fe0571dcf079a4c7f83e3692dbae19668c2b8f2ed32beb2276dbcd0a00a1`:
 
 ```sh
-cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:54033a775d1f15748588de86d57ed3c4c09a28e372d77105003c273210a82541 \
-  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.2.0 \
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:4e84fe0571dcf079a4c7f83e3692dbae19668c2b8f2ed32beb2276dbcd0a00a1 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.2.1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
 ```yaml
 images:
   - name: ghcr.io/ncecere/open-mcp-portal
-    newTag: v0.2.0
-    digest: sha256:54033a775d1f15748588de86d57ed3c4c09a28e372d77105003c273210a82541
+    newTag: v0.2.1
+    digest: sha256:4e84fe0571dcf079a4c7f83e3692dbae19668c2b8f2ed32beb2276dbcd0a00a1
 ```
 
 ## Secrets

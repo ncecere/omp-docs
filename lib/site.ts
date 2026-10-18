@@ -20,7 +20,7 @@ export const gitConfig = {
 export const productRepo = 'https://github.com/ncecere/open-mcp-portal';
 
 /** The Open MCP Portal release these docs describe. */
-export const productVersion = 'v0.2.0';
+export const productVersion = 'v0.2.1';
 
 /** The date that release was tagged (YYYY-MM-DD). */
 export const productReleaseDate = '2026-10-18';
@@ -32,7 +32,7 @@ export const productReleaseUrl = `${productRepo}/releases/tag/${productVersion}`
 export const productImage = `ghcr.io/ncecere/open-mcp-portal:${productVersion}`;
 
 /** The digest of the release's image (verify the signature, then pin this). */
-export const productImageDigest = 'sha256:54033a775d1f15748588de86d57ed3c4c09a28e372d77105003c273210a82541';
+export const productImageDigest = 'sha256:4e84fe0571dcf079a4c7f83e3692dbae19668c2b8f2ed32beb2276dbcd0a00a1';
 
 export const appName = 'Open MCP Portal docs';
 export const docsRoute = '/docs';
