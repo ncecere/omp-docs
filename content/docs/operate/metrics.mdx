@@ -19,6 +19,10 @@ Labels never carry user, key, service account, team or request IDs. Gateway, ser
 | `omp_http_requests_total`, `omp_http_request_duration_seconds` | `route` (the registered pattern), `method`, `code` (`2xx`, …) |
 | `omp_retention_deleted_total`, `omp_retention_last_success_timestamp_seconds` | `kind` |
 | `omp_usage_rollup_last_success_timestamp_seconds`, `omp_loop_leader` | `loop` |
+| `omp_notifications_emitted_total` | `event` |
+| `omp_notification_deliveries_total` | `channel`, `event`, `outcome` |
+| `omp_notification_emit_errors_total` | |
+| `omp_automation_token_auth_total` | `result` |
 | `omp_db_pool_*` | Connections acquired, idle, total and maximum; acquires, empty acquires and wait time |
 
 Plus the Go runtime and process collectors. `omp_mcp_requests_total` counts requests to `/mcp/{slug}` that reached a gateway.
@@ -29,6 +33,7 @@ Plus the Go runtime and process collectors. `omp_mcp_requests_total` counts requ
 - No replica with `omp_loop_leader{loop="retention"} == 1` for an hour, or `omp_retention_last_success_timestamp_seconds` too old: old data isn't being deleted.
 - `omp_usage_rollup_last_success_timestamp_seconds` older than 15 minutes: dashboards are stale.
 - `omp_mcp_servers{state="failing"} > 0`: a team's server is down.
+- `omp_notification_emit_errors_total` increasing: a change couldn't record its notification (the change itself succeeded). No replica with `omp_loop_leader{loop="notifications"} == 1`: nothing is being delivered.
 - A high rate of `omp_mcp_rate_limited_total`, or of `omp_provider_token_refresh_total{result="unavailable"}`.
 
 There are no ready-made dashboards, alert rules or tracing yet.

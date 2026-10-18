@@ -24,3 +24,58 @@ The database schema is managed by migrations built into the binary. They are **f
 ## Rolling back
 
 Pin the previous image. Migrations are never rolled back automatically; because they are expand-only, the previous release normally runs on the newer schema. To undo a migration itself, restore the backup made before the upgrade.
+
+## Upgrading from v0.1.0
+
+v0.2.0 adds migrations `00014` to `00017` (notifications, automation tokens, the protocol a server last negotiated, and per-server consent for provider tokens). The steps above apply; these are the points specific to this upgrade. The release's own summary is in the [v0.2.0 notes](/docs/releases/v0-2-0#upgrading).
+
+<Steps>
+<Step>
+
+### Check your keys
+
+The portal now refuses to start with an `ENCRYPTION_KEY` equal to the `API_KEY_PEPPER`, on any `APP_URL`. If an install used one value for both, give each its own, following [Secrets and key rotation](/docs/operate/secrets-and-key-rotation).
+
+</Step>
+<Step>
+
+### Migrate, then roll every replica
+
+Back up, pin the v0.2.0 digest (see [Install with Docker Compose](/docs/operate/compose#the-image) or [Install on Kubernetes](/docs/operate/kubernetes#the-image)), and run `migrate` once (the `migrate` init container, or `MIGRATE_ON_START` on a single instance). Then start **every** replica on v0.2.0.
+
+</Step>
+<Step>
+
+### Create no automation token until every replica runs v0.2.0
+
+An older replica doesn't know the new `ompadm_` and `omppub_` prefixes, and can't list audit entries written by a token. Once every replica is on v0.2.0, platform admins and team admins can create tokens: see [Automation tokens](/docs/administer/automation-tokens) and [Publisher tokens](/docs/teams/publisher-tokens). `API_KEY_PEPPER_PREVIOUS` covers tokens too, so a pepper rotation keeps them working.
+
+</Step>
+<Step>
+
+### Set up what you want, all optional
+
+- **Email:** `SMTP_*` ([Configuration](/docs/operate/configuration#notifications)). Add the SMTP port to the NetworkPolicy's egress in Kubernetes.
+- **Webhooks to internal receivers:** `NOTIFY_WEBHOOK_ALLOWED_NETWORKS`, and an egress rule for their port.
+- **Streaming:** check that your ingress doesn't buffer or cut quiet responses ([Ingress](/docs/operate/kubernetes#ingress)).
+
+</Step>
+<Step>
+
+### Tell people and script owners
+
+- **Email needs one sign-in.** Email goes only to addresses the identity provider reported as verified, recorded at each sign-in. Until a person signs in after the upgrade they get notifications in the portal but no email.
+- **One consent per server.** The first time a person calls a tool that uses a connected account after the upgrade, they allow that server once ([Connecting accounts](/docs/use/connecting-accounts#allowing-a-server)). There is no backfill, on purpose. A consent link issued before the upgrade is refused as expired: running the tool again makes a new one.
+- **Scripts that approve must send the digest.** Anything that approves a server or a capability through the management API must send `expectedDigest` or `expectedFingerprint` ([Publishing and review](/docs/teams/publishing#approvals-name-what-was-reviewed)).
+
+</Step>
+<Step>
+
+### Run `doctor`
+
+`open-mcp-portal doctor` now also reports email and webhooks under `notifications`.
+
+</Step>
+</Steps>
+
+Going back to v0.1.0 after you created automation tokens leaves audit entries that v0.1.0 can't list. Restore the backup from before the upgrade if you need to go back past a migration.

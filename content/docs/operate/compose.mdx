@@ -8,24 +8,30 @@ description: Pull and verify the Open MCP Portal image, try the demo, and run a 
 Each release publishes a multi-arch (linux/amd64, linux/arm64) image to GitHub's container registry, tagged with the release:
 
 ```sh
-docker pull ghcr.io/ncecere/open-mcp-portal:v0.1.0
-docker run --rm ghcr.io/ncecere/open-mcp-portal:v0.1.0 version
+docker pull ghcr.io/ncecere/open-mcp-portal:v0.2.0
+docker run --rm ghcr.io/ncecere/open-mcp-portal:v0.2.0 version     # open-mcp-portal 0.2.0 (<commit>)
+```
+
+The digest of the v0.2.0 image is:
+
+```text
+sha256:54033a775d1f15748588de86d57ed3c4c09a28e372d77105003c273210a82541
 ```
 
 The image is scanned for known vulnerabilities before it is published, carries an SBOM and build provenance, and is signed with cosign keyless signing by the repository's `image.yml` workflow. Check the signature (use **cosign v3.0 or newer**) before you use it:
 
 ```sh
-cosign verify ghcr.io/ncecere/open-mcp-portal:v0.1.0 \
-  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.1.0 \
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:54033a775d1f15748588de86d57ed3c4c09a28e372d77105003c273210a82541 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.2.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-Then pin the image by its digest (`ghcr.io/ncecere/open-mcp-portal@sha256:…`, shown by `docker buildx imagetools inspect ghcr.io/ncecere/open-mcp-portal:v0.1.0`) in your Compose file, so a moved tag can't change what you run.
+Then pin the image by that digest (`ghcr.io/ncecere/open-mcp-portal@sha256:54033a775d1f15748588de86d57ed3c4c09a28e372d77105003c273210a82541`) in your Compose file, so a moved tag can't change what you run. `docker buildx imagetools inspect ghcr.io/ncecere/open-mcp-portal:v0.2.0` shows the digest a tag points to now; compare it with the one above.
 
 To build the image yourself instead, from a checkout of the tag:
 
 ```sh
-git clone --branch v0.1.0 https://github.com/ncecere/open-mcp-portal
+git clone --branch v0.2.0 https://github.com/ncecere/open-mcp-portal
 cd open-mcp-portal
 make docker                         # open-mcp-portal:<git describe>
 ```
@@ -59,7 +65,7 @@ services:
       retries: 30
 
   portal:
-    image: ghcr.io/ncecere/open-mcp-portal:v0.1.0   # pin it by digest: ghcr.io/ncecere/open-mcp-portal@sha256:…
+    image: ghcr.io/ncecere/open-mcp-portal@sha256:54033a775d1f15748588de86d57ed3c4c09a28e372d77105003c273210a82541   # v0.2.0
     command: ["serve"]
     depends_on:
       postgres:
@@ -70,6 +76,9 @@ services:
       MIGRATE_ON_START: "true"          # fine for one instance; see Migrations
       OIDC_ISSUER: https://idp.example.com
       OIDC_CLIENT_ID: open-mcp-portal
+      # Optional, for notification email (off without SMTP_HOST); see Configuration:
+      # SMTP_HOST: smtp.example.com
+      # SMTP_FROM: Open MCP Portal <portal@example.com>
       BOOTSTRAP_ADMIN_SUBJECT: "<the first admin's OIDC sub>"
       TRUSTED_PROXIES: 172.16.0.0/12    # your reverse proxy's addresses
       DATABASE_URL_FILE: /run/secrets/database-url
@@ -95,7 +104,7 @@ volumes:
 Then:
 
 1. Register `https://mcp.example.com/auth/callback` as the redirect URI of the portal's client at your identity provider.
-2. Point your reverse proxy's host at port 8088, with read timeouts of a few minutes (a call can wait up to 120 seconds for its MCP server) and request bodies of at least 1 MiB. Route every path to the portal, including `/mcp/`, `/oauth/`, `/connect/` and `/.well-known/`.
+2. Point your reverse proxy's host at port 8088, with read timeouts of a few minutes (a call can wait up to 120 seconds for its MCP server), request bodies of at least 1 MiB, and **response buffering off**: a call that asks for progress is answered as a stream of server-sent events, which a buffering proxy holds back (see [Ingress](/docs/operate/kubernetes#ingress) for the settings per proxy). Route every path to the portal, including `/mcp/`, `/oauth/`, `/connect/` and `/.well-known/`.
 3. `docker compose up -d`, then `docker compose exec portal /open-mcp-portal doctor` to check everything.
 4. Sign in as the bootstrap admin and follow [First run](/docs/administer/first-run).
 

@@ -35,7 +35,9 @@ kubectl -n open-mcp-portal exec deploy/open-mcp-portal -c portal -- /open-mcp-po
 | `postgres connect` | PostgreSQL answers, and its version |
 | `postgres migrations` | The schema's version against the binary's, and pending migrations |
 | `keys encryption` | Stored secrets per encryption key, values that can't be decrypted, and whether `ENCRYPTION_KEY_PREVIOUS` can be removed |
-| `keys pepper` | Keys still on the previous pepper, and whether `API_KEY_PEPPER_PREVIOUS` can be removed |
+| `keys pepper` | Keys and automation tokens still on the previous pepper, and whether `API_KEY_PEPPER_PREVIOUS` can be removed |
+| `notifications email` | Off (information) without `SMTP_HOST`. Configured: connects, greets, upgrades to TLS, authenticates and quits within 5 seconds, without sending a message, and shows the host, port and mode (and "authenticated"), never the username or password. Fails with the error class when it can't |
+| `notifications webhooks` | That webhook destinations reach public https addresses only, or how many internal networks or hosts `NOTIFY_WEBHOOK_ALLOWED_NETWORKS` adds |
 
 Each check has a time limit (`--timeout`, 10 seconds by default). `doctor` exits `1` if any check failed, so you can use it in scripts and after upgrades.
 

@@ -11,11 +11,12 @@ Open MCP Portal is stateless: scale it horizontally. Any replica can serve any r
 |---|---|---|
 | MCP server health checks | `HEALTH_CHECK_INTERVAL` (5 minutes) | One replica at a time (advisory lock); a server checked within the last 90% of the interval is skipped |
 | Identity signing-key rotation | Checked hourly | One replica at a time |
+| Notifications (fan-out, delivery of email and webhooks, the hourly scan for expiring keys) | `NOTIFICATION_INTERVAL` (15 seconds) | One replica at a time (advisory lock) |
 | Retention | `RETENTION_INTERVAL` (15 minutes) | One replica at a time |
 | Usage rollups | Every 5 minutes | One replica at a time |
 | Old rate-limit windows; expired sessions and consent links | Every minute; every 15 minutes | Every replica (idempotent deletes) |
 
-`omp_loop_leader{loop="retention"}` and `{loop="usage_rollup"}` say which replica led each loop's latest run.
+`omp_loop_leader{loop="retention"}`, `{loop="usage_rollup"}` and `{loop="notifications"}` say which replica led each loop's latest run.
 
 ## Settings caches
 
@@ -29,4 +30,4 @@ Limits on `/mcp/{slug}`, the OAuth endpoints, connection starts, sign-in and the
 
 Each replica holds a connection pool; size PostgreSQL's `max_connections` (or a pooler) for replicas × pool size. `omp_db_pool_*` metrics show how busy the pool is.
 
-Calls are buffered: a call holds a request for up to its server's timeout (at most 120 seconds) and at most 1 MiB each way.
+A call holds a request for up to its server's timeout (at most 120 seconds) and at most 1 MiB each way. Calls are buffered, except a `tools/call` that asks for progress, which is streamed (up to 64 progress events and 4 MiB) and needs an ingress that doesn't buffer: see [Ingress](/docs/operate/kubernetes#ingress).

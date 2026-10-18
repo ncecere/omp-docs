@@ -53,10 +53,10 @@ An invalid value stops the process with a message naming the setting. `open-mcp-
 
 | Setting | Default | Notes |
 |---|---|---|
-| `ENCRYPTION_KEY` (secret) | none (required by `serve`) | 32 random bytes, base64 (`openssl rand -base64 32`). Encrypts MCP server header values, identity signing keys, auth provider client secrets, people's provider tokens, PKCE verifiers, consent links and recorded call contents |
+| `ENCRYPTION_KEY` (secret) | none (required by `serve`) | 32 random bytes, base64 (`openssl rand -base64 32`). Encrypts MCP server header values, identity signing keys, auth provider client secrets, people's provider tokens, PKCE verifiers, consent links, recorded call contents, webhook destinations' URLs and signing secrets, and the state a client echoes back in a multi-step request |
 | `ENCRYPTION_KEY_PREVIOUS` (secret) | none | The previous key during a rotation: values sealed with it still decrypt until `rotate-keys` re-encrypts them |
-| `API_KEY_PEPPER` (secret) | none (required by `serve`) | 32 random bytes, base64, different from the encryption key. Keys the HMAC that stores API keys, service account keys and OAuth tokens. Rotate it with `API_KEY_PEPPER_PREVIOUS`, never by just replacing it |
-| `API_KEY_PEPPER_PREVIOUS` (secret) | none | The previous pepper: keys and tokens made with it keep working, and keys are re-digested on use. Must differ from `API_KEY_PEPPER` |
+| `API_KEY_PEPPER` (secret) | none (required by `serve`) | 32 random bytes, base64, different from the encryption key. Keys the HMAC that stores API keys, service account keys, automation tokens and OAuth tokens. Rotate it with `API_KEY_PEPPER_PREVIOUS`, never by just replacing it |
+| `API_KEY_PEPPER_PREVIOUS` (secret) | none | The previous pepper: keys and tokens made with it (automation tokens too, since v0.2.0) keep working, and keys are re-digested on use. Must differ from `API_KEY_PEPPER` |
 | `SIGNING_KEY_PREPUBLISH` | `24h` | How long a new identity signing key is published in the JWKS before it signs (0 to 7 days). Keys rotate every 30 days |
 
 See [Secrets and key rotation](/docs/operate/secrets-and-key-rotation).
@@ -66,6 +66,22 @@ See [Secrets and key rotation](/docs/operate/secrets-and-key-rotation).
 | Setting | Default | Notes |
 |---|---|---|
 | `UPSTREAM_ALLOWED_NETWORKS` | none | Internal networks and hosts MCP servers (and auth providers' endpoints) may use besides public addresses. Comma-separated: a network or address (`10.20.0.0/16`, `fd00:1234::/32`, `10.20.0.5`) or a host name (`mcp.corp.example.com`, `*.corp.example.com` for subdomains only). Prefix an entry with `http:` to also allow plain http: `10.20.0.0/16,http:*.svc.cluster.local,mcp.corp.example.com`. Shown read-only in Admin › Internal networks; an invalid entry stops the server. See [Internal networks](/docs/administer/internal-networks) |
+
+## Notifications
+
+Notifications reach people in the web app's inbox without any setting. Email needs an SMTP server; webhooks need no setting unless a receiver is on an internal network. See [Notifications](/docs/administer/notifications).
+
+| Setting | Default | Notes |
+|---|---|---|
+| `SMTP_HOST` | empty (**email off**) | The mail server's host name or address, without a scheme. Any other `SMTP_*` setting without it is an error: a half configuration never silently means "off" |
+| `SMTP_PORT` | `587` for `starttls`, `465` for `tls`, `25` for `none` | 1 to 65535 |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` (secret) | none | Set both or neither. `SMTP_PASSWORD_FILE` works. The password is never logged, shown or returned |
+| `SMTP_FROM` | none (required with `SMTP_HOST`) | One address: `portal@example.com` or `Open MCP Portal <portal@example.com>` |
+| `SMTP_TLS` | `starttls` | `starttls` (required: a server that doesn't offer it fails, the portal never sends in plain text instead), `tls` (implicit TLS) or `none`. Certificates are always verified; there is no setting to skip it |
+| `NOTIFICATION_INTERVAL` | `15s` | How often the dispatcher delivers queued notifications (5 seconds to 10 minutes). One replica at a time |
+| `NOTIFY_WEBHOOK_ALLOWED_NETWORKS` | none | Internal networks and hosts that **webhook destinations** may use besides public https addresses. Same syntax as `UPSTREAM_ALLOWED_NETWORKS` (a network, address or host name, `*.suffix` for subdomains, `http:` before an entry to allow plain http); loopback, link-local and cloud-metadata addresses can't be listed. Separate from the MCP servers' list on purpose |
+
+Mail goes only to people whose address the identity provider reported as verified at their latest sign-in. `open-mcp-portal doctor` reports email under `notifications email`: off is informational; configured, it connects, greets, upgrades to TLS, authenticates and quits within 5 seconds without sending a message.
 
 ## Background work
 
@@ -108,6 +124,9 @@ Unless `APP_URL` is a loopback address, `serve` refuses to start when:
 
 - `ENCRYPTION_KEY` or `API_KEY_PEPPER` (or `API_KEY_PEPPER_PREVIOUS`) is the public example value from the repository's `.env.example`;
 - `DEV_AUTH=true`;
-- `APP_URL` is `http://`.
+- `APP_URL` is `http://`;
+- `SMTP_TLS=none` is set **with** credentials, unless `SMTP_HOST` is a loopback address (the password would cross the network in plain text). `none` without credentials is accepted, for an in-cluster mail relay, and `doctor` reports it as unencrypted.
+
+On any `APP_URL`, `serve` also refuses an `ENCRYPTION_KEY` equal to the `API_KEY_PEPPER`: one value for both would tie the sealed secrets to the digests of every key and token. Generate each with `openssl rand -base64 32`.
 
 `serve` also needs a sign-in method: OpenID Connect, or development sign-in on a loopback address. `migrate` needs only `DATABASE_URL`, and applies the safety checks only when `APP_URL` is set.

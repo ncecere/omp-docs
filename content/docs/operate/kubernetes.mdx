@@ -3,23 +3,23 @@ title: Install on Kubernetes
 description: "Deploy Open MCP Portal with the repository's Kustomize base and example overlay: secrets, configuration, network policies, ingress and probes."
 ---
 
-The repository's [`deploy/kubernetes`](https://github.com/ncecere/open-mcp-portal/tree/v0.1.0/deploy/kubernetes) holds a Kustomize **base** and an **example overlay** (namespace, pinned image, settings, an NGINX Ingress or a Gateway API `HTTPRoute`, narrowed NetworkPolicies, and optional metrics). Copy the overlay into your own GitOps repository and replace every `example.org` value and the image digest. The image is `ghcr.io/ncecere/open-mcp-portal:v0.1.0`, signed with cosign; the overlay's digest is a placeholder you replace with the release's. Bring your own PostgreSQL 17 and backups: there is no in-cluster database component. `make k8s-validate` renders the base and overlay and checks them against the Kubernetes schemas.
+The repository's [`deploy/kubernetes`](https://github.com/ncecere/open-mcp-portal/tree/v0.2.0/deploy/kubernetes) holds a Kustomize **base** and an **example overlay** (namespace, pinned image, settings, an NGINX Ingress or a Gateway API `HTTPRoute`, narrowed NetworkPolicies, and optional metrics). Copy the overlay into your own GitOps repository and replace every `example.org` value and the image digest. The image is `ghcr.io/ncecere/open-mcp-portal:v0.2.0`, signed with cosign; the overlay at the v0.2.0 tag carries a placeholder digest that you replace with the release's (below). Bring your own PostgreSQL 17 and backups: there is no in-cluster database component. `make k8s-validate` renders the base and overlay and checks them against the Kubernetes schemas.
 
 ## The image
 
-The base and the overlay use `ghcr.io/ncecere/open-mcp-portal`. Check the signature of the release you deploy, then put its digest in the overlay's `images:`:
+The base and the overlay use `ghcr.io/ncecere/open-mcp-portal`. Check the signature of the release you deploy (cosign v3.0 or newer), then put its digest in the overlay's `images:`. The digest of v0.2.0 is `sha256:54033a775d1f15748588de86d57ed3c4c09a28e372d77105003c273210a82541`:
 
 ```sh
-cosign verify ghcr.io/ncecere/open-mcp-portal:v0.1.0 \
-  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.1.0 \
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:54033a775d1f15748588de86d57ed3c4c09a28e372d77105003c273210a82541 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.2.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
 ```yaml
 images:
   - name: ghcr.io/ncecere/open-mcp-portal
-    newTag: v0.1.0
-    digest: sha256:<the digest of v0.1.0>   # docker buildx imagetools inspect ghcr.io/ncecere/open-mcp-portal:v0.1.0
+    newTag: v0.2.0
+    digest: sha256:54033a775d1f15748588de86d57ed3c4c09a28e372d77105003c273210a82541
 ```
 
 ## Secrets
@@ -78,7 +78,9 @@ The policies select only the portal's pods, so the base can share a namespace:
 - ingress on TCP 8088 from the ingress controller's namespace (placeholder `ingress-controller`: patch it);
 - DNS to kube-dns in `kube-system`;
 - TCP 5432 to anywhere (narrow it to your database);
-- TCP 443 to anywhere: MCP servers, the OIDC provider, and auth providers' token, revocation and userinfo endpoints.
+- TCP 443 to anywhere: MCP servers, the OIDC provider, auth providers' token, revocation and userinfo endpoints, and webhook destinations.
+
+**Notification email and webhooks.** The base allows TCP 443 only. If you set `SMTP_HOST`, add an egress rule for the SMTP port (587, 465 or 25) to your mail server in your overlay. Webhook destinations on another port than 443, and internal ones you list in `NOTIFY_WEBHOOK_ALLOWED_NETWORKS`, need rules too.
 
 MCP servers on other ports (`:8443`, or plain http on 80 or 8080) need extra egress rules in your overlay, as the example shows; so do internal servers you allow in `UPSTREAM_ALLOWED_NETWORKS` or Admin › Internal networks. Many CNIs don't match pod addresses with `ipBlock`, so in-cluster servers (`*.svc.cluster.local`) usually need a `namespaceSelector`/`podSelector` rule for their namespace and port. If the portal allows an address but a policy drops the traffic, the server's health shows a timeout, not "Address not allowed".
 
@@ -88,6 +90,13 @@ The portal's own address guard applies whatever the policies allow: public addre
 
 - The host must equal `APP_URL`'s host; TLS terminates at the ingress. Route every path to the portal, including `/mcp/`, `/oauth/`, `/connect/` and `/.well-known/`.
 - **Timeouts.** A `/mcp/{slug}` call waits up to 120 seconds for its MCP server. Allow reads of a few minutes: the example sets `proxy-read-timeout: 300` for ingress-nginx and `timeouts.request: 300s` on the HTTPRoute, and turns off proxy buffering. Requests are capped at 1 MiB.
+- **Streaming (server-sent events).** A `tools/call` that carries `_meta.progressToken`, from a client that accepts `text/event-stream`, is answered as a stream: the server's progress, then the response, with a `: keep-alive` comment every 15 seconds while it waits. The portal sends `X-Accel-Buffering: no` and sets no write timeout of its own, so the proxy in front must neither buffer the response nor cut a quiet one. The nginx example is the one in the repository's example overlay; the other settings below follow the product's deployment guide and haven't been tested here.
+  - **ingress-nginx:** `proxy-buffering: "off"` (the example sets it; the response header does the same) and a `proxy-read-timeout` above the longest server timeout, 120 seconds (the example uses 300). Don't compress `text/event-stream`.
+  - **Traefik:** don't put the `buffering` middleware on the portal's route, leave the entrypoint's `respondingTimeouts.writeTimeout` at 0, keep `idleTimeout` above 120 seconds, and, if a `ServersTransport` sets `forwardingTimeouts.responseHeaderTimeout`, make it at least 300 seconds.
+  - **Gateway API (`HTTPRoute`):** `timeouts.request` of at least 300 seconds (the example sets it), and the same or unset for `timeouts.backendRequest`.
+  - **Cloud load balancers** have idle timeouts of their own (AWS ALB: 60 seconds by default). The keep-alive comments count as traffic, but a total call time above the balancer's request limit still ends the stream.
+
+  A client that closes the stream cancels the call to the MCP server, so a proxy that ends a response early also cancels the call. Calls without a progress token, or without `text/event-stream` in `Accept`, stay one buffered JSON response (at most 1 MiB); a streamed call relays at most 64 progress events and 4 MiB.
 - **No sticky sessions.** `/mcp/{slug}` is stateless and browser sessions live in PostgreSQL: any replica can serve any request.
 - Set `TRUSTED_PROXIES` to the controller's pod network, so client addresses are logged and rate-limited correctly.
 
