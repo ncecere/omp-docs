@@ -12,7 +12,7 @@ docker pull ghcr.io/ncecere/open-mcp-portal:v0.1.0
 docker run --rm ghcr.io/ncecere/open-mcp-portal:v0.1.0 version
 ```
 
-The image is signed with cosign keyless signing by the repository's `image.yml` workflow. Check the signature before you use it:
+The image is scanned for known vulnerabilities before it is published, carries an SBOM and build provenance, and is signed with cosign keyless signing by the repository's `image.yml` workflow. Check the signature (use **cosign v3.0 or newer**) before you use it:
 
 ```sh
 cosign verify ghcr.io/ncecere/open-mcp-portal:v0.1.0 \
