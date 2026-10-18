@@ -17,7 +17,7 @@ Out of the box the list holds:
 
 ## Which clients can be trusted
 
-Only clients identified by a **Client ID Metadata Document**: the client ID is an https URL with a path, published by the client's maker, which the portal fetches to learn the client's name and redirect addresses. Clients that registered themselves (Dynamic Client Registration) can never be trusted: their IDs change, and anyone can register any name.
+Only clients identified by a **Client ID Metadata Document**: the client ID is an https URL with a path, published by the client's maker, which the portal fetches to learn the client's name and redirect addresses. Clients that registered themselves (Dynamic Client Registration) can never be trusted: their IDs change, and anyone can register any name. Registration is open to anyone who can reach the portal, so since v0.2.1 the portal also caps how many registered clients it keeps (`OAUTH_MAX_REGISTERED_CLIENTS`, default 1,000, counting those used in the last 30 days; `0` for no cap; see [Configuration](/docs/operate/configuration#oauth-clients)). Past the cap an app that registers itself is refused until some registrations go unused for 30 days, so ask the administrator if people report it. Clients that use a metadata document, such as Claude Code, aren't counted and are never affected by it.
 
 **Add trusted client**: the **Client ID** (the https address of the client's metadata document, its OAuth `client_id`) and a **Label** (up to 100 characters). Up to 50 clients. **Save trusted clients** applies the list at once: it's read on every authorization.
 

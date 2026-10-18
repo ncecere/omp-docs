@@ -49,6 +49,14 @@ An invalid value stops the process with a message naming the setting. `open-mcp-
 | `SESSION_TTL` | `12h` | How long a browser session lasts (5 minutes to 30 days) |
 | `DEV_AUTH` | `false` | Development sign-in with fixed personas and no password. Refused unless `APP_URL` is a loopback address. Never on a reachable host |
 
+## OAuth clients
+
+| Setting | Default | Notes |
+|---|---|---|
+| `OAUTH_MAX_REGISTERED_CLIENTS` | `1000` | The most OAuth clients that may be registered through the open `POST /oauth/register` (Dynamic Client Registration) at once: those used within the last 30 days (0 to 1,000,000). `0` means no cap. Over the cap, registration answers `503 temporarily_unavailable` and the person is told to ask the administrator; nothing is stored. Clients that identify themselves with a Client ID Metadata Document, such as Claude Code, are not counted. Added in v0.2.1 |
+
+Registration is open to anyone who can reach the portal, so the cap bounds how many clients it keeps. The existing limit of 10 registrations a minute per address is unchanged. An install with more live registrations than the cap stops accepting new ones until some go unused for 30 days: raise the setting (or set `0`) first if that matters. See [OAuth endpoints](/docs/api/oauth-endpoints#clients).
+
 ## Keys
 
 | Setting | Default | Notes |

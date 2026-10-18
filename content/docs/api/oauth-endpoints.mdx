@@ -29,7 +29,7 @@ Open MCP Portal is an OAuth 2.1 authorization server for its own gateways, follo
 ## Clients
 
 - **Client ID Metadata Documents** (preferred): the client ID is an https URL. The portal fetches it through its address guard (public addresses, or allowed internal networks), with no proxy and no redirects, within 5 seconds, at most 16 KiB, as JSON; its `client_id` must equal the URL. It's cached for its `max-age`, between 1 minute and 1 hour (10 minutes by default).
-- **Dynamic Client Registration**: public clients only, IDs `ompcl_…`, 10 a minute per address. A registration unused for 30 days expires. Registered clients are shown as unverified and can never be trusted.
+- **Dynamic Client Registration**: public clients only, IDs `ompcl_…`, 10 a minute per address. A registration unused for 30 days expires. Registered clients are shown as unverified and can never be trusted. Since v0.2.1 the portal keeps at most `OAUTH_MAX_REGISTERED_CLIENTS` of them at once (default 1,000, `0` for no cap; see [Configuration](/docs/operate/configuration#oauth-clients)): over the cap, `POST /oauth/register` answers `503 temporarily_unavailable`. Clients that use a metadata document are not counted.
 - **Redirect URIs**: https, or http on a loopback address (any port).
 
 ## Tokens
