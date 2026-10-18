@@ -115,6 +115,37 @@ See [Health and doctor](/docs/operate/health-and-doctor) for start-up and gracef
 kubectl -n open-mcp-portal exec deploy/open-mcp-portal -c portal -- /open-mcp-portal doctor
 ```
 
+## Smoke test
+
+`make k8s-validate` only renders the manifests and checks their schemas. `make k8s-smoke` (from a checkout of the repository, [`scripts/k8s-smoke.sh`](https://github.com/ncecere/open-mcp-portal/blob/v0.2.1/scripts/k8s-smoke.sh)) applies them to a real cluster and uses what it deployed:
+
+```sh
+make k8s-smoke                    # about 2 minutes warm; needs docker, kind, kubectl, curl and jq
+SMOKE_CNI=calico make k8s-smoke   # about 3 minutes; Calico enforces the NetworkPolicies, which are then tested
+```
+
+It builds the portal and the fake MCP server images from the working tree, creates a `kind` cluster of one control plane and two workers (its own kubeconfig in a temporary directory; it never touches `~/.kube`), and applies the base through a test overlay, `overlays/smoke` (a throwaway PostgreSQL 17 on a PVC, the fake MCP server, and random secrets made at run time). It stops at the first failed assertion, then always collects pod logs, events and descriptions into `bin/k8s-smoke-artifacts` and deletes the cluster; `SMOKE_KEEP=1` keeps it. On the release tree it passed with 30 assertions on the default CNI and 37 with Calico.
+
+**What it proves**
+
+- The `migrate` init container completed in every pod, and `doctor` passes in the running pod.
+- Both replicas are Ready on **different nodes**, the Service has two endpoints, and the PodDisruptionBudget exists and counts two healthy pods.
+- `/healthz` and `/readyz` answer, and development sign-in works through `kubectl port-forward`.
+- Through the real API: a team, the in-cluster fake MCP server registered as a server, a gateway selecting two of its tools, and an API key. With that key, `initialize`, `tools/list` and `tools/call` work at `/mcp/{slug}` in **both protocol eras** (the legacy one, and 2026-07-28 with its required headers); a modern request without `Mcp-Method` is a `400` and a request without a key a `401`.
+- **A rolling update** (a configuration change rolls the pods) and the **deletion of a pod**, both under a loop that calls the Service from inside the cluster (`/healthz` and a real `tools/list`): no request fails. The terminating pod answers `/readyz` with `503` while it still answers `/healthz`, logs `shutting down` and, 10 seconds later (`SHUTDOWN_DELAY`), `shutdown complete`; the replacement lands on a different node from the survivor. The API key and the browser session, both in PostgreSQL, work on the new pods.
+- **The PodDisruptionBudget:** one eviction is allowed and a second one right after it is refused.
+- With `SMOKE_CNI=calico`: the NetworkPolicies are enforced. A pod in the namespace the ingress policy allows reaches the portal; a pod in another namespace and a pod beside it do not. From a pod wearing the portal's labels, PostgreSQL and the in-cluster MCP server are reachable and DNS works, while other namespaces' pods and PostgreSQL's pod on other ports are not. The portal keeps passing `doctor` and serving calls under those policies.
+
+**What it does not prove**
+
+- **NetworkPolicy on the default run.** kind's default CNI (kindnet) does not enforce it: the policies are applied and valid, nothing more. Only `SMOKE_CNI=calico` tests them, and the `egress-https` rule (TCP 443 to anywhere) is not exercised in either.
+- **The internal-network allowlist.** The test needs development sign-in on a loopback `APP_URL`, and then the portal allows private and plain-http MCP server addresses whatever `UPSTREAM_ALLOWED_NETWORKS` says, so registering the fake server would work without it.
+- **Ingress and TLS, and OIDC.** There is no ingress controller, certificate or `TRUSTED_PROXIES`, and the example overlay's Ingress, HTTPRoute and ServiceMonitor are only validated, never applied. Sign-in is the development sign-in.
+- **Production sizing, storage and PostgreSQL.** One throwaway PostgreSQL without backup, TLS or failover; a three-node cluster in one Docker VM; no zone spreading (kind's nodes carry no zone label); no node drain, upgrade between releases or restore.
+- **Client-visible `/readyz`.** A pod that has had SIGTERM answers `/readyz` with `503` on purpose, and for a second or so kube-proxy can still route a request to it, so a loop of `/readyz` requests during a rollout sees a few `503`s. Real traffic (`/healthz`, `/mcp`) does not.
+
+**In CI.** The repository's workflow, [`k8s-smoke.yml`](https://github.com/ncecere/open-mcp-portal/blob/v0.2.1/.github/workflows/k8s-smoke.yml), runs the script on demand, weekly and on pushes to `main` that change `deploy/**`, the `Dockerfile`, the script or the workflow, with both CNIs. It has not run on GitHub yet; the script itself was run on macOS (Docker Desktop, arm64).
+
 ## Not included
 
-No Helm chart, HorizontalPodAutoscaler, in-cluster PostgreSQL or backup CronJob. The manifests are rendered and schema-checked (`make k8s-validate`) but haven't been smoke-tested on a real cluster. The example overlay's image digest is a placeholder: use the digest of the release image.
+No Helm chart, HorizontalPodAutoscaler, in-cluster PostgreSQL or backup CronJob. The manifests are rendered and schema-checked (`make k8s-validate`), exercised by the [smoke test](#smoke-test) on a `kind` cluster, and v0.2.0 was deployed to one real cluster. The example overlay's image digest is a placeholder: use the digest of the release image.

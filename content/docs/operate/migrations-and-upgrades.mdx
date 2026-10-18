@@ -25,6 +25,14 @@ The database schema is managed by migrations built into the binary. They are **f
 
 Pin the previous image. Migrations are never rolled back automatically; because they are expand-only, the previous release normally runs on the newer schema. To undo a migration itself, restore the backup made before the upgrade.
 
+## Upgrading from v0.2.0
+
+v0.2.1 has no migrations, and nothing you must change. The steps above apply; the release's own summary is in the [v0.2.1 notes](/docs/releases/v0-2-1#upgrading). Three points to know:
+
+- **Open client registration is capped.** `OAUTH_MAX_REGISTERED_CLIENTS` (default `1000`, `0` for no cap) bounds the OAuth clients registered through `POST /oauth/register` that were used in the last 30 days. If more than that registered themselves in the last 30 days, new registrations get `503 temporarily_unavailable` until some go unused or you raise the setting. Most installs are nowhere near it. Clients that use a metadata document, such as Claude Code, aren't counted. See [Configuration](/docs/operate/configuration#oauth-clients).
+- **Test connection sends the editor's identity token.** Editors who press it now cause the server to receive their identity token (name, email, team slugs), as real calls from them already do. Turn **Send identity token** off for a server that shouldn't receive it ([Send identity token](/docs/teams/register-a-server#send-identity-token)).
+- **The Kubernetes manifests have a smoke test.** `make k8s-smoke` ([Smoke test](/docs/operate/kubernetes#smoke-test)) needs a checkout of the repository; it creates its own throwaway `kind` cluster and never touches `~/.kube`.
+
 ## Upgrading from v0.1.0
 
 v0.2.0 adds migrations `00014` to `00017` (notifications, automation tokens, the protocol a server last negotiated, and per-server consent for provider tokens). The steps above apply; these are the points specific to this upgrade. The release's own summary is in the [v0.2.0 notes](/docs/releases/v0-2-0#upgrading).
@@ -41,7 +49,7 @@ The portal now refuses to start with an `ENCRYPTION_KEY` equal to the `API_KEY_P
 
 ### Migrate, then roll every replica
 
-Back up, pin the v0.2.0 digest (see [Install with Docker Compose](/docs/operate/compose#the-image) or [Install on Kubernetes](/docs/operate/kubernetes#the-image)), and run `migrate` once (the `migrate` init container, or `MIGRATE_ON_START` on a single instance). Then start **every** replica on v0.2.0.
+Back up, pin the digest of the current release, v0.2.1, which includes v0.2.0's migrations and adds none (see [Install with Docker Compose](/docs/operate/compose#the-image) or [Install on Kubernetes](/docs/operate/kubernetes#the-image)), and run `migrate` once (the `migrate` init container, or `MIGRATE_ON_START` on a single instance). Then start **every** replica on v0.2.1 (at least v0.2.0).
 
 </Step>
 <Step>
