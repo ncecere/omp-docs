@@ -1,9 +1,9 @@
 ---
 title: v0.1.0
-description: "The first release of Open MCP Portal (not yet released): registry and catalog, gateways, client sign-in and service accounts, delegated credentials, per-person upstream OAuth and operations."
+description: "The first release of Open MCP Portal (2026-10-17): registry and catalog, gateways, client sign-in and service accounts, delegated credentials, per-person upstream OAuth and operations."
 ---
 
-**Not yet released.** These notes describe the `main` branch, which will become v0.1.0. Migrations `00001` to `00013`.
+**Released 2026-10-17.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.1.0) · image `ghcr.io/ncecere/open-mcp-portal:v0.1.0` · migrations `00001` to `00013`.
 
 The first version of Open MCP Portal: a self-hosted portal where teams register MCP servers, publish them to a company catalog, curate gateways and give people and agents governed access.
 
@@ -54,15 +54,31 @@ The first version of Open MCP Portal: a self-hosted portal where teams register 
 - Prometheus metrics (`omp_*`) on `METRICS_ADDR`; encryption key and pepper rotation (`rotate-keys`, `ENCRYPTION_KEY_PREVIOUS`, `API_KEY_PEPPER_PREVIOUS`); `doctor`.
 - A distroless image, a demo Compose file, and a Kustomize base and example overlay.
 
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.1.0` is a distroless, multi-arch image signed with cosign keyless signing by the repository's `image.yml` workflow. Check the signature, then pin the image by its digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal:v0.1.0 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.1.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
 ## Verified
 
 Besides the test suites: Claude Code's real client signed in to a gateway with OAuth (through its metadata document, as a trusted client) and called tools; pi signed in (registering itself, through the consent page) and called tools; and GitHub's hosted MCP server ran end to end in per-person OAuth mode, with a GitHub App as the client, each person signing in with their own GitHub account, and six tools called from pi.
 
-## Not verified yet
+## Known limitations
+
+What v0.1.0 doesn't verify yet:
 
 - Delegated credentials against a real Google or Microsoft provider: providers were run only against a fake OAuth provider. The presets were checked against the providers' documentation.
-- VS Code and Cursor sign-in, and upstream servers that use Client ID Metadata Documents or dynamic registration in practice.
-- The CI workflow on GitHub's runners, and a smoke test on a real Kubernetes cluster (the manifests are only rendered and schema-checked).
+- VS Code and Cursor beyond their configuration snippets: neither has been signed in to a gateway, and upstream servers that use Client ID Metadata Documents or dynamic registration haven't been tried in practice.
+- A smoke test of the Kubernetes manifests on a real cluster (they are only rendered and schema-checked).
+
+What it doesn't do yet: streaming responses through to the client (calls are buffered, up to 1 MiB), resource subscriptions, and forwarding of sampling, elicitation and roots. There is no Helm chart. It is pre-1.0 and hasn't run in production.
 
 ## Upgrading from a development build
 

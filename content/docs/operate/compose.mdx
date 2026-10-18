@@ -1,23 +1,39 @@
 ---
 title: Install with Docker Compose
-description: Build the Open MCP Portal image, try the demo, and run a single instance with Docker Compose behind TLS.
+description: Pull and verify the Open MCP Portal image, try the demo, and run a single instance with Docker Compose behind TLS.
 ---
 
 ## The image
 
+Each release publishes a multi-arch (linux/amd64, linux/arm64) image to GitHub's container registry, tagged with the release:
+
 ```sh
-git clone https://github.com/ncecere/open-mcp-portal
+docker pull ghcr.io/ncecere/open-mcp-portal:v0.1.0
+docker run --rm ghcr.io/ncecere/open-mcp-portal:v0.1.0 version
+```
+
+The image is signed with cosign keyless signing by the repository's `image.yml` workflow. Check the signature before you use it:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal:v0.1.0 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.1.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+Then pin the image by its digest (`ghcr.io/ncecere/open-mcp-portal@sha256:…`, shown by `docker buildx imagetools inspect ghcr.io/ncecere/open-mcp-portal:v0.1.0`) in your Compose file, so a moved tag can't change what you run.
+
+To build the image yourself instead, from a checkout of the tag:
+
+```sh
+git clone --branch v0.1.0 https://github.com/ncecere/open-mcp-portal
 cd open-mcp-portal
 make docker                         # open-mcp-portal:<git describe>
-docker run --rm open-mcp-portal:<tag> version
 ```
 
 - The image is distroless: the binary is `/open-mcp-portal` (the entrypoint) and there is no shell. Commands: `serve` (default), `migrate`, `doctor`, `rotate-keys`, `version`.
 - It runs as UID/GID 65532, listens on port 8088 (`LISTEN_ADDR`) and needs no writable filesystem.
 - There's no `HEALTHCHECK` (no shell or curl): probe `/healthz` and `/readyz` from your orchestrator.
 - Multi-arch: `docker buildx build --platform linux/amd64,linux/arm64 --build-arg VERSION=… --build-arg COMMIT=… .` The web app and Go builds run on the build platform and cross-compile.
-
-No image is published yet; push the one you build to your own registry.
 
 ## The demo
 
@@ -43,7 +59,7 @@ services:
       retries: 30
 
   portal:
-    image: registry.example.com/open-mcp-portal:v0.1.0   # the image you built and pushed
+    image: ghcr.io/ncecere/open-mcp-portal:v0.1.0   # pin it by digest: ghcr.io/ncecere/open-mcp-portal@sha256:…
     command: ["serve"]
     depends_on:
       postgres:

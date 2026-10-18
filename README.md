@@ -2,7 +2,7 @@
 
 The user, team, administrator, operator and server-author documentation for [Open MCP Portal](https://github.com/ncecere/open-mcp-portal), the self-hosted portal to a company's MCP servers: teams register servers, publish them to a catalog and curate gateways that people and agents connect to. It's published at <https://docs.omp.bitop.dev>; the product's website is <https://omp.bitop.dev>. Both addresses, the repositories and the release the docs describe are in `lib/site.ts`.
 
-These pages are for the people who use gateways, the team owners and admins who register servers and build gateways, platform admins, operators, and MCP server authors. The Open MCP Portal repository's own `docs/` folder stays the engineering record (design, decisions and "As built" notes). The docs describe **Open MCP Portal v0.1.0**, which is not yet released: they follow the `main` branch until it is tagged.
+These pages are for the people who use gateways, the team owners and admins who register servers and build gateways, platform admins, operators, and MCP server authors. The Open MCP Portal repository's own `docs/` folder stays the engineering record (design, decisions and "As built" notes). The docs describe **Open MCP Portal v0.1.0**, released on 2026-10-17; the product tag is `v0.1.0`.
 
 A static site: [Fumadocs](https://fumadocs.dev) on Next.js with `output: "export"`, TypeScript and Tailwind CSS v4, served by nginx in a container. Search is Fumadocs' built-in static index, searched in the browser. No tracking, no cookies, no external fonts or CDNs: Inter is self-hosted.
 
@@ -69,7 +69,7 @@ SCREENSHOTS.md                the capture list for the screenshot session
 
 ### API reference
 
-`npm run sync:openapi` copies the product's `api/openapi.yaml` into `openapi/open-mcp-portal.yaml`. Review the diff and rebuild: there is one page per operation, grouped by the operation's first tag (sidebar labels in `lib/openapi.ts`). Sync from the release's tag once v0.1.0 is tagged.
+`npm run sync:openapi` copies the product's `api/openapi.yaml` into `openapi/open-mcp-portal.yaml`. Review the diff and rebuild: there is one page per operation, grouped by the operation's first tag (sidebar labels in `lib/openapi.ts`). Sync from the release's tag (`npm run sync:openapi -- v0.1.0`); the copy in the repository matches v0.1.0's contract.
 
 ### Brand
 

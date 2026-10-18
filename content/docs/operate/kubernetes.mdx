@@ -3,7 +3,24 @@ title: Install on Kubernetes
 description: "Deploy Open MCP Portal with the repository's Kustomize base and example overlay: secrets, configuration, network policies, ingress and probes."
 ---
 
-The repository's [`deploy/kubernetes`](https://github.com/ncecere/open-mcp-portal/tree/main/deploy/kubernetes) holds a Kustomize **base** and an **example overlay** (namespace, pinned image, settings, an NGINX Ingress or a Gateway API `HTTPRoute`, narrowed NetworkPolicies, and optional metrics). Copy the overlay into your own GitOps repository and replace every `example.org` value and the image digest. Bring your own PostgreSQL 17 and backups: there is no in-cluster database component. `make k8s-validate` renders the base and overlay and checks them against the Kubernetes schemas.
+The repository's [`deploy/kubernetes`](https://github.com/ncecere/open-mcp-portal/tree/v0.1.0/deploy/kubernetes) holds a Kustomize **base** and an **example overlay** (namespace, pinned image, settings, an NGINX Ingress or a Gateway API `HTTPRoute`, narrowed NetworkPolicies, and optional metrics). Copy the overlay into your own GitOps repository and replace every `example.org` value and the image digest. The image is `ghcr.io/ncecere/open-mcp-portal:v0.1.0`, signed with cosign; the overlay's digest is a placeholder you replace with the release's. Bring your own PostgreSQL 17 and backups: there is no in-cluster database component. `make k8s-validate` renders the base and overlay and checks them against the Kubernetes schemas.
+
+## The image
+
+The base and the overlay use `ghcr.io/ncecere/open-mcp-portal`. Check the signature of the release you deploy, then put its digest in the overlay's `images:`:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal:v0.1.0 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.1.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+```yaml
+images:
+  - name: ghcr.io/ncecere/open-mcp-portal
+    newTag: v0.1.0
+    digest: sha256:<the digest of v0.1.0>   # docker buildx imagetools inspect ghcr.io/ncecere/open-mcp-portal:v0.1.0
+```
 
 ## Secrets
 
@@ -42,7 +59,7 @@ configMapGenerator:
       - TRUSTED_PROXIES=10.0.0.0/8
 ```
 
-The base sets `LISTEN_ADDR=:8088`, `LOG_FORMAT=json`, `LOG_LEVEL=info`, `DEV_AUTH=false`, `MIGRATE_ON_START=false` (the Deployment pins it too), `SHUTDOWN_DELAY=10s`, `SHUTDOWN_TIMEOUT=125s`, and placeholders for `APP_URL`, `OIDC_ISSUER` and `OIDC_CLIENT_ID`. Don't set `generatorOptions.disableNameSuffixHash`: pods would keep running with stale settings. Pin the image by digest in the overlay's `images:`. Every setting is in [Configuration](/docs/operate/configuration).
+The base sets `LISTEN_ADDR=:8088`, `LOG_FORMAT=json`, `LOG_LEVEL=info`, `DEV_AUTH=false`, `MIGRATE_ON_START=false` (the Deployment pins it too), `SHUTDOWN_DELAY=10s`, `SHUTDOWN_TIMEOUT=125s`, and placeholders for `APP_URL`, `OIDC_ISSUER` and `OIDC_CLIENT_ID`. Don't set `generatorOptions.disableNameSuffixHash`: pods would keep running with stale settings. Every setting is in [Configuration](/docs/operate/configuration).
 
 ## What the base deploys
 
@@ -91,4 +108,4 @@ kubectl -n open-mcp-portal exec deploy/open-mcp-portal -c portal -- /open-mcp-po
 
 ## Not included
 
-No Helm chart, HorizontalPodAutoscaler, in-cluster PostgreSQL, backup CronJob or smoke test against a real cluster. The example's image digest is a placeholder until images are published.
+No Helm chart, HorizontalPodAutoscaler, in-cluster PostgreSQL or backup CronJob. The manifests are rendered and schema-checked (`make k8s-validate`) but haven't been smoke-tested on a real cluster. The example overlay's image digest is a placeholder: use the digest of the release image.

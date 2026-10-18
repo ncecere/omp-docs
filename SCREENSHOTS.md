@@ -20,7 +20,7 @@ Every image in these docs has a named slot in `lib/screenshot-slots.json` (its a
   - Auth providers **Google** (Google preset, slug `google`) and **GitHub** (GitHub preset, slug `github`); they may point at `cmd/fakeoauth`, but never show a real client ID or secret.
 - **No real third parties.** Use the fakes in the repository (`make fake-mcp`, `make fake-oauth`, `make example-mail-fake`), not GitHub or Google accounts. As captured: `cmd/fakeoauth` stands in for Google and for SourceHub's authorization server, `examples/mail-mcp -fake-gmail` is Mail, and Status, Wiki search, On-call and Code search (SourceHub's hosted server, OAuth-protected like `cmd/fakemcp -protect`) are small capture servers with the same capabilities as `cmd/fakemcp` for Status and believable data (`../omp-assets/capture/stack/`).
 - **Size**: PNG, **1440×900** (device scale factor 1), light theme unless the state says otherwise.
-- **Version**: Open MCP Portal **v0.1.0** (the release image once tagged; until then the `main` build). Pin the clock in the seed so timestamps don't churn.
+- **Version**: Open MCP Portal **v0.1.0** (captured from the build at commit `d039647`, before the tag; retake from the release image if the UI changed since). Pin the clock in the seed so timestamps don't churn.
 - **Secrets**: any key or token shown must be a fake value (`omp_0000…`, `omp_sa_0000…`) before capture.
 - **File name**: the slot name, `<slot>.png`, in the screenshots directory (`../omp-assets/screenshots` by default), then:
 

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Card, Cards } from 'fumadocs-ui/components/card';
 import { BookOpen, Braces, Code2, Network, Server, ShieldCheck, Tag, Users } from 'lucide-react';
 import { OmpWordmark } from '@/components/logo';
-import { productRepo, productSite, productUnreleased, productVersion } from '@/lib/site';
+import { productReleaseDate, productRepo, productSite, productVersion } from '@/lib/site';
 
 const sections = [
   {
@@ -56,7 +56,7 @@ const sections = [
     title: 'Releases',
     href: '/docs/releases',
     icon: <Tag />,
-    description: `What changed in each release. These docs describe ${productVersion}${productUnreleased ? ' (not yet released)' : ''}.`,
+    description: `What changed in each release. These docs describe ${productVersion}, released on ${productReleaseDate}.`,
   },
 ];
 
@@ -109,8 +109,8 @@ export default function HomePage() {
       </Cards>
 
       <p className="mt-12 text-sm text-fd-muted-foreground">
-        Open MCP Portal is pre-1.0 development software. These docs describe {productVersion}
-        {productUnreleased ? ', the first release, as it stands on the main branch' : ''}. More about
+        Open MCP Portal is pre-1.0 development software. These docs describe {productVersion},
+        the first release ({productReleaseDate}). More about
         the project is on{' '}
         <a className="text-brand-link underline" href={productSite}>
           its website

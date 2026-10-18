@@ -5,9 +5,9 @@ description: Open MCP Portal's releases, what to expect before 1.0, and how rele
 
 | Release | Date | In short |
 |---|---|---|
-| [v0.1.0](/docs/releases/v0-1-0) | Not yet released | The first release: a registry and company catalog of MCP servers, curated gateways, OAuth sign-in for MCP clients and service accounts, a signed identity on every call, delegated credentials, per-person OAuth to OAuth-protected servers, and operations. Migrations `00001` to `00013`. |
+| [v0.1.0](/docs/releases/v0-1-0) | 2026-10-17 | The first release: a registry and company catalog of MCP servers, curated gateways, OAuth sign-in for MCP clients and service accounts, a signed identity on every call, delegated credentials, per-person OAuth to OAuth-protected servers, and operations. Migrations `00001` to `00013`. |
 
-These docs describe **v0.1.0**, which isn't tagged yet: until it is, they follow the `main` branch. The full history is in the repository's [changelog](https://github.com/ncecere/open-mcp-portal/blob/main/CHANGELOG.md) and [commits](https://github.com/ncecere/open-mcp-portal/commits/main).
+These docs describe **v0.1.0**, released on 2026-10-17 ([GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.1.0)). The full history is in the repository's [changelog](https://github.com/ncecere/open-mcp-portal/blob/v0.1.0/CHANGELOG.md) and [releases](https://github.com/ncecere/open-mcp-portal/releases).
 
 ## Before 1.0
 
@@ -17,4 +17,12 @@ These docs describe **v0.1.0**, which isn't tagged yet: until it is, they follow
 
 ## How releases are published
 
-Each release will be a Git tag, `vX.Y.Z`, on the main branch, with an entry in the repository's `CHANGELOG.md`. The project follows Semantic Versioning. There is no published container image or release workflow yet: build the image from the tag with the repository's `Dockerfile` (`make docker`). Security fixes are made on `main`, and once releases exist, released as a patch of the latest minor release.
+Each release is a Git tag, `vX.Y.Z`, with an entry in the repository's `CHANGELOG.md` and a GitHub release. The project follows Semantic Versioning. Releasing a tag publishes the container image `ghcr.io/ncecere/open-mcp-portal:vX.Y.Z`, signed with cosign keyless signing by the repository's `image.yml` workflow. Check the signature before you deploy, and deploy by digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal:vX.Y.Z \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/vX.Y.Z \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+Security fixes are made on `main` and released as a patch of the latest minor release.

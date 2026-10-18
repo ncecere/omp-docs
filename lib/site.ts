@@ -22,11 +22,14 @@ export const productRepo = 'https://github.com/ncecere/open-mcp-portal';
 /** The Open MCP Portal release these docs describe. */
 export const productVersion = 'v0.1.0';
 
-/** The date that release was tagged (YYYY-MM-DD), or null while it is unreleased. */
-export const productReleaseDate: string | null = null;
+/** The date that release was tagged (YYYY-MM-DD). */
+export const productReleaseDate = '2026-10-17';
 
-/** Whether that release is still unreleased (the docs then describe current `main`). */
-export const productUnreleased = true;
+/** The release's page on GitHub. */
+export const productReleaseUrl = `${productRepo}/releases/tag/${productVersion}`;
+
+/** The release's container image, signed with cosign keyless signing. */
+export const productImage = `ghcr.io/ncecere/open-mcp-portal:${productVersion}`;
 
 export const appName = 'Open MCP Portal docs';
 export const docsRoute = '/docs';

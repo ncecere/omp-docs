@@ -5,7 +5,7 @@
 //   npm run sync:openapi -- v0.1.0           # from GitHub, at a tag or commit
 //
 // The docs describe one Open MCP Portal release: sync the spec from that
-// release's tag once it exists (until then, from main). The API reference
+// release's tag (v0.1.0). The API reference
 // under /docs/api/reference is generated from this file at build time.
 import { copyFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
