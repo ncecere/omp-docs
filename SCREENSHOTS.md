@@ -1,6 +1,6 @@
 # Screenshot capture list
 
-Every image in these docs has a named slot in `lib/screenshot-slots.json` (its alt text and the file names it may have) and is placed with `<Screenshot slot="…" />`. Until an image is imported, the page shows a marked placeholder. This file is the capture list for the screenshot session. **All 43 slots are captured** (2026-10-17, Open MCP Portal at commit `d039647`, from the Example Corp capture stack in `../omp-assets/capture/`); the files and what each shows are in `../omp-assets/screenshots/MANIFEST.md`. A retake follows `../omp-assets/capture/README.md`.
+Every image in these docs has a named slot in `lib/screenshot-slots.json` (its alt text and the file names it may have) and is placed with `<Screenshot slot="…" />`. Until an image is imported, the page shows a marked placeholder. This file is the capture list for the screenshot session. **Slots 1 to 43 are captured** (2026-10-17, Open MCP Portal at commit `d039647`, from the Example Corp capture stack in `../omp-assets/capture/`); the files and what each shows are in `../omp-assets/screenshots/MANIFEST.md`. A retake follows `../omp-assets/capture/README.md`. **Slots 44 to 54 were added for v0.2.0 and are not captured yet**: their pages show the marked placeholder until `npm run screenshots` imports them. See "For v0.2.0" below.
 
 ## Rules
 
@@ -20,8 +20,8 @@ Every image in these docs has a named slot in `lib/screenshot-slots.json` (its a
   - Auth providers **Google** (Google preset, slug `google`) and **GitHub** (GitHub preset, slug `github`); they may point at `cmd/fakeoauth`, but never show a real client ID or secret.
 - **No real third parties.** Use the fakes in the repository (`make fake-mcp`, `make fake-oauth`, `make example-mail-fake`), not GitHub or Google accounts. As captured: `cmd/fakeoauth` stands in for Google and for SourceHub's authorization server, `examples/mail-mcp -fake-gmail` is Mail, and Status, Wiki search, On-call and Code search (SourceHub's hosted server, OAuth-protected like `cmd/fakemcp -protect`) are small capture servers with the same capabilities as `cmd/fakemcp` for Status and believable data (`../omp-assets/capture/stack/`).
 - **Size**: PNG, **1440×900** (device scale factor 1), light theme unless the state says otherwise.
-- **Version**: Open MCP Portal **v0.1.0** (captured from the build at commit `d039647`, before the tag; retake from the release image if the UI changed since). Pin the clock in the seed so timestamps don't churn.
-- **Secrets**: any key or token shown must be a fake value (`omp_0000…`, `omp_sa_0000…`) before capture.
+- **Version**: slots 1 to 43 were captured from Open MCP Portal's build at commit `d039647` (v0.1.0, before its tag); slots 44 to 54 are for **v0.2.0**, to be captured from the v0.2.0 image (`ghcr.io/ncecere/open-mcp-portal:v0.2.0`). Pin the clock in the seed so timestamps don't churn.
+- **Secrets**: any key or token shown must be a fake value (`omp_0000…`, `omp_sa_0000…`, `ompadm_0000…`, `omppub_0000…`, `ompwhs_0000…`) before capture.
 - **File name**: the slot name, `<slot>.png`, in the screenshots directory (`../omp-assets/screenshots` by default), then:
 
   ```sh
@@ -79,3 +79,19 @@ Every image in these docs has a named slot in `lib/screenshot-slots.json` (its a
 | 41 | `admin-usage.png` | 1440×900 | `/admin/usage` | Morgan Lee | `/docs/administer/usage-and-calls` | Seeded calls across three teams. |
 | 42 | `admin-calls.png` | 1440×900 | `/admin/calls` | Taylor Brooks | `/docs/administer/usage-and-calls` | Mixed outcomes; one Recorded call. |
 | 43 | `admin-audit.png` | 1440×900 | `/admin/audit` | Taylor Brooks | `/docs/administer/audit-log` | After the seed and the other captures. |
+| 44 | `admin-overview.png` | 1440×900 | `/admin` | Morgan Lee | `/docs/administer/overview` | Seeded calls over a day, with some errors and one rate-limited call. One failing published server (Status, failing since the previous day), one published server with a changed capability held back, two servers waiting for review (one for more than 3 days), a personal key and a service account key expiring within 14 days, and one failing webhook destination, so that every severity shows. |
+| 45 | `admin-notifications.png` | 1440×900 | `/admin/notifications` | Morgan Lee | `/docs/administer/notifications` | SMTP set to a local sink (`SMTP_HOST`, `SMTP_FROM=Open MCP Portal <portal@example.com>`), one platform JSON destination and one Slack destination with a few delivered and one failed delivery. No real webhook URL: use a reserved example address and show only the host. |
+| 46 | `admin-automation-tokens.png` | 1440×900 | `/admin/automation-tokens` | Morgan Lee | `/docs/administer/automation-tokens` | Two platform tokens (`monitoring` with `platform:read`, `provisioning` with `platform:write`), one revoked, and one blocked because its creator is no longer a platform admin. |
+| 47 | `admin-automation-token-created.png` | 1440×900 | `/admin/automation-tokens` (the dialog after Create) | Morgan Lee | `/docs/administer/automation-tokens` | The show-once panel. Replace the secret with a fake value `ompadm_0000…` before capture. |
+| 48 | `team-attention.png` | 1440×900 | `/teams/support-tools` | Priya Shah | `/docs/teams/attention-and-notifications` | The Attention card with a failing server, a server with changes held back from the catalog and a publisher token expiring. |
+| 49 | `team-notifications.png` | 1440×900 | `/teams/support-tools/settings?tab=notifications` | Priya Shah | `/docs/teams/attention-and-notifications` | Two destinations (a JSON one and a Slack one) with health badges, one with a failed delivery. Fake hosts only. |
+| 50 | `team-automation-tokens.png` | 1440×900 | `/teams/support-tools/settings?tab=automation-tokens` | Priya Shah | `/docs/teams/publisher-tokens` | A `github-actions` token with `servers:write` and one expired token. |
+| 51 | `notifications-inbox.png` | 1440×900 | `/notifications` | Sam Ortiz | `/docs/use/notification-preferences` | A few notifications, some unread (server unhealthy, capability changed, a decided review). |
+| 52 | `notification-preferences.png` | 1440×900 | `/settings/notifications` | Sam Ortiz | `/docs/use/notification-preferences` | Email set up, the defaults (all on). |
+| 53 | `connect-allow-server.png` | 1440×900 | `/connect/google?request=…` | Sam Ortiz | `/docs/use/connecting-accounts` | Sam's Google connection already covers `gmail.readonly`; call `mail__search_messages` from a server he hasn't allowed and open the link: the page that asks only "Allow Mail (Support Tools)". |
+| 54 | `server-protocol.png` | 1440×900 | `/teams/support-tools/servers/<status>` | Priya Shah | `/docs/teams/capabilities` | Run `cmd/fakemcp -protocol modern` (or `both`), refresh, and show the protocol line on the server's Overview. |
+
+## For v0.2.0
+
+- **New slots 44 to 54** (above) are not captured. Pages that use them show the placeholder, listed by `npm run screenshots:check`.
+- **Slots 1 to 43 show v0.1.0's screens** and were not retaken. Since then the header has a bell with an unread count, the admin sidebar starts with **Overview** (the admin area also gains **Notifications** and **Automation tokens** pages), and Team settings gains two tabs, so a retake from the v0.2.0 image will show those. Three of them also changed in content: `connect-confirm` (the consent page names the server and its team for platform providers), `my-connections` (a connection lists the servers it allowed) and `server-overview` (the negotiated protocol). `/admin` now opens Overview, not Users.

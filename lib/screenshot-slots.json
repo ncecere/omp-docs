@@ -256,5 +256,71 @@
       "admin-audit"
     ],
     "alt": "Admin › Audit log, viewed as auditor: recent changes such as mcp_server.refresh, mcp_call.payload_view, service_account_key.create, team.member_remove, a suspended user, retention.purge and gateway changes, with Hide sign-ins on and Export CSV."
+  },
+  "admin-overview": {
+    "files": [
+      "admin-overview"
+    ],
+    "alt": "Admin \u203a Overview for Example Corp, viewed as Morgan Lee: stat cards (people, teams, servers, published, gateways), the last-24-hours strip with calls, error rate and rate-limited calls and its \"as of\" time, and a Needs attention list grouped by severity with items such as a failing server, a server with changes held back, a review waiting and keys expiring, each with a button that opens it."
+  },
+  "admin-notifications": {
+    "files": [
+      "admin-notifications"
+    ],
+    "alt": "Admin \u203a Notifications: the Email card (status, From address, host, port and mode, and a Send test email button), the delivery queue card, and the platform webhook destinations with their health badges, events, and the Add, Test and Rotate secret actions."
+  },
+  "admin-automation-tokens": {
+    "files": [
+      "admin-automation-tokens"
+    ],
+    "alt": "Admin \u203a Automation tokens: the list of platform tokens with name, prefix (ompadm_ and eight characters), scopes, status, created by, expiry and last used, one row marked as blocked because its creator is no longer a platform admin, the Create button, and the banner that tokens never work on the MCP endpoint."
+  },
+  "admin-automation-token-created": {
+    "files": [
+      "admin-automation-token-created"
+    ],
+    "alt": "The show-once panel after creating a platform token: the secret as a fake value starting ompadm_0000, a copy button, and the curl and GitHub Actions snippets, with the note that it can't be shown again."
+  },
+  "team-attention": {
+    "files": [
+      "team-attention"
+    ],
+    "alt": "The team overview of Support Tools as Priya Shah: the Attention card above the page's content, listing a failing server since a time, a server with changes held back from the catalog and a publisher token expiring, each with a button that opens it."
+  },
+  "team-notifications": {
+    "files": [
+      "team-notifications"
+    ],
+    "alt": "Team settings \u203a Notifications for Support Tools, as team owner: webhook destinations with health badges and the events each receives, and the Add, Test, Rotate secret, delivery log and enable or disable actions."
+  },
+  "team-automation-tokens": {
+    "files": [
+      "team-automation-tokens"
+    ],
+    "alt": "Team settings \u203a Automation tokens for Support Tools, as team owner: publisher tokens with name, prefix (omppub_ and eight characters), scopes servers:read and servers:write, status, created by, expiry and last used, and the Create button, with the note that a token can publish but not approve or delete."
+  },
+  "notifications-inbox": {
+    "files": [
+      "notifications-inbox"
+    ],
+    "alt": "The Notifications inbox for Sam Ortiz: the All and Unread tabs, rows with a title and a line of detail, some unread, and the bell in the top bar with its unread count."
+  },
+  "notification-preferences": {
+    "files": [
+      "notification-preferences"
+    ],
+    "alt": "Account \u203a Notifications: the events Sam Ortiz can receive, each with an In-app and an Email switch, all on by default."
+  },
+  "connect-allow-server": {
+    "files": [
+      "connect-allow-server"
+    ],
+    "alt": "The connect confirm page asking Sam Ortiz to allow a server: \"Allow Mail (Support Tools)\" naming the server and its team, the provider Google and the scope, shown as already allowed on the account, with Allow and Cancel and no step to the provider."
+  },
+  "server-protocol": {
+    "files": [
+      "server-protocol"
+    ],
+    "alt": "A server's Overview tab for Status, showing the protocol line \"Protocol 2026-07-28 (modern), negotiated a few minutes ago\" beside the server's health."
   }
 }

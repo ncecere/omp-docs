@@ -1,6 +1,6 @@
 {
   "name": "omp-docs",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "User, team, administrator, operator and server-author documentation for Open MCP Portal, the self-hosted portal to a company's MCP servers.",
   "license": "MIT",

@@ -58,9 +58,8 @@ A `resources/read` must name a selected resource's URI exactly, or match a selec
 | `400` | A malformed request, a batch, an unsupported `MCP-Protocol-Version`, or a 2026-07-28 request whose `_meta` or headers are missing or don't match the body (`-32602`, `-32020`, `-32022`) |
 | `401` | No valid credential: missing, wrong, revoked or expired; a suspended person; a service account that's turned off, deleted or whose team is archived; an OAuth token for another gateway |
 | `403` | A foreign `Origin` |
-| `404` | The gateway doesn't exist, is turned off, or its team is archived; or the caller can't use it, including a key limited to other gateways. All look the same |
+| `404` | The gateway doesn't exist, is turned off, or its team is archived; or the caller can't use it, including a key limited to other gateways. All look the same. (A 2026-07-28 request for a method the portal doesn't implement is also `404`, with `-32601`) |
 | `405` | `GET` or `DELETE` |
-| `404` (2026-07-28 requests) | Also a method the portal doesn't implement, with `-32601` |
 | `429` | A rate limit, with `Retry-After`. The JSON-RPC code is `-32029` for older clients and `429` for 2026-07-28 requests |
 
 Counted responses carry `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` for the caller's own tightest limit.
