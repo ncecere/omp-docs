@@ -1,0 +1,49 @@
+---
+title: Client compatibility
+description: Which MCP clients have been run against Open MCP Portal's gateways, what was checked, what hasn't been tried, and how to test and report a client yourself.
+---
+
+Open MCP Portal's gateways speak the MCP revisions 2024-11-05 through 2025-11-25 and the 2026-07-28 revision, chosen per request ([MCP protocol](/docs/server-authors/mcp-protocol)). That a client follows the specification is not the same as it having been run here, so this page says which clients **have been run**, what was observed, and which haven't.
+
+## What has been run
+
+| Client | Version | Signed in with | What was observed | When |
+|---|---|---|---|---|
+| Claude Code | 2.1.280 | OAuth (a metadata-document client, so no consent page when a platform admin trusts it) and a personal API key | Spoke the 2026-07-28 revision natively: `server/discover`, the lists, and `tools/call` with the required headers. Listed and called tools through a gateway on a real deployment. Showed the person the "connect your account" link from the tool error (it declares form-mode elicitation only, so it gets the tool-error answer, not `input_required`) | 2026-10-18 |
+| Claude Code | not recorded (v0.1.0 testing) | OAuth | Signed in and called tools on the earlier revisions; GitHub's hosted MCP server worked through it with each person's own GitHub sign-in | 2026-10-17 |
+| pi | not recorded (v0.1.0 testing) | OAuth with dynamic client registration, through the consent page | Signed in and called tools | 2026-10-17 |
+| MCP Go SDK client | v1.8.0 | API key | Both protocol eras; the consent link as an `input_required` result (it declares URL elicitation) and as a tool error (it doesn't) | test suite |
+| MCP conformance suite | `@modelcontextprotocol/conformance` | n/a | Caching, headers and custom headers pass in full; the remaining failures are by design ([MCP protocol](/docs/server-authors/mcp-protocol#conformance)) | 2026-10-18 |
+
+## What has not been run
+
+- **VS Code** and **Cursor**: the gateway page generates their connection snippets, but neither has been run against a gateway.
+- **Claude Desktop**, other IDEs, agent frameworks and other SDKs.
+- A client that **declares URL elicitation** from a real product (only the Go SDK client has been used for the `input_required` consent result).
+- **Reconnecting after the access token expires** (one hour; the refresh token lasts 30 days): the portal's side is tested, no real client has been watched doing it.
+
+If you try one of these, a report is welcome: see [Report a result](#report-a-result).
+
+## Test a client in ten minutes
+
+You need a gateway you can use (any team gateway of a team you're on will do) and the client.
+
+1. Open **My gateways**, open the gateway, and copy the **Connect** snippet for your client (use **Use an API key instead** if the client has no OAuth sign-in).
+2. Add the server to the client and let it connect. For OAuth, a browser window opens for sign-in; if the client isn't trusted you also see a consent page ([Connected apps](/docs/use/connected-apps)).
+3. Check these five things, in order:
+   1. **It connects** and shows the gateway as connected.
+   2. **It lists the gateway's tools** (names look like `server-slug__tool_name`).
+   3. **It calls a tool** and shows the result.
+   4. **A tool that needs your account** shows you a link (or a clear message with the link) when you haven't connected it. Open it, approve, and run the tool again ([Connecting accounts](/docs/use/connecting-accounts)).
+   5. **It keeps working after an hour**, without asking you to sign in again, which exercises the refresh token.
+4. If your administrator lets you see calls, **Team › Calls** shows each call with the client name the portal recorded; it confirms the call reached the portal.
+
+## Behaviour worth knowing
+
+- **The consent answer depends on what the client declares.** A client that declares URL elicitation gets the link as a question it can show; any other client of the new revision gets a tool error with the link in its text; older clients get the JSON-RPC error `-32042` with the link. All three carry the same link.
+- **Public servers that refuse an Authorization header** fail on their first call while **Send identity token** is on: see [Troubleshooting](/docs/use/troubleshooting).
+- **Tool names** are `{server-slug}__{name}`; some clients shorten or sanitize long names, which is theirs to explain.
+
+## Report a result
+
+Open a **Client compatibility report** on [GitHub](https://github.com/ncecere/open-mcp-portal/issues/new?template=client_compatibility.yml): the client and version, how you signed in, which of the five checks worked, and the exact message for any that didn't. Don't paste keys or tokens. For questions, use [Discussions](https://github.com/ncecere/open-mcp-portal/discussions).
