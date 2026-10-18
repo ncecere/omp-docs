@@ -18,7 +18,7 @@ What your client receives depends on its MCP version:
 
 - **Most clients** get the JSON-RPC error above (`-32042`), and clients that support URL elicitation show the link as a prompt; others show the message, which contains the link.
 - A client using the **2026-07-28** revision that supports URL elicitation gets the link as a question it can answer (an `input_required` result), and retries the call with the state it was given.
-- A **2026-07-28** client that doesn't support URL elicitation gets a tool error with the link in its text ("… Open <link> to connect it, then try again."), because that revision forbids `-32042` for such a client. A prompt or a resource read gets error `-32010` with the link in the message.
+- A **2026-07-28** client that doesn't support URL elicitation gets a tool error with the link in its text (ending "Open the link to connect it, then try again."), because that revision forbids `-32042` for such a client. A prompt or a resource read gets error `-32010` with the link in the message.
 
 In every case it is the same link. Open it in your browser:
 

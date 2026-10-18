@@ -25,7 +25,7 @@ What it can list, and who sees it:
 
 Members see what they can already open: the team's servers, review state and capability changes. Only **owners, admins and platform staff** see key and token expiries and notification problems, because only they can list those. Personal API keys and people's connections aren't on the team card: they belong to individuals.
 
-For members, the card is hidden when nothing needs the team. Owners and admins see **All clear**. An archived team shows only its archived notice. Each kind lists at most 20 items; when more are cut, the card says how many.
+For members, the card is hidden when nothing needs the team. Owners and admins see **All clear**. An archived team shows only its archived notice. Each kind lists at most 20 items; when more are cut, the card says how many. The same data is available to scripts from `GET /v1/teams/{team}/attention` ([reference](/docs/api/reference/teams/getTeamAttention)), for team members and platform staff.
 
 ## Who gets which notification
 

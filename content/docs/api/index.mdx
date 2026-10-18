@@ -30,7 +30,7 @@ Conventions:
 - **Not allowed and not found look alike**: people outside a team get `404` for its objects.
 - **Rate limit**: `REQUESTS_PER_MINUTE` per person or per token (600 by default), `429` with `Retry-After`.
 
-The tags group the routes: sign-in, me, teams, MCP servers, catalog, gateways and calls, API keys, OAuth consent and connected apps, service accounts, auth providers, connections, limits, retention, usage, notifications, automation tokens and admin. New in v0.2.0: `GET /v1/admin/overview` ([Admin overview](/docs/administer/overview)), `GET /v1/teams/{team}/attention` ([Team attention](/docs/teams/attention-and-notifications)), the notification operations (inbox, preferences, destinations, deliveries; see [Notifications](/docs/administer/notifications)), the automation token operations, and `POST /v1/connect/requests/{requestId}/confirm` ([Connecting accounts](/docs/use/connecting-accounts)).
+The tags group the routes: sign-in, me, teams, MCP servers, catalog, gateways and calls, API keys, OAuth consent and connected apps, service accounts, auth providers, connections, limits, retention, usage, notifications, automation tokens and admin. New in v0.2.0: `GET /v1/admin/overview` ([Admin overview](/docs/administer/overview), [reference](/docs/api/reference/admin/adminGetOverview)), `GET /v1/teams/{team}/attention` ([Team attention](/docs/teams/attention-and-notifications), [reference](/docs/api/reference/teams/getTeamAttention)), the notification operations (inbox, preferences, destinations, deliveries; see [Notifications](/docs/administer/notifications)), the automation token operations, and `POST /v1/connect/requests/{requestId}/confirm` ([Connecting accounts](/docs/use/connecting-accounts#allowing-a-server), [reference](/docs/api/reference/connections/confirmConnectRequest)).
 
 ## Automation tokens
 
@@ -43,7 +43,7 @@ curl -H "Authorization: Bearer $OMP_TOKEN" https://mcp.example.com/v1/token
 - A request with an `Authorization` header is treated as a token request and only that: a cookie sent with it is ignored. It must be exactly `Bearer <token>`.
 - A token works only on operations whose OpenAPI description carries `x-omp-token-scopes`, and only if it holds one of the scopes listed there (a write scope includes its read scope). Any other operation answers `403 token_not_allowed`. The four operations that create or revoke tokens answer `403 session_required`: a token can never make or end tokens.
 - **Platform tokens** (`ompadm_`, scopes `platform:read` and `platform:write`) read the platform's state and provision teams, gateways, grants and limits. **Team publisher tokens** (`omppub_`, scopes `servers:read` and `servers:write`) work on one team's servers; on another team's path they get `404 team_not_found`.
-- `GET /v1/token` returns the calling token's kind, name, scopes, team and expiry, which helps when debugging a pipeline.
+- [`GET /v1/token`](/docs/api/reference/automation-tokens/getToken) returns the calling token's kind, name, scopes, team and expiry, which helps when debugging a pipeline.
 - Tokens never work on `/mcp/{slug}`.
 
 See [Automation tokens](/docs/administer/automation-tokens) (platform) and [Publisher tokens](/docs/teams/publisher-tokens) (team) for creating and using them.

@@ -65,7 +65,7 @@ The portal never forwards the caller's own credential. Instead, each forwarded c
 
 ## Connections
 
-Some tools need to act **as the person** on another service: create a GitHub issue as them, read their Google Drive. A platform admin configures that service as an **auth provider**; the server's team sets a **user authorization** requirement (a provider and scopes). The first call asks the person to connect their account in the browser; after that, the portal sends their token with each call that needs it and refreshes it. The resulting **connection** is listed under **My connections**. Servers in OAuth mode use the same connections, bound to that one server. See [Connecting accounts](/docs/use/connecting-accounts).
+Some tools need to act **as the person** on another service: create a GitHub issue as them, read their Google Drive. A platform admin configures that service as an **auth provider**; the server's team sets a **user authorization** requirement (a provider and scopes). The first call asks the person to connect their account in the browser and to **allow that server** (each person allows each server once, on a page that names the server and its team); after that, the portal sends their token to that server with each call that needs it and refreshes it. The resulting **connection** is listed under **My connections**. Servers in OAuth mode use the same connections, bound to that one server. See [Connecting accounts](/docs/use/connecting-accounts).
 
 ## Roles
 

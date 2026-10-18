@@ -70,7 +70,7 @@ Then connect a client to the `mail` gateway, for example `claude mcp add --trans
    `-audience` must be exactly the URL you register next.
 
 5. Register the server in a team. In **Settings › User authorization**, choose **Google** with the scope `https://www.googleapis.com/auth/gmail.readonly`; on the **Capabilities** tab, override `create_draft` to `https://www.googleapis.com/auth/gmail.compose`, so people who only read never grant it.
-6. Add the three tools to a gateway, connect a client, and run a mail tool: connect your Google account when asked, then run it again.
+6. Add the three tools to a gateway, connect a client, and run a mail tool: connect your Google account when asked and allow the Mail server (the page names the server and its team), then run it again.
 
 Use full scope URLs: they are the names Google's token response returns, so the portal can tell they were granted.
 
