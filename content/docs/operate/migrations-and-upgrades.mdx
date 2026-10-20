@@ -23,11 +23,24 @@ The database schema is managed by migrations built into the binary. They are **f
 
 ## Rolling back
 
-Pin the previous image. Migrations are never rolled back automatically; because they are expand-only, the previous release normally runs on the newer schema. To undo a migration itself, restore the backup made before the upgrade. **Don't use `goose down`** to go back past `00020` (v0.3.0): it would drop the trusted agent platforms, the relay marks and the agent columns of the call history. Pin the previous image instead.
+Pin the previous image. Migrations are never rolled back automatically; because they are expand-only, the previous release normally runs on the newer schema. To undo a migration itself, restore the backup made before the upgrade. **Don't use `goose down`** to go back past `00023` (v0.3.1) or `00020` (v0.3.0): it would drop the provider access lists, the stored credential parts, the call records' trace ids, the trusted agent platforms, the relay marks and the agent columns of the call history. Pin the previous image instead. One thing a rollback to v0.3.0 does change: it ignores the credential parts table, so a server whose credential was saved as a list reads as having no credential until you save it as one header again (see [Upgrading from v0.3.0](#upgrading-from-v030)).
+
+## Upgrading from v0.3.0
+
+v0.3.1 adds migrations `00021`, `00022` and `00023`. All three are **expand-only**: they add tables and nullable columns and change nothing that v0.3.0 reads, so the steps above apply and a rolling upgrade is safe. The release's own summary is in the [v0.3.1 notes](/docs/releases/v0-3-1#upgrading). **Nothing changes for existing providers or servers until an admin opts in**, except that credentials you save from now on may be stored in the new form.
+
+- **Migrations.** `00021` adds the auth providers' access lists and the narrowing switch, `00022` the table that holds a server's credential parts, and `00023` a nullable trace id on call records. The `migrate` init container, or `migrate` run once before `serve`, applies them. Because they only add tables or nullable columns, the previous image keeps working against the new schema.
+- **No rolling back with `goose down`.** Pin the previous image instead (see [Rolling back](#rolling-back)). v0.3.0 reads a server whose credential was saved as parts (the new table) as having no credential, so before going back, save such a server's credential as one header again, or accept that it loses its credential until you do.
+- **Existing auth providers stay open to every team.** Every provider that exists at the upgrade keeps working as before and is flagged in Admin › Auth providers (an **Open to every team** badge, and a warning on its **Access** tab). Decide which to restrict: Admin › Auth providers › the provider › **Access**. **A provider you create after the upgrade starts restricted** with nobody listed, so a team that expects to use it must be listed before it can require it. See [Auth providers](/docs/administer/auth-providers#who-may-use-a-provider).
+- **One `409 changed_since_review`.** A published server's review request that is open during the upgrade gets one `409 changed_since_review` when the reviewer approves, because the review digest now covers the kind and name of each credential part (the digest version changed). The reviewer reloads and approves again.
+- **Narrowing and background refresh are off.** Only the Microsoft Entra ID preset pre-fills **Narrow tokens per call**, for providers you add; existing providers are unchanged. `PROVIDER_REFRESH_INTERVAL` is `0` (off) until you set it.
+- **Tracing is off.** It needs an OTLP endpoint ([Tracing](/docs/operate/tracing)). If untrusted clients can reach the portal, use `traceidratio` sampling: the default parent-based sampler lets a client ask for a trace by sending a sampled `traceparent`.
+- **The binary is about 3.6 MB larger.** The OpenTelemetry exporter pulls in protobuf and gRPC packages.
+- **Run `doctor`** as usual after the upgrade. It now also reports whether tracing is on.
 
 ## Upgrading from v0.2.2
 
-v0.3.0 adds migration `00020`, which is **expand-only**: it adds tables and columns and changes nothing that v0.2.2 reads, so the steps above apply and a rolling upgrade is safe. The release's own summary is in the [v0.3.0 notes](/docs/releases/v0-3-0#upgrading).
+Coming from v0.2.2, follow this section and then [Upgrading from v0.3.0](#upgrading-from-v030). v0.3.0 adds migration `00020`, which is **expand-only**: it adds tables and columns and changes nothing that v0.2.2 reads, so the steps above apply and a rolling upgrade is safe. The release's own summary is in the [v0.3.0 notes](/docs/releases/v0-3-0#upgrading).
 
 - **Migration `00020`.** It adds the tables for trusted agent platforms and for the token IDs the portal has accepted, a relay mark on service accounts, the present-person settings of servers and capabilities, and the agent columns of the call history. The `migrate` init container, or `migrate` run once before `serve`, applies it. It takes no long lock on the call history, so a large `mcp_calls` table doesn't block calls while it runs.
 - **No rolling back with `goose down`.** Undoing `00020` would drop the trusted platforms, the relay marks and the agent columns of the call history. Pin the previous image instead: v0.2.2 ignores the new tables and columns and keeps working against the new schema (see [Rolling back](#rolling-back)).
@@ -79,7 +92,7 @@ The portal now refuses to start with an `ENCRYPTION_KEY` equal to the `API_KEY_P
 
 ### Migrate, then roll every replica
 
-Back up, pin the digest of the current release, v0.3.0, which includes v0.2.0's migrations and adds `00018`, `00019` and `00020` (see [Install with Docker Compose](/docs/operate/compose#the-image) or [Install on Kubernetes](/docs/operate/kubernetes#the-image)), and run `migrate` once (the `migrate` init container, or `MIGRATE_ON_START` on a single instance). Then start **every** replica on v0.3.0 (at least v0.2.0). Read [Upgrading from v0.2.1](#upgrading-from-v021) and [Upgrading from v0.2.2](#upgrading-from-v022) too.
+Back up, pin the digest of the current release, v0.3.1, which includes v0.2.0's migrations and adds `00018` to `00023` (see [Install with Docker Compose](/docs/operate/compose#the-image) or [Install on Kubernetes](/docs/operate/kubernetes#the-image)), and run `migrate` once (the `migrate` init container, or `MIGRATE_ON_START` on a single instance). Then start **every** replica on v0.3.1 (at least v0.2.0). Read [Upgrading from v0.2.1](#upgrading-from-v021), [Upgrading from v0.2.2](#upgrading-from-v022) and [Upgrading from v0.3.0](#upgrading-from-v030) too.
 
 </Step>
 <Step>
