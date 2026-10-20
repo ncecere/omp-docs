@@ -2,10 +2,10 @@
 // Refreshes openapi/open-mcp-portal.yaml from the Open MCP Portal repository.
 //
 //   npm run sync:openapi                     # from a checkout: $OMP_REPO, or ../golang/open-mcp-portal
-//   npm run sync:openapi -- v0.3.1           # from GitHub, at a tag or commit
+//   npm run sync:openapi -- v0.3.2           # from GitHub, at a tag or commit
 //
 // The docs describe one Open MCP Portal release: sync the spec from that
-// release's tag (v0.3.1). The API reference
+// release's tag (v0.3.2). The API reference
 // under /docs/api/reference is generated from this file at build time.
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, writeFileSync } from 'node:fs';
@@ -31,7 +31,7 @@ if (ref) {
     : ['open-mcp-portal', 'open-mcp-gateway'].map((name) => resolve(join(import.meta.dirname, '../../golang', name)));
   const repo = candidates.find((dir) => existsSync(join(dir, 'api/openapi.yaml')));
   if (!repo) {
-    console.error(`api/openapi.yaml not found in ${candidates.join(' or ')}. Set OMP_REPO, or pass a tag: npm run sync:openapi -- v0.3.1`);
+    console.error(`api/openapi.yaml not found in ${candidates.join(' or ')}. Set OMP_REPO, or pass a tag: npm run sync:openapi -- v0.3.2`);
     process.exit(1);
   }
   const source = join(repo, 'api/openapi.yaml');

@@ -28,7 +28,7 @@ Three limits follow from that:
 - **The call can reach no more than the relay could.** The call is allowed as the person *and* as the relay account, so the relay's team decides which gateways its agents can ever use, and a person never gets more through an agent than they have themselves.
 - **An agent never gets a consent link.** An agent has nobody to open one.
 
-What a compromised key or platform can do is in [Security](/docs/operate/security#agent-platforms) and the repository's [threat model](https://github.com/ncecere/open-mcp-portal/blob/v0.3.1/docs/threat-model.md#68-the-agent-platform-relay-decisions-65-to-67).
+What a compromised key or platform can do is in [Security](/docs/operate/security#agent-platforms) and the repository's [threat model](https://github.com/ncecere/open-mcp-portal/blob/v0.3.2/docs/threat-model.md#68-the-agent-platform-relay-decisions-65-to-67).
 
 ## Set it up
 
@@ -192,7 +192,7 @@ A refused token leaves no call record or audit entry, only the counter and a war
 7. Suspend the person in the portal: the next agent call is refused ("account is suspended"). Remove them from the team: the gateway is gone for them at once. Reactivate: it works again.
 8. Turn the platform off (**Admin › Trusted agent platforms**, the row's **Turn off**; **Stop trusting…** deletes it): the next call is refused (`disabled_issuer`). Rotate the platform's signing key and check that calls keep working after one unknown-key fetch.
 
-To try the portal's side without the platform, the repository's [agent platforms guide](https://github.com/ncecere/open-mcp-portal/blob/v0.3.1/docs/agent-platforms.md#try-it) describes minting a token with any ES256 key whose public half you serve as a key set.
+To try the portal's side without the platform, the repository's [agent platforms guide](https://github.com/ncecere/open-mcp-portal/blob/v0.3.2/docs/agent-platforms.md#try-it) describes minting a token with any ES256 key whose public half you serve as a key set.
 
 ## Limits you should know
 

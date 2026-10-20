@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Open MCP Portal API
-  version: 0.3.1
+  version: 0.3.2
   description: 'Management API. Browser sessions authenticate with a cookie; writes need the session''s `X-CSRF-Token`
     (from `GET /v1/me`) and a same-origin `Origin`. Success responses are `{"data": ...}` and errors `{"error":
     {"code": "...", "message": "..."}}`.
@@ -853,6 +853,10 @@ paths:
         are sealed and never returned; the saved URL is still refused when it has a query (a query part is added to
         each request to the server, never to the URL).
 
+        tls (decision 74) is the server''s CA bundle and mTLS client certificate with its key (McpServerTlsInput); 422
+        invalid_tls with details.field and details.reason when it is refused. An automation token can''t send it (403
+        token_not_allowed, details.field tls).
+
         authMode oauth (docs/phase7-upstream-oauth.md) needs oauth. The portal runs the sign-in discovery again itself
         (it never trusts endpoints sent by the browser) and, for registration dcr (or auto resolving to it), registers
         its client before saving: 422 oauth_discovery_failed (details.problems as in DetectAuthResult) or 502
@@ -864,6 +868,16 @@ paths:
         ones, or turned off). In oauth mode the first capability discovery is skipped (refresh and refreshError
         null, setupRequired true): someone signs in with authorizeTeamMcpServerSetup first. Audited as
         mcp_server.create and mcp_server.auth_update (never a secret).
+
+        authMode machine_oauth (decision 73, docs/machine-oauth.md) needs machineOAuth: tokenUrl, clientId and
+        clientSecret (400 invalid_machine_oauth; 422 client_secret_required without the secret), and optionally scopes,
+        tokenAuthMethod, audience and resource. The portal gets a token with the client credentials grant and sends it
+        as Authorization: Bearer on every request to the server (discovery, tests, health checks and calls, from
+        everyone alike); the first discovery runs at once with it. 422 auth_conflict (details.reason
+        static_authorization or requirement) as for oauth. 422 url_not_allowed (details.field machineOAuth.tokenUrl)
+        when the token endpoint is refused by the address rules. Audited as mcp_server.create and
+        mcp_server.auth_update (token endpoint, scopes, clientSecretChanged; never a secret or a token). An
+        automation token can't create a server in this mode (403 token_not_allowed).
       requestBody:
         required: true
         content:
@@ -910,8 +924,9 @@ paths:
         the two root forms for an issuer without a path). Every request goes through the address guard and the
         internal-network allowlist (no proxy, no redirects, 5 s each, responses of at most 64 KiB, at most 8
         requests). Nothing is stored or audited. Problems found (resource or issuer mismatch, no PKCE S256, ...)
-        are reported in the result with status 200, not as errors. 422 url_not_allowed as for create. 409
-        team_archived. 429 slow_down (10 a minute per person).
+        are reported in the result with status 200, not as errors. machineOAuth says whether the authorization server
+        lists client_credentials in grant_types_supported, with its token endpoint (for authMode machine_oauth). 422
+        url_not_allowed as for create. 409 team_archived. 429 slow_down (10 a minute per person).
       requestBody:
         required: true
         content:
@@ -1040,6 +1055,13 @@ paths:
         (needs_reconsent; leaving oauth deletes them, revoked where possible). Audited as mcp_server.auth_update
         (before/after, clientIdChanged, clientSecretChanged, connectionsReset; never a secret).
 
+        machineOAuth (decision 73): see create. Under approval_required a published server goes back to pending
+        (reason upstream_auth_changed) when it switches to machine_oauth, or its token endpoint, client ID, audience or
+        resource changes, or a scope is added; a new secret alone does not. Any change drops the token the portal had
+        for the server. Audited as mcp_server.auth_update (tokenUrlChanged, clientIdChanged, clientSecretChanged; never
+        a secret or a token). A publisher automation token can''t send machineOAuth, or switch a server to this mode
+        (403 token_not_allowed, details.field).
+
 
         A URL with another origin (scheme, host or port; case, a trailing slash and the path don''t count) never keeps the
         stored static header value, which nobody but its author can read: 422 auth_value_required (details.field authValue)
@@ -1049,7 +1071,15 @@ paths:
         keep), or an empty list, or authMode none; otherwise 422 auth_value_required with details.field credentials[i]
         and details.kind and details.name of the part (the first stored part when the request doesn''t send credentials).
         Nothing changes and nothing is sent to the new host. In oauth mode another origin also erases every connection''s
-        tokens and sends the server back to the setup sign-in (as above). The audit entry names oldOrigin and newOrigin.'
+        tokens and sends the server back to the setup sign-in (as above). The audit entry names oldOrigin and newOrigin.
+
+
+        tls (decision 74) sets the server''s CA bundle (which replaces the system roots for this server only) and its mTLS
+        client certificate and key: see McpServerTlsInput for the validation (422 invalid_tls) and the origin rule (422
+        tls_key_required: the stored key and CA never follow a URL to another origin). A changed CA is a review trigger
+        under approval_required (mcp_server.publish_request, reason upstream_tls_changed); a new client certificate is
+        not. An automation token can''t send tls (403 token_not_allowed, details.field tls), and on a server that holds a
+        client key it can''t change the URL.'
       parameters:
       - $ref: '#/components/parameters/IfMatchHeader'
       requestBody:
@@ -3951,6 +3981,178 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '404':
           $ref: '#/components/responses/ErrorReply'
+  /v1/me/server-secrets:
+    get:
+      tags:
+      - me
+      - connections
+      operationId: listMyServerSecrets
+      summary: The servers whose callers enter their own key, with the caller's entry for each (never a key)
+      description: 'Servers in person_secret mode that the caller may use through a gateway now (the rule a call is
+        judged by), and every key the caller has entered, also for a server they can no longer reach (so it can be
+        taken back), by server name. Session only (an automation token has no scope for it).'
+      responses:
+        '200':
+          description: Servers by name
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ServerSecret'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/me/server-secrets/{serverId}:
+    parameters:
+    - $ref: '#/components/parameters/ServerIdParam'
+    put:
+      tags:
+      - me
+      - connections
+      operationId: setMyServerSecret
+      summary: Enter, replace or change the caller's own key for a server
+      description: 'Browser session only (403 session_required; API keys, automation tokens, service accounts and agents
+        are refused: a key is a person''s own decision). The key is sealed with ENCRYPTION_KEY, bound to the person, the
+        server and the origin it has now, and never returned, logged or audited (person_secret.create, person_secret.rotate;
+        person_secret.agents_update when only allowAgents changes). The request names the origin the person was shown.
+        404 server_not_found (no such server, or one the caller may not use through a gateway); 409 not_person_secret;
+        409 server_changed (another origin than the one shown: reload); 400 invalid_secret (no origin); 400
+        invalid_secret_value (8-4096 characters on one line); 400 secret_required (no key stored and none sent); 403
+        when useForSetup is asked by someone who is not an editor of the server''s team. 429 slow_down (20 a minute per
+        person, shared with revokeMyServerSecret).'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetServerSecret'
+      responses:
+        '200':
+          description: The caller's entry, without the key
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ServerSecret'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '422':
+          $ref: '#/components/responses/ErrorReply'
+        '429':
+          $ref: '#/components/responses/ErrorReply'
+    delete:
+      tags:
+      - me
+      - connections
+      operationId: revokeMyServerSecret
+      summary: Remove the caller's key for a server
+      description: 'Browser session only (403 session_required). Deletes the key; the next call of that server asks for
+        one again. Allowed whether or not the caller can still use the server. Audited as person_secret.revoke. 404
+        person_secret_not_found. 429 slow_down.'
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '429':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/connect/secret-requests/{requestId}:
+    parameters:
+    - $ref: '#/components/parameters/ConnectRequestIdParam'
+    get:
+      tags:
+      - connections
+      operationId: getSecretRequest
+      summary: What a link that asks for the person's own key is for, so the page can name the server, team and address
+      description: Signed in, and only the person the link was made for; anyone else gets 404 secret_request_not_found,
+        the same as an unknown ID. 410 secret_request_expired once it expired (10 minutes), or when the server's address
+        or mode changed after the link was made (a link is for one server at one address). An agent's call never gets
+        a link.
+      responses:
+        '200':
+          description: The request
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SecretRequest'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '410':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/users/{userId}/server-secrets:
+    parameters:
+    - $ref: '#/components/parameters/UserIdParam'
+    get:
+      tags:
+      - admin
+      - connections
+      operationId: adminListUserServerSecrets
+      summary: The keys a person has entered for servers, without the keys (platform admins and auditors)
+      description: Session only (no automation token scope). Only the servers a key exists for.
+      responses:
+        '200':
+          description: Entries by server name
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ServerSecret'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/users/{userId}/server-secrets/{serverId}:
+    parameters:
+    - $ref: '#/components/parameters/UserIdParam'
+    - $ref: '#/components/parameters/ServerIdParam'
+    delete:
+      tags:
+      - admin
+      - connections
+      operationId: adminRevokeUserServerSecret
+      summary: Remove a person's key for a server (platform admins)
+      description: As revokeMyServerSecret, audited with reason admin. Session only. Auditors get 403.
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
   /v1/me/connections:
     get:
       tags:
@@ -6841,8 +7043,11 @@ components:
       - timeout
       - too_large
       - not_allowed
+      - tls
       description: 'not_allowed: the URL or an address it resolves to is refused (blocked, or internal and not allowlisted),
-        or the server redirected'
+        or the server redirected. tls: the TLS handshake failed (the server''s certificate isn''t trusted or isn''t valid
+        for the host name, or the server refused the portal''s client certificate); the message says which and what to
+        do. See McpServerTls.'
     CapabilityCounts:
       type: object
       required:
@@ -6893,6 +7098,12 @@ components:
           type: boolean
           description: The latest check was an oauth server's unauthenticated probe that got the expected sign-in
             challenge (status healthy, shown as "requires sign-in")
+        warnings:
+          type: array
+          description: Things that aren't failures yet, such as a client certificate that expires within 14 days (or
+            has expired)
+          items:
+            $ref: '#/components/schemas/ServerWarning'
     McpServer:
       type: object
       description: A remote MCP server a team registered. The auth header value is never returned.
@@ -6961,6 +7172,11 @@ components:
             server that has not been saved with the list shows here as one header part
           items:
             $ref: '#/components/schemas/McpServerCredential'
+        tls:
+          allOf:
+          - $ref: '#/components/schemas/McpServerTls'
+          nullable: true
+          description: The server's TLS settings (decision 74); null when it has none
         timeoutSeconds:
           type: integer
           format: int32
@@ -7025,6 +7241,18 @@ components:
           nullable: true
           description: The sign-in configuration when authMode is oauth, else null. Absent (like authMode) from servers
             before Phase 7
+        personSecret:
+          allOf:
+          - $ref: '#/components/schemas/PersonSecretSettings'
+          nullable: true
+          description: How each person's own secret is sent, and how many people have entered one, when authMode is
+            person_secret; else null. Absent from servers before v0.3.2
+        machineOAuth:
+          allOf:
+          - $ref: '#/components/schemas/McpServerMachineOAuth'
+          nullable: true
+          description: The portal's own OAuth client for this server when authMode is machine_oauth, else null. The
+            client secret is never returned. Absent from servers before v0.3.2
         requiresPresentPerson:
           type: boolean
           description: 'Refuse calls on a relay service account unless they are for a person the platform says is
@@ -7048,8 +7276,9 @@ components:
         reviewDigest:
           type: string
           readOnly: true
-          description: 'SHA-256 (hex) over the server''s URL, auth mode and requirement and over every listed capability''s
-            kind, name and fingerprint, sorted. It changes when any of them does (a refresh, a new URL ...). Send it back
+          description: 'SHA-256 (hex) over the server''s URL, auth mode and requirement (for machine_oauth also its token
+            endpoint, client ID, token authentication method, scopes, audience and resource, never the secret) and over
+            every listed capability''s kind, name and fingerprint, sorted. It changes when any of them does (a refresh, a new URL ...). Send it back
             as expectedDigest when reviewing (adminReviewMcpServer) or publishing, so what is approved is what was read'
         revision:
           $ref: '#/components/schemas/Revision'
@@ -7121,6 +7350,146 @@ components:
           type: boolean
           description: Keep the stored part of this kind and name with its values (update only; sends no value; not
             allowed when the URL moves to another origin)
+    McpServerTlsInput:
+      type: object
+      description: >-
+        A server's TLS settings in a request (decision 74): a CA bundle that replaces the system roots for this server
+        only (a stolen public CA can't impersonate an internal server, and the private CA vouches for nothing else), and
+        a client certificate with its private key for mTLS. Host name verification and TLS 1.2 as the minimum always
+        apply; there is no setting that turns verification off. The private key is sealed with ENCRYPTION_KEY and never
+        returned, logged or audited. A new or changed CA (or removing it) sends a published server back to pending under
+        approval_required (reason upstream_tls_changed); a new client certificate does not. Input is validated when
+        saved (422 invalid_tls, details.field tls.caPem, tls.clientCertPem or tls.clientKeyPem and details.reason:
+        empty, too_large, not_pem, too_many_certificates, private_key_in_certificate_field, not_a_certificate,
+        invalid_certificate, expired, not_yet_valid, not_for_client_authentication, weak_key, weak_signature,
+        encrypted_key, not_a_private_key, invalid_key, key_mismatch, key_without_certificate, key_required,
+        clear_with_other_fields). Moving the URL to another origin never carries the stored key or CA along: 422
+        tls_key_required unless the same request replaces the client certificate and key, removes them
+        (clientCertPem "") or clears the settings (a stored CA alone is dropped and audited). A platform admin or
+        publisher automation token can't send it (403 token_not_allowed, details.field tls). Omitted fields keep what
+        is stored.
+      properties:
+        caPem:
+          type: string
+          maxLength: 65536
+          description: 'PEM certificates only (at most 10 and 64 KiB; a private key block is refused). The CA that signed
+            the server''s certificate, with any intermediates. "" removes the CA (the system roots apply again).'
+        clientCertPem:
+          type: string
+          maxLength: 65536
+          description: 'The client certificate chain, leaf first (at most 10 certificates). Not expired, for client
+            authentication, RSA 2048 bits or more, ECDSA P-256/P-384/P-521 or Ed25519. Without clientKeyPem it must belong
+            to the stored key (a renewal). "" (with no key) removes the client certificate and its key.'
+        clientKeyPem:
+          type: string
+          writeOnly: true
+          maxLength: 16384
+          description: One unencrypted PKCS#8, PKCS#1 or SEC1 PEM private key (a passphrase-protected key is refused)
+            that belongs to the first certificate. Sealed with ENCRYPTION_KEY, never returned.
+        clear:
+          type: boolean
+          description: Remove the CA, the client certificate and its key. Not with other fields.
+    TlsCertificate:
+      type: object
+      description: Public facts about one certificate
+      required:
+      - subject
+      - issuer
+      - sha256
+      - notBefore
+      - notAfter
+      properties:
+        subject:
+          type: string
+        issuer:
+          type: string
+        sha256:
+          type: string
+          description: Fingerprint of the DER encoding, hex
+        notBefore:
+          type: string
+          format: date-time
+        notAfter:
+          type: string
+          format: date-time
+        names:
+          type: array
+          description: DNS names and addresses the certificate lists (client certificate only)
+          items:
+            type: string
+    McpServerTlsCa:
+      type: object
+      required:
+      - sha256
+      - certificates
+      properties:
+        sha256:
+          type: string
+          description: Fingerprint of the set of certificates (their order doesn't matter); what a review covers
+        certificates:
+          type: array
+          items:
+            $ref: '#/components/schemas/TlsCertificate'
+    McpServerTlsClient:
+      type: object
+      required:
+      - certificate
+      - chainLength
+      - hasKey
+      - status
+      - daysLeft
+      properties:
+        certificate:
+          $ref: '#/components/schemas/TlsCertificate'
+        chainLength:
+          type: integer
+          format: int32
+          description: Certificates in the chain, the first included
+        hasKey:
+          type: boolean
+          description: The private key is stored (sealed). It is never returned.
+        status:
+          type: string
+          enum:
+          - valid
+          - expiring
+          - expired
+          description: expiring is within 14 days of notAfter
+        daysLeft:
+          type: integer
+          format: int32
+          description: Whole days until notAfter (zero or negative once expired)
+    McpServerTls:
+      type: object
+      description: A server's TLS settings as facts about the certificates; never the key. Absent from a server that
+        has none (system roots, no client certificate).
+      properties:
+        ca:
+          allOf:
+          - $ref: '#/components/schemas/McpServerTlsCa'
+          nullable: true
+          description: The CA bundle that replaces the system roots for this server
+        client:
+          allOf:
+          - $ref: '#/components/schemas/McpServerTlsClient'
+          nullable: true
+    ServerWarning:
+      type: object
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: string
+          enum:
+          - tls_certificate_expiring
+          - tls_certificate_expired
+        message:
+          type: string
+        at:
+          type: string
+          format: date-time
+          description: When it expires (or expired)
     McpServerCreate:
       type: object
       required:
@@ -7155,6 +7524,11 @@ components:
           description: The server's own credential as parts, instead of authHeaderName and authValue (decision 70)
           items:
             $ref: '#/components/schemas/McpServerCredentialInput'
+        tls:
+          allOf:
+          - $ref: '#/components/schemas/McpServerTlsInput'
+          description: The server's CA bundle and client certificate (decision 74). The server is created even when
+            discovery then fails; refreshError says why (class tls for a handshake problem)
         timeoutSeconds:
           type: integer
           format: int32
@@ -7176,9 +7550,22 @@ components:
         authMode:
           allOf:
           - $ref: '#/components/schemas/McpServerAuthMode'
-          description: 'Default: static_header when authHeaderName is sent, else none. oauth needs oauth'
+          description: 'Default: static_header when authHeaderName is sent, else none. oauth needs oauth. machine_oauth
+            needs machineOAuth'
         oauth:
           $ref: '#/components/schemas/McpServerOAuthInput'
+        personSecret:
+          allOf:
+          - $ref: '#/components/schemas/PersonSecretInput'
+          description: Required with authMode person_secret (400 invalid_person_secret otherwise); ignored for other
+            modes. How each person's own secret is sent. Nobody has entered a key yet, so capabilities are not read
+            (McpServerCreated.setupRequired); an editor enters theirs under Account > My connections, choosing to read
+            the server with it
+        machineOAuth:
+          allOf:
+          - $ref: '#/components/schemas/McpServerMachineOAuthInput'
+          description: Required with authMode machine_oauth (tokenUrl, clientId and clientSecret); refused (400
+            invalid_machine_oauth) with any other mode, because it carries a secret
         sendIdentity:
           type: boolean
           description: Send the signed identity token with forwarded calls (McpServer.sendIdentity). Omit for the default
@@ -7217,6 +7604,13 @@ components:
             for a server that has a credential (403 token_not_allowed)
           items:
             $ref: '#/components/schemas/McpServerCredentialInput'
+        tls:
+          allOf:
+          - $ref: '#/components/schemas/McpServerTlsInput'
+          description: Omit to keep. Changing the CA or the client certificate forgets the stored health and reads the
+            capabilities again (like a URL change); a changed CA is a review trigger under approval_required (reason
+            upstream_tls_changed). Audited in mcp_server.update (fingerprints and what changed; never a key, a
+            ciphertext or a PEM)
         timeoutSeconds:
           type: integer
           format: int32
@@ -7238,11 +7632,28 @@ components:
           allOf:
           - $ref: '#/components/schemas/McpServerAuthMode'
           description: Omit to keep. none removes the static header and the oauth configuration; leaving oauth deletes
-            the server's connections
+            the server's connections; leaving machine_oauth deletes its client and secret
         oauth:
           allOf:
           - $ref: '#/components/schemas/McpServerOAuthInput'
           description: Only with authMode oauth (sent now or stored). Omitted fields keep their stored values
+        personSecret:
+          allOf:
+          - $ref: '#/components/schemas/PersonSecretInput'
+          description: 'Only with authMode person_secret (sent now or stored; required when switching to it). Omit to
+            keep. A URL on another origin, another mode or another placement deletes every person''s secret for the server
+            (audited as mcp_server.person_secrets_reset); a path-only edit, or another name, prefix, label or help,
+            keeps them. A new mode, placement, name or prefix sends a published server back to review under
+            approval_required. A publisher automation token can''t send it, nor switch a server to this mode (403
+            token_not_allowed)'
+        machineOAuth:
+          allOf:
+          - $ref: '#/components/schemas/McpServerMachineOAuthInput'
+          description: Only with authMode machine_oauth (sent now or stored; 400 invalid_machine_oauth otherwise).
+            Omitted fields keep their stored values; the first time (switching to the mode) tokenUrl, clientId and
+            clientSecret are required. A new tokenUrl, a new clientId or a URL with another origin needs clientSecret
+            in the same request (422 client_secret_required, details.reason token_url_changed, client_id_changed or
+            origin_changed; nothing is stored and nothing is sent to the new endpoint)
         sendIdentity:
           type: boolean
           description: Omit to keep. Not a review trigger (turning it off sends less). Audited in mcp_server.update
@@ -8648,7 +9059,10 @@ components:
             excludes the server), person_not_present (an agent''s call whose server or capability requires
             a present person) or, for an agent''s call for a person, person_no_account or person_suspended; needs_authorization
             with needs_connection for an agent''s call (the person must connect an account; the answer was a tool error
-            with no link); upstream_error with provider_unavailable.'
+            with no link); upstream_error with provider_unavailable. For a server where each person enters their own
+            key (decision 72): needs_authorization with secret_missing or secret_rejected (the answer carried the
+            link, or for an agent''s call a tool error with none) or agents_not_allowed (an agent''s call, the person
+            has a key but hasn''t allowed agents); denied with service_account or person_suspended.'
         providerSlug:
           type: string
           description: The auth provider the capability required at the time of the call (absent when none)
@@ -10047,11 +10461,230 @@ components:
       - none
       - static_header
       - oauth
+      - person_secret
+      - machine_oauth
       description: 'How the portal authenticates to the server (decision 39). none: only the identity token, in
-        Authorization: Bearer. static_header: one static header (authHeaderName); the identity token moves to
-        MCP-Gateway-Identity when that header is Authorization. oauth: each person''s own token from the server''s
-        authorization server in Authorization: Bearer, and the identity token in MCP-Gateway-Identity. oauth excludes
-        a static Authorization header and a requirement (one credential per call)'
+        Authorization: Bearer. static_header: the static credential (authHeaderName, or credentials); the identity
+        token moves to MCP-Gateway-Identity when it sets Authorization. oauth: each person''s own token from the
+        server''s authorization server in Authorization: Bearer, and the identity token in MCP-Gateway-Identity. oauth
+        excludes a static Authorization header and a requirement (one credential per call). person_secret (decision
+        72): each person''s own API key or token, entered under Account > My connections and sent as the placement
+        in personSecret says (a header, a bearer token or a query parameter); a bearer or an Authorization header
+        moves the identity token to MCP-Gateway-Identity; it excludes a requirement and a static part that sets
+        the same header, query parameter or Authorization. machine_oauth (decision 73): the portal''s own token from
+        the server''s authorization server (the client credentials grant, machineOAuth), the same for every caller,
+        in Authorization: Bearer, and the identity token in MCP-Gateway-Identity; it excludes a static Authorization
+        header and a requirement like oauth does'
+    PersonSecretInput:
+      type: object
+      description: How a server's person secrets travel and how the page where people enter them describes the key
+      required:
+      - placement
+      properties:
+        placement:
+          $ref: '#/components/schemas/PersonSecretPlacement'
+        name:
+          type: string
+          maxLength: 100
+          description: The header (not a reserved one; Authorization is allowed) or the query parameter (1-64 letters,
+            digits, dots, hyphens and underscores, never starting with mcp-). Absent for bearer
+          example: X-API-Key
+        prefix:
+          type: string
+          maxLength: 64
+          description: Sent before the secret, for example "Token ". Not for bearer
+        label:
+          type: string
+          maxLength: 100
+          description: What the key is called on the page where people enter it
+          example: Acme API key
+        help:
+          type: string
+          maxLength: 2000
+          description: Plain text on that page, saying where to find the key
+    PersonSecretPlacement:
+      type: string
+      enum:
+      - header
+      - bearer
+      - query
+      description: 'header: Name: prefix + secret. bearer: Authorization: Bearer secret. query: ?Name=prefix+secret,
+        added to each request and never to the saved URL; many servers and proxies log URLs, so prefer header or bearer'
+    PersonSecretSettings:
+      type: object
+      required:
+      - placement
+      - prefix
+      - label
+      - help
+      - people
+      - rejected
+      - setup
+      properties:
+        placement:
+          $ref: '#/components/schemas/PersonSecretPlacement'
+        name:
+          type: string
+          nullable: true
+        prefix:
+          type: string
+        label:
+          type: string
+        help:
+          type: string
+        people:
+          type: integer
+          format: int64
+          description: How many people have entered a key for this server
+        rejected:
+          type: integer
+          format: int64
+          description: Of those, how many the server refused (they are asked to enter them again)
+        setup:
+          $ref: '#/components/schemas/PersonSecretSetup'
+    PersonSecretSetup:
+      type: object
+      description: The editor whose own key reads the server's capabilities (decision 42's counterpart); scheduled
+        health checks send nobody's key
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          enum:
+          - active
+          - rejected
+          - missing
+          description: missing when nobody was chosen, or the person is no longer an active editor of the team, or
+            their key was revoked or is for another address
+        personId:
+          type: string
+          format: uuid
+          nullable: true
+        personName:
+          type: string
+          nullable: true
+        at:
+          type: string
+          format: date-time
+          nullable: true
+    ServerSecret:
+      type: object
+      description: A server in person_secret mode with the caller's own key for it, if any. The key itself is never
+        returned, only its last four characters when it has at least eight
+      required:
+      - server
+      - config
+      - origin
+      - hasSecret
+      - allowAgents
+      - reachable
+      - canSetup
+      - isSetup
+      properties:
+        server:
+          $ref: '#/components/schemas/ConnectServer'
+        config:
+          $ref: '#/components/schemas/PersonSecretInput'
+        origin:
+          type: string
+          description: The scheme, host and port of the server's URL now; an entered key is bound to it
+        hasSecret:
+          type: boolean
+        hint:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+          enum:
+          - active
+          - rejected
+          description: The server answered 401 or 403 to a rejected key; it is not sent again until replaced
+        allowAgents:
+          type: boolean
+          description: An agent that relays a call for the person may use the key (decisions 66 and 68). Off by default
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+        rotatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        rejectedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+        reachable:
+          type: boolean
+          description: The caller may use the server through a gateway now (they may enter or replace a key)
+        canSetup:
+          type: boolean
+          description: The caller is an active editor of the server's team, so their key can read its capabilities
+        isSetup:
+          type: boolean
+          description: Their key reads the server's capabilities now
+    SetServerSecret:
+      type: object
+      description: A key, or a change to the caller's entry for one server
+      required:
+      - origin
+      properties:
+        origin:
+          type: string
+          description: The origin the page showed (ServerSecret.origin); refused (409 server_changed) when the server has
+            another now
+        value:
+          type: string
+          writeOnly: true
+          minLength: 8
+          maxLength: 4096
+          description: The key, on one line (surrounding space is trimmed). Omit to keep the stored key while changing
+            allowAgents or useForSetup. Sealed, never returned, logged or audited
+        allowAgents:
+          type: boolean
+          description: Omit to keep (false for a new entry)
+        useForSetup:
+          type: boolean
+          description: Read the server's capabilities with this key from now on (editors of the server's team only, else 403). The capabilities are read once it is saved; a failure is stored as the server's refresh error
+    SecretRequest:
+      type: object
+      description: Why a call asked the person to enter their key (a link from JSON-RPC -32042 or an input request)
+      required:
+      - id
+      - reason
+      - server
+      - config
+      - origin
+      - gateway
+      - capability
+      - secret
+      properties:
+        id:
+          type: string
+        reason:
+          type: string
+          enum:
+          - secret_missing
+          - secret_rejected
+        server:
+          $ref: '#/components/schemas/ConnectServer'
+        config:
+          $ref: '#/components/schemas/PersonSecretInput'
+        origin:
+          type: string
+          description: Where the key will be sent, and only there
+        gateway:
+          $ref: '#/components/schemas/CallRef'
+        capability:
+          $ref: '#/components/schemas/ConnectRequestCapability'
+        secret:
+          $ref: '#/components/schemas/ServerSecret'
     McpServerOAuthRegistration:
       type: string
       enum:
@@ -10233,6 +10866,88 @@ components:
           description: The callback the server's OAuth client uses (<APP_URL>/connect/callback); register it with a
             manual client. Absent before this field was added
           example: https://mcp.example.com/connect/callback
+    McpServerMachineOAuth:
+      type: object
+      description: >-
+        A server's machine OAuth client (decision 73, docs/machine-oauth.md). The portal gets a token with
+        the client credentials grant from tokenUrl and sends it as Authorization: Bearer to the server's URL. The client
+        secret is never returned
+      required:
+      - tokenUrl
+      - clientIdHint
+      - hasClientSecret
+      - clientSecretHint
+      - tokenAuthMethod
+      - scopes
+      - audience
+      - resource
+      properties:
+        tokenUrl:
+          type: string
+          description: The authorization server's token endpoint
+        clientIdHint:
+          type: string
+          description: The last six characters of the client ID (all of a shorter one)
+        hasClientSecret:
+          type: boolean
+          description: Always true (a machine client has a secret)
+        clientSecretHint:
+          type: string
+          description: The last four characters of a secret of eight or more, else empty
+        tokenAuthMethod:
+          type: string
+          enum:
+          - client_secret_basic
+          - client_secret_post
+          description: How the portal authenticates to the token endpoint
+        scopes:
+          $ref: '#/components/schemas/ScopeList'
+        audience:
+          type: string
+          nullable: true
+          description: Sent as the audience parameter when set
+        resource:
+          type: string
+          nullable: true
+          description: Sent as the resource parameter (RFC 8707) when set
+    McpServerMachineOAuthInput:
+      type: object
+      properties:
+        tokenUrl:
+          type: string
+          maxLength: 1000
+          description: The authorization server's token endpoint. The address rules apply as for a server's URL (https
+            unless an internal-network entry allows http; no userinfo, query or fragment; 422 url_not_allowed with
+            details.field machineOAuth.tokenUrl), when saved and at every token request
+        clientId:
+          type: string
+          minLength: 1
+          maxLength: 500
+        clientSecret:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Sealed with ENCRYPTION_KEY, never returned. Replace-only; omit to keep the stored one (not
+            allowed when tokenUrl, clientId or the server's origin changes)
+        tokenAuthMethod:
+          type: string
+          enum:
+          - client_secret_basic
+          - client_secret_post
+          description: 'Default client_secret_basic: the client ID and secret in an HTTP Basic header. client_secret_post
+            sends them in the request body'
+        scopes:
+          $ref: '#/components/schemas/ScopeList'
+        audience:
+          type: string
+          maxLength: 500
+          description: Sent as the audience parameter (some authorization servers want it). An empty string removes it
+        resource:
+          type: string
+          maxLength: 500
+          description: An absolute URI without a fragment, sent as the resource parameter (RFC 8707) so the token is for
+            this server only (authorization servers that ignore it leave the token usable elsewhere). An empty string
+            removes it
     McpServerOAuthInput:
       type: object
       properties:
@@ -10521,6 +11236,37 @@ components:
         latencyMs:
           type: integer
           format: int64
+    DetectAuthMachine:
+      type: object
+      required:
+      - tokenEndpoint
+      - grantTypesListed
+      - clientCredentials
+      - tokenAuthMethods
+      - resource
+      properties:
+        tokenEndpoint:
+          type: string
+          description: The authorization server's token endpoint, to enter as tokenUrl
+        grantTypesListed:
+          type: boolean
+          description: grant_types_supported was in its metadata (RFC 8414 defaults an absent list to authorization_code
+            and implicit, so clientCredentials is false when it is not listed)
+        clientCredentials:
+          type: boolean
+          description: client_credentials is in grant_types_supported
+        tokenAuthMethods:
+          type: array
+          items:
+            type: string
+            enum:
+            - client_secret_basic
+            - client_secret_post
+          description: The token endpoint authentication methods it lists that the portal can use
+        resource:
+          type: string
+          description: The protected resource identifier from the server's metadata, to enter as resource when the
+            authorization server supports RFC 8707 (empty when none was found)
     DetectAuthResult:
       type: object
       required:
@@ -10566,6 +11312,12 @@ components:
           allOf:
           - $ref: '#/components/schemas/DetectAuthRegistration'
           nullable: true
+        machineOAuth:
+          allOf:
+          - $ref: '#/components/schemas/DetectAuthMachine'
+          nullable: true
+          description: Whether the authorization server it found offers the client credentials grant (for authMode
+            machine_oauth); null when no authorization server metadata was found
         suggestedScopes:
           allOf:
           - $ref: '#/components/schemas/ScopeList'
@@ -11356,7 +12108,9 @@ components:
       - gateways_disabled
       - rate_limited
       - notification_failures
-      description: 'server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed:
+      - server_certificate_expiring
+      description: 'server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within
+        14 days or has expired (at = notAfter; critical once expired, warning within 3 days). server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed:
         one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers
         waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed
         or unapproved capabilities (count = how many, held back from the catalog). personal_keys_expiring: count of personal
@@ -12202,6 +12956,7 @@ components:
           - new
           - url_changed
           - upstream_auth_changed
+          - upstream_tls_changed
           - requirement_changed
         note:
           type: string
@@ -12297,9 +13052,10 @@ components:
           - service_account
           - publisher_token
           - platform_token
+          - server_certificate
         name:
           type: string
-          description: The key's or token's name (never its prefix or secret)
+          description: The key's or token's name (never its prefix or secret); for server_certificate the server's name
         expiresAt:
           type: string
           format: date-time
@@ -12319,6 +13075,12 @@ components:
               name:
                 type: string
           nullable: true
+        server:
+          allOf:
+          - $ref: '#/components/schemas/NotificationServerRef'
+          nullable: true
+          description: The server, for server_certificate (its mTLS client certificate expires within 14 days; the
+            team's owners, admins and editors are told)
     NotificationTestData:
       type: object
       required:
