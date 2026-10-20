@@ -15,7 +15,7 @@ An **auth provider** is an OAuth app on another service that people connect thei
 |---|---|
 | **GitHub** | Authorize `https://github.com/login/oauth/authorize`, token `…/access_token`, userinfo `https://api.github.com/user`; default scope `read:user`. No revocation endpoint |
 | **Google** | Google's authorize, token, revoke and userinfo endpoints; default scopes `openid` and `…/auth/userinfo.email`; `access_type=offline`, `prompt=consent`, `include_granted_scopes=true`. Use full scope URLs |
-| **Microsoft Entra ID** | `login.microsoftonline.com/{tenant}/oauth2/v2.0/…` (tenant `organizations` by default), userinfo `graph.microsoft.com/oidc/userinfo`; default scopes `openid profile email offline_access User.Read` |
+| **Microsoft Entra ID** | `login.microsoftonline.com/{tenant}/oauth2/v2.0/…` (tenant `organizations` by default), userinfo `graph.microsoft.com/oidc/userinfo`; default scopes `openid profile email offline_access User.Read`; **Narrow tokens per call** on (see [Narrower tokens per call](#narrower-tokens-per-call)) |
 | **Atlassian** | `auth.atlassian.com`, userinfo `api.atlassian.com/me`; default scopes `read:me offline_access`; `audience=api.atlassian.com`, `prompt=consent`; PKCE off |
 | **Slack** | `slack.com/oauth/v2/authorize` and `oauth.v2.access`; user tokens: scope parameter `user_scope`, comma separator, token under `authed_user`; PKCE off; no revocation endpoint |
 | **GitLab** | `{host}/oauth/…` (host `gitlab.com` by default, or your self-managed host), with revoke and userinfo; default scopes `openid read_user` |
@@ -29,11 +29,17 @@ The form's sections:
 - **Endpoints**: **Authorization URL** (where people's browsers go to approve), **Token URL**, optional **Revocation URL** (RFC 7009, used when someone disconnects) and **Userinfo URL** (read once after connecting, to label the account, such as `octocat`). All must be https; the token, revocation and userinfo endpoints are reached through the same address guard as MCP servers, so an internal identity provider needs an [internal network](/docs/administer/internal-networks) entry.
 - **Authorization request**: **Default scopes** (asked for when a server's requirement names none, and when someone connects from My connections), **Scope parameter** (`scope`, or `user_scope` for Slack user tokens), **Scope separator** (space, or comma for Slack), **Token response format** (standard, or under `authed_user` for Slack), and **Extra authorization parameters** (one `key=value` per line, at most 10; the portal sets `client_id`, `redirect_uri`, `state`, the scope parameter and PKCE itself).
 
+- **Token scopes per call**: the **Narrow tokens per call** switch, off unless the preset turns it on. See [Narrower tokens per call](#narrower-tokens-per-call).
+
 Register the redirect URI at the provider before people connect: they can't until it matches. Up to 100 providers.
+
+<Callout type="warn" title="A new provider starts restricted">
+A provider you add from now on is **restricted** with nobody listed: no team can require it, and no server receives anyone's token, until you list teams or servers on the provider's **Access** tab after adding it. The form says so. See [Who may use a provider](#who-may-use-a-provider).
+</Callout>
 
 ## A provider's page
 
-**Overview** shows the redirect URI, the configuration (never the secret) and its use: the servers that require it and how many people connected it. **Settings** edits everything except the slug; the client secret is replace-only.
+**Overview** shows the redirect URI, the configuration (never the secret), who may use it (open or restricted, linking to **Access**), whether tokens are narrowed per call, and its use: the servers that require it and how many people connected it. **Access** says who may use the provider ([below](#who-may-use-a-provider)). **Settings** edits everything except the slug; the client secret is replace-only. The provider list has an **Access** column, and a provider that is open to every team carries an **Open to every team** badge in the list and on its page.
 
 - **Changing the Client ID** disconnects everyone: their tokens belong to the old app, so their connections are marked as needing to connect again and their tokens are erased.
 - **Turning it off** refuses calls that need it (`-32010`, `provider_disabled`) and new connections. Existing connections are kept.
@@ -47,7 +53,49 @@ Since v0.2.0, a person's token for a platform provider goes only to a **server t
 - A server's permissions end when its URL moves to another host, scheme or port, when it requires another provider (or none), or when it is deleted. A change that only touches the path keeps them. They end too when the person disconnects, or you delete the provider or the person.
 - When a person's account already has the scopes the server needs, the consent page asks only "Allow &lt;server&gt; (&lt;team&gt;)" and doesn't go to the provider.
 
-What hasn't changed: the connection is still one token per person and provider, holding **every scope** the person has granted that provider, so an allowed server receives all of them. And any team editor can still name any enabled provider on a server (there is no per-provider list of teams or servers allowed to use it): the person's consent, which names the server and its team, is the check. Narrowing scopes per call and a per-provider allowlist are planned.
+What hasn't changed: the connection is still one token per person and provider, and it still **holds every scope** the person has granted that provider. Two settings narrow what a server receives: the provider's [access list](#who-may-use-a-provider) decides which teams' servers may use the provider at all, and [narrower tokens per call](#narrower-tokens-per-call) send a server only the scopes its call needs, where the provider supports it. Where neither is set, an allowed server receives all of the person's scopes, and the person's consent, which names the server and its team, is the check.
+
+## Who may use a provider
+
+Every provider is either **open** or **restricted**. This is the **Access** tab on a provider's page (platform admins change it; auditors read it).
+
+- **Restricted**: only servers of the **teams** you list, and the individual **servers** you name, may require the provider and receive people's tokens. Use a team entry for every server of a team, now and later, and a server entry for a single server whatever its team.
+- **Open to every team**: any editor of any team may require the provider on their servers. The lists are kept but not used.
+
+**A provider you create from now on starts restricted with nobody listed**, so no team can require it until you list teams or servers. **Providers that existed at the upgrade to v0.3.1 stay open**, so nothing breaks, and the portal flags them: an **Open to every team** badge on the list and on the provider's page, and a warning on the Access tab ("Any editor of any team can require the provider on their servers, and those servers then receive the tokens of everyone who connected it and allowed them. Restrict it to the teams that need it."). Decide which of them to restrict. If you restrict a provider that servers already use, the Access tab lists the servers that still require it although the list leaves them out, because their calls are refused until their team or the server is listed.
+
+The list is checked in three places:
+
+- **When a requirement is saved.** A team can choose, on a server or a capability, only a provider the list allows for that server or its team (`422 provider_not_allowed`); the provider picker offers only those. This applies to a provider you newly choose. A server that already requires a provider keeps it when the list stops covering it, so its other settings stay editable, but its calls are refused until the list is fixed.
+- **When a person allows a server.** On the consent link, in its callback and under [Allow servers… on My connections](/docs/use/connecting-accounts#allow-servers-from-my-connections). A server the list excludes isn't offered there and can't be allowed. If someone follows a consent link for such a server, the account is connected but nothing is allowed, and the result page says "Connected to the provider, but the server can't use it": ask a platform admin to add the team or server.
+- **On every call**, including a call an agent relays for a person. A server the list excludes gets error `-32010` with the reason `provider_not_allowed`, recorded as `denied`, with no consent link, and nothing is sent to the server. Taking a team off the list therefore stops delivery on the next call. People's connections and allowances are kept, so listing the team again restores delivery.
+
+A team's server in [OAuth mode](/docs/teams/register-a-server#sign-in-with-oauth-per-person) that links a platform provider's client is not gated by the list: it shares only the client, never the connections.
+
+Saving the Access tab replaces the mode and both lists as a whole, and is rejected if someone else changed the provider in the meantime. It works only in a browser session: an automation token can't read or change who may use a credential provider. Each change is audited as `auth_provider.access_update` with the lists before and after.
+
+## Narrower tokens per call
+
+By default a call carries the stored token, which holds every scope the person ever granted. With **Narrow tokens per call** on (Settings › Token scopes per call), the portal instead refreshes the token with only the scopes the call needs (RFC 6749 section 6) and sends that. The narrowed token is kept in memory only, on the replica that made it, until a minute before it expires; it is never stored, logged or audited. If the provider rotates refresh tokens, the new one is stored in the same step, so a rotating provider never sees one used twice.
+
+- **It needs a refresh token.** A connection without one (a GitHub OAuth app's tokens, for example) keeps sending the stored token. [My connections](/docs/use/connecting-accounts#my-connections) shows which token each account sends: "Each call gets a token for only the scopes it needs", or an **All granted scopes** badge.
+- **It fails closed.** If the provider refuses the narrower scope, the portal does not fall back to the full token: the call is refused as `provider_unavailable`, and the log says to turn narrowing off.
+- **It is only as good as the provider's support.** A provider that ignores `scope` on refresh returns its full token even with the switch on, and the portal can only log when an answer holds more scopes than were asked. The switch is your statement that the provider honours it.
+
+Which presets pre-fill it, from each provider's own documentation (checked in October 2026, **not run against a live account**):
+
+| Preset | `scope` on refresh | Switch |
+|---|---|---|
+| **Microsoft Entra ID** | Documented: the scopes on a refresh must equal or be a subset of those of the original request. A token is issued for the resource of the first scope, so keep scopes of one resource (such as Microsoft Graph) together | **On** |
+| **GitHub** | Not documented | Off |
+| **Google** | Not documented | Off |
+| **Atlassian** | Not documented | Off |
+| **Slack** | Not documented | Off |
+| **GitLab** | Not in GitLab's documentation. Its OAuth library accepts a narrower `scope` in its current source, but GitLab's own version was not confirmed | Off; try it on a test instance first |
+
+## Background refresh
+
+Optional, and off by default. Set `PROVIDER_REFRESH_INTERVAL` (default `0`, which is off; at least `1m`; see [Configuration](/docs/operate/configuration#background-refresh-of-provider-tokens)). One replica at a time then refreshes the connected accounts whose token expires before the next pass and that were used in the last 7 days. A grant the provider revoked then turns **needs to connect again** (and the person is told) before a call finds out. A connection is never refreshed twice for one expiry. It refreshes the stored token, also for providers that narrow.
 
 ## How tokens are handled
 
@@ -57,7 +105,7 @@ What hasn't changed: the connection is still one token per person and provider, 
 - Tokens and the client secret are never returned, logged, audited, recorded in calls or captured.
 - The portal doesn't check that the provider account belongs to the person (for example by email). The account label is informational.
 
-Audit: `auth_provider.create`, `.update` (with `clientSecretChanged` and `connectionsReset`), `.delete`, and `provider_connection.create`, `.refresh_failed`, `.revoke`, `.server_allow` (a person allowed a server, with the server and its address), and, in the server's team log, `mcp_server.provider_grants_reset`.
+Audit: `auth_provider.create`, `.update` (with `clientSecretChanged` and `connectionsReset`), `.access_update` (the lists before and after), `.delete`, and `provider_connection.create`, `.refresh_failed`, `.revoke`, `.server_allow` (a person allowed a server, with the server and its address), and, in the server's team log, `mcp_server.provider_grants_reset`.
 
 ## OAuth-protected MCP servers
 

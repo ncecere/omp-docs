@@ -45,11 +45,16 @@ Only then does that server receive your token for the service, at the address it
 - **After the upgrade to v0.2.0** nobody had allowed any server, on purpose, so you are asked once per server. A link made before the upgrade is refused as expired: run the tool again.
 - A link is made for **one server**: it can't allow another. If the server moved or changed service after the link was made, the link is refused and nothing is recorded; run the tool again.
 
-Allowing a server gives it your token for the service, which holds **every permission you have ever granted that service**, not only the ones this server asked for. Allow only servers you trust. The portal doesn't narrow the token per call yet.
+Allowing a server lets it receive your token for the service. **Which token** depends on how the service is set up by your platform admins:
+
+- **Usually the stored token**, which holds **every permission you have ever granted that service**, not only the ones this server asked for. Allow only servers you trust.
+- **A narrower token**, where an admin turned on **Narrow tokens per call** for the service and your connection can do it: each call then carries a token refreshed for only the permissions that call needs. My connections shows which of the two a connection sends (below).
+
+**Only servers the service's access list covers.** A platform admin decides which teams' servers may use each service ([Auth providers](/docs/administer/auth-providers#who-may-use-a-provider)). A server the list excludes can't use your account: it isn't offered when you allow servers, a consent link for it connects your account but allows nothing (the result page says the server can't use it), and a call to it is refused with `-32010` and the reason `provider_not_allowed` instead of asking you for a link. If you see that, ask a platform admin to add the server's team or the server to the service's access list. Your connection and the permissions you gave other servers are kept.
 
 ### Allow servers from My connections
 
-You can also allow a server **without making a call**. On Account › **My connections**, choose **Allow servers…** on a connection. The dialog lists the servers that need that service and that you can use through a gateway now (your teams' servers on gateways you can use, and published servers on gateways you have access to), each with its team, its address and the permissions it asks for. Choose **Allow** for the ones you trust. A server that isn't on a gateway you can use isn't listed and can't be allowed.
+You can also allow a server **without making a call**. On Account › **My connections**, choose **Allow servers…** on a connection. The dialog lists the servers that need that service and that you can use through a gateway now (your teams' servers on gateways you can use, and published servers on gateways you have access to), each with its team, its address and the permissions it asks for. Choose **Allow** for the ones you trust. A server that isn't on a gateway you can use isn't listed and can't be allowed, and neither is a server the service's access list excludes.
 
 <Callout type="info" title="Why this exists: agents">
 An AI agent acting for you through an [agent platform](/docs/administer/agent-platforms) can't open a link. When its call needs something you haven't set up, the tool answers with a **link-free message** that says what to do, for example "github__create_issue needs you to allow Status (Support Tools) to use your GitHub account (repo), which you haven't. Allow Status under Account › My connections in Open MCP Portal, then try again." Do that, then ask the agent again.
@@ -66,6 +71,7 @@ Allowing records the same permission a consent link's confirm step would: the se
 | Denied | You (or the service) declined. Nothing changed |
 | This attempt expired | Connecting has to finish within 10 minutes. Run the tool again |
 | Sign in as the person who started connecting | Your browser is signed in to the portal as someone else, so nothing was connected |
+| Connected, but the server can't use it | Your account is connected, but a platform admin hasn't opened the service to the server's team, so nothing was allowed and the tool still can't use it. Ask a platform admin to add the team or server to the provider's access list |
 | Couldn't connect | Something failed at the service and nothing changed. If it keeps failing, ask a platform admin to check the provider's settings |
 
 <Screenshot slot="connect-done" />
@@ -79,10 +85,11 @@ You don't have to wait for a tool to ask:
 
 ## My connections
 
-Account › **My connections** lists your connected accounts: the service (or MCP server, with an "MCP server" badge and its team), the account it is (such as your GitHub login), the permissions granted, the **servers you allowed** to use it (name, team and address; read-only), the status, when it was last used and when the token expires. From there you can **Connect**, **Reconnect**, **Disconnect**, and use **Allow servers…** to allow or take back a server (see above).
+Account › **My connections** lists your connected accounts: the service (or MCP server, with an "MCP server" badge and its team), the account it is (such as your GitHub login), the permissions granted, the **servers you allowed** to use it (name, team and address; read-only), **which token a server gets**, the status, when it was last used and when the token expires. From there you can **Connect**, **Reconnect**, **Disconnect**, and use **Allow servers…** to allow or take back a server (see above).
 
 <Screenshot slot="my-connections" />
 
+- **Token sent** says what a server you allowed receives. "Each call gets a token for only the scopes it needs" means the service is set to narrow tokens and your connection holds a refresh token. An **All granted scopes** badge means the stored token goes to the server, with every permission you granted: the service isn't set to narrow, or your connection has no refresh token to narrow with.
 - One connection per service. Connecting again asks for everything granted before plus anything new, so a new token never loses permissions.
 - The portal refreshes tokens shortly before they expire. If a refresh is refused (for example you revoked the app at the service), the connection shows that it needs you to connect again, and the next call answers with a new link.
 - **Disconnect** erases the tokens and your permissions for servers at once and, where the service supports it, revokes the tokens there too.
