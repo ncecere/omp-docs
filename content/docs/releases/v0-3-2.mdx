@@ -1,0 +1,63 @@
+---
+title: v0.3.2
+description: "Open MCP Portal v0.3.2 (2026-10-20): each person's own key for a server, the portal's own OAuth client, and mTLS with a private CA. Migrations 00024, 00025 and 00026."
+---
+
+**Released 2026-10-20.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.3.2) · image `ghcr.io/ncecere/open-mcp-portal:v0.3.2` · migrations `00024`, `00025` and `00026` (all expand-only).
+
+The second credentials release of the v0.3 line, after [v0.3.1](/docs/releases/v0-3-1): three new ways for the portal to authenticate to an MCP server, and TLS client certificates with a private CA. **Nothing changes for existing servers**; each feature is something a team opts into on a server. Read [Upgrading](#upgrading) first.
+
+## What changed
+
+- **Each person's own key for a server** (#22). A new authentication mode: every person pastes their own API key or token for a server once (Account › My connections › [Keys for servers](/docs/use/keys-for-servers)). It is sealed per person and server, shown only as a hint, revocable, and sent as a header, a bearer token or a query-string key. Setting it up needs an editor's own key first, so the server's tools can be read. A URL change to another origin, or a change of where the key goes, deletes everyone's keys. A call an agent relays uses a person's key only if that person turned on **Let my agents use this key** for the server (off by default), and never gets a link: it gets a tool error saying where to enter the key. Scheduled health checks send no key, and a `401` or `403` counts as healthy. Admin › Users shows which servers a person has keys for (never the keys). See [Register a server](/docs/teams/register-a-server#each-persons-own-key).
+- **OAuth client credentials for servers that authenticate the portal itself** (#24). A server can use **the portal's own OAuth client**: the portal is the OAuth client, gets a token with the client credentials grant from the server's authorization server and sends it as the bearer, keeping it in memory with expiry skew and one fetch at a time. **Everyone who calls the server shares the portal's token**, service accounts and relayed agent calls included; the identity token moves to `MCP-Gateway-Identity`. The client secret is sealed and never shown, and is discarded when the server's origin, token endpoint or client changes. Editors may set it up; an automation token may not, even on a server with no credentials. See [Register a server](/docs/teams/register-a-server#the-portals-own-oauth-client).
+- **mTLS client certificates and a per-server CA** (#25). A server can present a client certificate to its upstream and trust a private CA **instead of** the system roots, for that server only. The key is sealed and never shown; host name verification is always on (there is no skip-verification option); TLS 1.2 is the minimum; each exchange uses its own connection, so nothing is shared across servers or identities. Certificate expiry shows on the server's Health page, in the [admin overview](/docs/administer/overview#what-counts-as-needing-attention) and as a `key.expiring` [notification](/docs/administer/notifications). Changing the CA sends a published server back to review; a new client certificate doesn't. See [TLS to the server](/docs/teams/register-a-server#tls-to-the-server).
+- **The three together.** A server is in one of five modes (none, a static credential, each person's own key, the portal's own OAuth client, per-person OAuth) and may sit behind a private CA with a client certificate, in any combination. The add-server form offers all five. Switching modes deletes the old mode's secrets, and another origin discards every kind of secret unless replaced. What a server author sees in each mode: [What your server receives in each mode](/docs/server-authors/what-servers-receive).
+- **A migration hazard was found and fixed before release.** Two of these migrations both rewrite the database's list of allowed authentication modes, and applied naively the later one would have dropped the earlier one's value. Each now adds its value to whatever the list currently holds, and a test applies them in both orders.
+
+## Upgrading
+
+1. Pin the new image (verify its signature first, see [The image](#the-image)). The init container applies `00024`, `00025` and `00026`; all only add tables or widen checks, so the previous image keeps working against the new schema while no server uses a new mode. **Do not use `goose down` for a rollback** once a server uses a new mode; pin the previous image. (The down migrations move such a server to a static credential if it has one, else to no authentication.)
+2. A published server's review request that is open during the upgrade gets one `409 changed_since_review`, because the review digest now covers the CA and client-certificate fingerprints, the person-key placement and the portal's OAuth client.
+3. A health check's `error_class` stops being an enumerated list in the database (a length bound replaces it), so new error classes need no migration. The new class `tls` is used for certificate problems.
+
+[Upgrading from v0.3.1](/docs/operate/migrations-and-upgrades#upgrading-from-v031) has the same points with the details.
+
+## Verification
+
+- Go tests with the race detector against PostgreSQL, run on each branch and again on the merged tree; the web tests; the route, authorization and token matrices; migration tests, including that the allowed authentication modes keep every value whichever order the migrations run in; `govulncheck` and `npm audit`; the Prometheus rule tests; and the Kubernetes smoke test in CI.
+- Combined tests behind a private CA with mutual TLS exercise every mode (create, Test, refresh, health, edit, call), mode switches, origin changes, relayed agent calls, key rotation of every new column, and one scan of every secret kind through responses, logs, audit, call records, recorded payloads and spans.
+- A browser check of the add-server form (all five modes offered; the portal's OAuth client fields and their warning that everyone who calls the server shares the portal's token), with the app started on the existing development database so migrations `00024` to `00026` ran on a database that already had data and the allowed modes came out with all five values.
+- **Not done:** a browser look at the person-key pages, the TLS card and the Health expiry warnings (covered by web and integration tests), a real authorization server (Entra ID, Okta, Keycloak, Auth0) for the portal's OAuth client, a real MCP server that wants a per-person key or a client certificate, and a rotation of `ENCRYPTION_KEY` over real servers.
+
+## Known limitations
+
+Carried over from v0.3.1 unless marked new:
+
+- **Client certificates aren't used for the OAuth metadata and token endpoints (new).** A server in per-person OAuth mode behind a private CA can't be set up yet, and the portal's own OAuth client can't reach an authorization server behind a private CA. CRL and OCSP aren't checked.
+- **A team's static credential echoed back by its own server reaches the caller in the tool result (new).** It is redacted from logs, error messages and recorded payloads.
+- **A person's key is as safe as the server that receives it (new).** It is sent in the clear to that server (over TLS); a query-string key is also visible in URLs.
+- **Not run against a live Pi Durable Platform.** VS Code and Cursor haven't been run; neither has a real Google or Microsoft provider, a Slack webhook, a mail server, a collector or an authorization server.
+- Remote servers only (no stdio); development software that has not run in production.
+
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.3.2` is signed with cosign keyless signing by the repository's `image.yml` workflow. Its digest is:
+
+```text
+sha256:80ee9a1c7203ac8813597a1a218902503d08378982e08b62ba48c4084add5bd6
+```
+
+Check the signature with **cosign v3.0 or newer**, then pin the image by that digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:80ee9a1c7203ac8813597a1a218902503d08378982e08b62ba48c4084add5bd6 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.3.2 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/open-mcp-portal/issues](https://github.com/ncecere/open-mcp-portal/issues) (there is a form for each kind) or ask in [Discussions](https://github.com/ncecere/open-mcp-portal/discussions). Report security problems privately, as [`SECURITY.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.3.2/SECURITY.md) describes.
