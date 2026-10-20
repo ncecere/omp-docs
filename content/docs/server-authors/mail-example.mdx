@@ -3,7 +3,7 @@ title: The mail example
 description: A Gmail MCP server that relies on Open MCP Portal's delegated credentials instead of running its own OAuth, with the checks it makes and how to run it.
 ---
 
-The repository's [`examples/mail-mcp`](https://github.com/ncecere/open-mcp-portal/tree/v0.2.1/examples/mail-mcp) is a reference MCP server with three Gmail tools. It shows how to adapt a server that used to run its own Google OAuth so that it relies on Open MCP Portal's [provider tokens](/docs/server-authors/provider-tokens). The portal signs the person in, asks for their consent at Google once, keeps and refreshes their token, and forwards it with each call that needs it. The server stores no tokens, sessions or client secret.
+The repository's [`examples/mail-mcp`](https://github.com/ncecere/open-mcp-portal/tree/v0.2.2/examples/mail-mcp) is a reference MCP server with three Gmail tools. It shows how to adapt a server that used to run its own Google OAuth so that it relies on Open MCP Portal's [provider tokens](/docs/server-authors/provider-tokens). The portal signs the person in, asks for their consent at Google once, keeps and refreshes their token, and forwards it with each call that needs it. The server stores no tokens, sessions or client secret.
 
 | Tool | Annotations | Gmail API | Scope |
 |---|---|---|---|

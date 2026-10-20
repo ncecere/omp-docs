@@ -3,23 +3,23 @@ title: Install on Kubernetes
 description: "Deploy Open MCP Portal with the repository's Kustomize base and example overlay: secrets, configuration, network policies, ingress and probes."
 ---
 
-The repository's [`deploy/kubernetes`](https://github.com/ncecere/open-mcp-portal/tree/v0.2.1/deploy/kubernetes) holds a Kustomize **base** and an **example overlay** (namespace, pinned image, settings, an NGINX Ingress or a Gateway API `HTTPRoute`, narrowed NetworkPolicies, and optional metrics). Copy the overlay into your own GitOps repository and replace every `example.org` value and the image digest. The image is `ghcr.io/ncecere/open-mcp-portal:v0.2.1`, signed with cosign; the overlay at the v0.2.1 tag carries a placeholder digest that you replace with the release's (below). Bring your own PostgreSQL 17 and backups: there is no in-cluster database component. `make k8s-validate` renders the base and overlay and checks them against the Kubernetes schemas.
+The repository's [`deploy/kubernetes`](https://github.com/ncecere/open-mcp-portal/tree/v0.2.2/deploy/kubernetes) holds a Kustomize **base** and an **example overlay** (namespace, pinned image, settings, an NGINX Ingress or a Gateway API `HTTPRoute`, narrowed NetworkPolicies, and optional metrics). Copy the overlay into your own GitOps repository and replace every `example.org` value and the image digest. The image is `ghcr.io/ncecere/open-mcp-portal:v0.2.2`, signed with cosign; the overlay at the v0.2.2 tag carries a placeholder digest that you replace with the release's (below). Bring your own PostgreSQL 17 and backups: there is no in-cluster database component. `make k8s-validate` renders the base and overlay and checks them against the Kubernetes schemas.
 
 ## The image
 
-The base and the overlay use `ghcr.io/ncecere/open-mcp-portal`. Check the signature of the release you deploy (cosign v3.0 or newer), then put its digest in the overlay's `images:`. The digest of v0.2.1 is `sha256:4e84fe0571dcf079a4c7f83e3692dbae19668c2b8f2ed32beb2276dbcd0a00a1`:
+The base and the overlay use `ghcr.io/ncecere/open-mcp-portal`. Check the signature of the release you deploy (cosign v3.0 or newer), then put its digest in the overlay's `images:`. The digest of v0.2.2 is `sha256:2e42d17d41f6b3f05baef903b1bef6da609107c34ce074c75237c054c71bdd8d`:
 
 ```sh
-cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:4e84fe0571dcf079a4c7f83e3692dbae19668c2b8f2ed32beb2276dbcd0a00a1 \
-  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.2.1 \
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:2e42d17d41f6b3f05baef903b1bef6da609107c34ce074c75237c054c71bdd8d \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.2.2 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
 ```yaml
 images:
   - name: ghcr.io/ncecere/open-mcp-portal
-    newTag: v0.2.1
-    digest: sha256:4e84fe0571dcf079a4c7f83e3692dbae19668c2b8f2ed32beb2276dbcd0a00a1
+    newTag: v0.2.2
+    digest: sha256:2e42d17d41f6b3f05baef903b1bef6da609107c34ce074c75237c054c71bdd8d
 ```
 
 ## Secrets
@@ -117,7 +117,7 @@ kubectl -n open-mcp-portal exec deploy/open-mcp-portal -c portal -- /open-mcp-po
 
 ## Smoke test
 
-`make k8s-validate` only renders the manifests and checks their schemas. `make k8s-smoke` (from a checkout of the repository, [`scripts/k8s-smoke.sh`](https://github.com/ncecere/open-mcp-portal/blob/v0.2.1/scripts/k8s-smoke.sh)) applies them to a real cluster and uses what it deployed:
+`make k8s-validate` only renders the manifests and checks their schemas. `make k8s-smoke` (from a checkout of the repository, [`scripts/k8s-smoke.sh`](https://github.com/ncecere/open-mcp-portal/blob/v0.2.2/scripts/k8s-smoke.sh)) applies them to a real cluster and uses what it deployed:
 
 ```sh
 make k8s-smoke                    # about 2 minutes warm; needs docker, kind, kubectl, curl and jq
@@ -144,7 +144,7 @@ It builds the portal and the fake MCP server images from the working tree, creat
 - **Production sizing, storage and PostgreSQL.** One throwaway PostgreSQL without backup, TLS or failover; a three-node cluster in one Docker VM; no zone spreading (kind's nodes carry no zone label); no node drain, upgrade between releases or restore.
 - **Client-visible `/readyz`.** A pod that has had SIGTERM answers `/readyz` with `503` on purpose, and for a second or so kube-proxy can still route a request to it, so a loop of `/readyz` requests during a rollout sees a few `503`s. Real traffic (`/healthz`, `/mcp`) does not.
 
-**In CI.** The repository's workflow, [`k8s-smoke.yml`](https://github.com/ncecere/open-mcp-portal/blob/v0.2.1/.github/workflows/k8s-smoke.yml), runs the script on demand, weekly and on pushes to `main` that change `deploy/**`, the `Dockerfile`, the script or the workflow, with both CNIs. It has not run on GitHub yet; the script itself was run on macOS (Docker Desktop, arm64).
+**In CI.** The repository's workflow, [`k8s-smoke.yml`](https://github.com/ncecere/open-mcp-portal/blob/v0.2.2/.github/workflows/k8s-smoke.yml), runs the script on demand, weekly and on pushes to `main` that change `deploy/**`, the `Dockerfile`, the script or the workflow, with both CNIs. It has not run on GitHub yet; the script itself was run on macOS (Docker Desktop, arm64).
 
 ## Not included
 
