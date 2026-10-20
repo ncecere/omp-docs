@@ -12,7 +12,7 @@ This is for servers in **None** or **Static credential** mode that call a third-
 Team editors, admins and owners set it in the server's **Settings** › **User authorization**:
 
 - **Requires a connection**: on.
-- **Provider**: one of the auth providers your platform admins configured (GitHub, Google, Microsoft Entra ID, Atlassian, Slack, GitLab or a custom one). If there are none, ask a platform admin to add one in Admin › [Auth providers](/docs/administer/auth-providers). Only an enabled provider can be newly chosen.
+- **Provider**: one of the auth providers your platform admins configured (GitHub, Google, Microsoft Entra ID, Atlassian, Slack, GitLab or a custom one). If there are none, ask a platform admin to add one in Admin › [Auth providers](/docs/administer/auth-providers). Only an enabled provider can be newly chosen, and only one whose [access list](/docs/administer/auth-providers#who-may-use-a-provider) allows your team or this server: the picker offers just those, and saving another is refused (`provider_not_allowed`). A provider a platform admin created recently starts restricted, so ask them to list your team. A server that already requires a provider keeps it if the list later stops covering it, but its calls are refused until the list is fixed.
 - **Scopes**: what the token may do, in the provider's own names (press Enter after each). Leave empty for the provider's default scopes. For Google, use full scope URLs such as `https://www.googleapis.com/auth/gmail.readonly`: they are the names Google's token response returns, so the portal can tell they were granted.
 
 <Screenshot slot="server-user-authorization" />
@@ -36,7 +36,7 @@ A person's token for a platform provider is **not** sent to every server that na
 - The first time someone calls a tool of your server, the call isn't forwarded and they get a consent link. The page names **your server and your team** ("Allow &lt;server&gt; (&lt;team&gt;)"), so use a server name people will recognise. Each person allows each server once. See [Connecting accounts](/docs/use/connecting-accounts#allowing-a-server).
 - If you **move the server to another host, scheme or port**, or make it require **another provider** (or none), everyone's permission for it ends, and they're asked again at the next call. A change that only touches the path keeps their permissions. Deleting the server ends them too.
 - After upgrading from v0.1.0 nobody has allowed anything: expect every person to be asked once per server.
-- A person who allows your server gives it a token that holds **every scope they have granted that provider**, not only the scopes your server asked for. Ask only for what your server needs, and treat the token with the care described in [Provider tokens](/docs/server-authors/provider-tokens).
+- A person who allows your server gives it a token that holds **every scope they have granted that provider**, not only the scopes your server asked for, unless a platform admin turned on [narrower tokens per call](/docs/administer/auth-providers#narrower-tokens-per-call) for the provider and the person's connection supports it: then each call carries a token for only the scopes that call needs. Ask only for what your server needs, and treat the token with the care described in [Provider tokens](/docs/server-authors/provider-tokens).
 
 ## Review
 
@@ -47,7 +47,7 @@ Under **Approval required**, a published server goes back to review when any cap
 - The catalog, the gateway picker and **My gateways** mark such capabilities, for example **Needs GitHub (repo)**.
 - The first call asks the person to connect their account with a consent link (JSON-RPC `-32042`). After that, calls are forwarded with the token. See [Connecting accounts](/docs/use/connecting-accounts).
 - **Service accounts can't use them**: their calls are refused with `-32010`. Team views mark these capabilities "Service accounts can't use this".
-- If the provider is turned off, calls are refused with `-32010` (`provider_disabled`).
+- If the provider is turned off, calls are refused with `-32010` (`provider_disabled`). If the provider's access list doesn't cover your server's team or the server, calls are refused with `-32010` (`provider_not_allowed`) and no consent link is made.
 
 ## What your server receives
 
