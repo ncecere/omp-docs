@@ -25,7 +25,7 @@ Add the gateway's URL to your client **without any header**. The first time the 
 2. The consent page names the app, the host that vouches for it, the gateway it wants and where your browser goes back to. Choose **Allow** (or **Deny**).
 3. The browser returns to the app, which now has tokens and refreshes them by itself.
 
-Consent is remembered **per app and gateway**: connecting the same app to another gateway asks again. Apps your platform admins trust (Claude, Claude Code and VS Code out of the box) skip the consent page, but you still sign in.
+Consent is remembered **per app and gateway**: connecting the same app to another gateway asks again. Apps your platform admins trust (Claude, Claude Code and VS Code out of the box) skip the consent page, but you still sign in. One exception: the first time you sign a trusted app in to a gateway from your own computer (the browser returns to `localhost`, as Claude Code's does), a short notice names the app and where it receives the result, with **Continue** or **Cancel**. It is asked once per app and gateway, not for apps with an `https` return address, and not for apps you already connected ([Trusted clients](/docs/administer/trusted-clients#the-first-sign-in-from-this-computer)).
 
 <Screenshot slot="oauth-consent" />
 
@@ -33,7 +33,7 @@ What a connected app can do:
 
 - It acts as **you**, on **that gateway only**. Its token is refused by every other gateway and by the management API.
 - Every request checks your account (suspended people are refused), your current access to the gateway (removing you from the team or the grant stops it at the next request) and that the connection still exists.
-- Access tokens last an hour. The app refreshes them; each refresh token lasts 30 days and is replaced on every use, so an app used at least monthly stays connected. If a refresh token is used twice (a sign of theft), the connection is revoked and you sign in again.
+- Access tokens last an hour. The app refreshes them; each refresh token lasts 30 days from its last use and is replaced on every use. **An app signs in again about every 180 days** from the last time you signed it in, however often it is used (your administrator can change that or turn it off); API keys and service-account keys have no such limit, so use one for a script or agent that runs without a person. If a refresh token is used again later than 30 seconds after it was replaced (a sign of theft), the connection is revoked and you sign in again.
 - You can disconnect it at any time under Account › [Connected apps](/docs/use/connected-apps).
 
 ## Claude Code
@@ -194,7 +194,7 @@ curl -X POST https://mcp.example.com/mcp/support \
 
 Clients identify themselves either with a *Client ID Metadata Document* (an https URL their maker publishes; the consent page shows "From &lt;host&gt;") or, for older clients, by registering themselves. Self-registered apps are marked **Unverified** on the consent page: anyone can register any name, so allow one only if you just connected it yourself, and check the host the page says your answer goes to. They are never on the trusted list, a registration unused for 30 days expires (the app registers again), the portal accepts only so many of them at once (`OAUTH_MAX_REGISTERED_CLIENTS`, 1,000 by default; past it an app that registers itself is refused and the person should ask the administrator; apps that use a metadata document aren't counted), and call records show their calls as "via &lt;name&gt; (unverified)".
 
-If the browser shows **Can't connect this app**, the app's request was refused before anything was shared: an unknown app, a redirect address the app never registered, or a metadata document the portal can't fetch. Errors after that (no PKCE, a URL that isn't one of your gateways, a gateway you can't use) go back to the app, which usually shows them.
+If the browser shows **Can't connect this app**, the app's request was refused before anything was shared: an unknown app, a redirect address the app never registered, or a metadata document the portal can't fetch. The portal looks at the app only after you sign in, so this page can appear after signing in. Errors after that (no PKCE, a URL that isn't one of your gateways, a gateway you can't use) go back to the app, which usually shows them.
 
 ## Next
 

@@ -11,7 +11,8 @@ Each row is one client on one gateway. Connecting the same client to three gatew
 
 - the client's name and the host that vouches for it, or **Unverified** for a client that registered itself;
 - the gateway (marked **Deleted** if the gateway no longer exists);
-- when it was connected and last used.
+- when it was connected and last used;
+- **Sign-in expires**: when the app will have to sign in again ([below](#how-long-a-connection-lasts)). It is empty when your administrator set no limit, and reads **Expired** for an app past its date that hasn't refreshed since.
 
 ## Disconnect
 
@@ -22,8 +23,10 @@ Disconnecting is the right step if you lose a laptop or stop using a client. You
 ## How long a connection lasts
 
 - Access tokens last an hour; the app refreshes them itself.
-- A refresh token lasts 30 days and is replaced on every use, so an app used at least once a month stays connected until you disconnect it.
-- If a refresh token is presented again more than 30 seconds after it was replaced (a sign it was copied), the connection is revoked and you sign in again.
+- A refresh token lasts 30 days from its last use and is replaced on every use.
+- **The app signs in again about every 180 days**, however often it is used. Since v0.2.2 the limit counts from the last time you signed the app in (`OAUTH_REFRESH_ABSOLUTE_TTL`, 180 days unless your administrator changed it or set no limit). After it, the app's next refresh is refused, the connection is revoked and the app asks you to sign in again; signing in starts a new 180 days. The **Sign-in expires** column shows the date. When you sign an app in again you see the consent page, unless the app is trusted; a trusted app on your own computer shows its one-time notice again too ([Trusted clients](/docs/administer/trusted-clients#the-first-sign-in-from-this-computer)).
+- API keys and service-account keys don't have this limit, so a script or agent that runs without a person should use one of those ([API keys](/docs/use/api-keys), [Service accounts](/docs/teams/service-accounts)).
+- An app that refreshes twice at once gets the same new tokens both times, if the second request comes within 30 seconds of the first. If a refresh token is presented again more than 30 seconds after it was replaced (a sign it was copied), the connection is revoked and you sign in again.
 
 ## Who else can see them
 

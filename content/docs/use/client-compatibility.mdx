@@ -20,7 +20,8 @@ Open MCP Portal's gateways speak the MCP revisions 2024-11-05 through 2025-11-25
 - **VS Code** and **Cursor**: the gateway page generates their connection snippets, but neither has been run against a gateway.
 - **Claude Desktop**, other IDEs, agent frameworks and other SDKs.
 - A client that **declares URL elicitation** from a real product (only the Go SDK client has been used for the `input_required` consent result).
-- **Reconnecting after the access token expires** (one hour; the refresh token lasts 30 days): the portal's side is tested, no real client has been watched doing it.
+- **Reconnecting after the access token expires** (one hour; the refresh token lasts 30 days from its last use and at most 180 days from the last sign-in): the portal's side is tested, no real client has been watched doing it.
+- **The one-time notice** that a trusted client such as Claude Code shows the first time it signs in from a computer (v0.2.2): covered by an integration test of the whole flow, not yet run with the real Claude Code client.
 
 If you try one of these, a report is welcome: see [Report a result](#report-a-result).
 
@@ -41,7 +42,7 @@ You need a gateway you can use (any team gateway of a team you're on will do) an
 ## Behaviour worth knowing
 
 - **The consent answer depends on what the client declares.** A client that declares URL elicitation gets the link as a question it can show; any other client of the new revision gets a tool error with the link in its text; older clients get the JSON-RPC error `-32042` with the link. All three carry the same link.
-- **Public servers that refuse an Authorization header** can fail on a call while **Send identity token** is on, even when **Test connection** passed: Test catches a server that refuses the token with `401` or `403`, not one that refuses only when a tool runs. See [Troubleshooting](/docs/use/troubleshooting).
+- **Public servers that refuse an Authorization header** can fail on a call while **Send identity token** is on, even when **Test connection** passed: Test catches a server that refuses the token with `401` or `403`, not one that refuses only when a tool runs. Since v0.2.2 a new server with no authentication on a public host starts with the switch off, so this mostly affects servers registered earlier. See [Troubleshooting](/docs/use/troubleshooting).
 - **Tool names** are `{server-slug}__{name}`; some clients shorten or sanitize long names, which is theirs to explain.
 
 ## Report a result

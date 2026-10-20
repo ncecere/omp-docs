@@ -98,7 +98,7 @@ The portal's own address guard applies whatever the policies allow: public addre
 
   A client that closes the stream cancels the call to the MCP server, so a proxy that ends a response early also cancels the call. Calls without a progress token, or without `text/event-stream` in `Accept`, stay one buffered JSON response (at most 1 MiB); a streamed call relays at most 64 progress events and 4 MiB.
 - **No sticky sessions.** `/mcp/{slug}` is stateless and browser sessions live in PostgreSQL: any replica can serve any request.
-- Set `TRUSTED_PROXIES` to the controller's pod network, so client addresses are logged and rate-limited correctly.
+- Set `TRUSTED_PROXIES` to the controller's pod network, so client addresses are logged and rate-limited correctly. Without it the portal logs a warning and `doctor` prints an info line ([why](/docs/operate/configuration#behind-a-proxy-trusted_proxies)).
 
 Register `<APP_URL>/auth/callback` at your identity provider, and `<APP_URL>/connect/callback` at each auth provider's OAuth app.
 

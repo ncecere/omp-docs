@@ -22,14 +22,15 @@ Open MCP Portal is an OAuth 2.1 authorization server for its own gateways, follo
 ## Authorize
 
 - `response_type=code`, `code_challenge` with `code_challenge_method=S256` (`plain` is refused), `redirect_uri`, `state` (at most 1,000 characters), and `resource` equal to exactly `<APP_URL>/mcp/{slug}`. There are no scopes: a `scope` parameter is ignored.
-- Problems before the client and its redirect address are known (an unknown or unfetchable client, a redirect URI it didn't register, a repeated parameter, a query over 8,000 characters) show an error page, "Can't connect this app", and never redirect. Later problems go back to the client with `state` and `iss`: `unsupported_response_type`, `invalid_request` (no PKCE, `plain`, a malformed challenge), `invalid_target` (a missing or wrong `resource`), `access_denied`.
+- **Nothing is looked at before sign-in.** Without a browser session, the request is sent to sign in with its whole query and nothing else happens: the client's metadata document isn't fetched and no reason is given. Only a query over 8,000 characters or a repeated parameter gets a generic "Can't connect this app" page, the same for both. So a person with a bad client learns it after signing in. Uncached fetches of client metadata documents are limited to 20 a minute per source address (a signed-in person over it gets a `429` page, `slow_down`).
+- After sign-in, problems before the client and its redirect address are known (an unknown or unfetchable client, a redirect URI it didn't register) show an error page, "Can't connect this app", and never redirect. Later problems go back to the client with `state` and `iss`: `unsupported_response_type`, `invalid_request` (no PKCE, `plain`, a malformed challenge), `invalid_target` (a missing or wrong `resource`), `access_denied`.
 - Then the person signs in, if they aren't already. Signed in, the resource must be a gateway they may use **now**; otherwise `invalid_target` (unknown, turned off and no access look the same).
-- A remembered consent (the same person, client and gateway) or a [trusted client](/docs/administer/trusted-clients) gets a code at once; anyone else sees the consent page.
+- A remembered consent (the same person, client and gateway) or a [trusted client](/docs/administer/trusted-clients) gets a code at once; anyone else sees the consent page. One exception: a trusted client with a loopback redirect (`http` on `localhost`, `127.0.0.1` or `::1`) that the person hasn't connected to this gateway yet gets a notice page with Continue and Cancel first ([why](/docs/administer/trusted-clients#the-first-sign-in-from-this-computer)). Continue records the grant and issues the code; Cancel answers `access_denied`.
 
 ## Clients
 
 - **Client ID Metadata Documents** (preferred): the client ID is an https URL. The portal fetches it through its address guard (public addresses, or allowed internal networks), with no proxy and no redirects, within 5 seconds, at most 16 KiB, as JSON; its `client_id` must equal the URL. It's cached for its `max-age`, between 1 minute and 1 hour (10 minutes by default).
-- **Dynamic Client Registration**: public clients only, IDs `ompcl_…`, 10 a minute per address. A registration unused for 30 days expires. Registered clients are shown as unverified and can never be trusted. Since v0.2.1 the portal keeps at most `OAUTH_MAX_REGISTERED_CLIENTS` of them at once (default 1,000, `0` for no cap; see [Configuration](/docs/operate/configuration#oauth-clients)): over the cap, `POST /oauth/register` answers `503 temporarily_unavailable`. Clients that use a metadata document are not counted.
+- **Dynamic Client Registration**: public clients only, IDs `ompcl_…`, 10 a minute per address. A registration that never received tokens is deleted after 24 hours, and one that did expires after 30 unused days. One source address can hold at most `OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS` registrations that haven't received tokens (default 20; the next answers `429 slow_down`). An admin can turn registration off ([Trusted clients](/docs/administer/trusted-clients#open-client-registration)): the metadata then has no `registration_endpoint` and `POST /oauth/register` answers `403`. Registered clients are shown as unverified and can never be trusted. Since v0.2.1 the portal keeps at most `OAUTH_MAX_REGISTERED_CLIENTS` of them at once (default 1,000, `0` for no cap; see [Configuration](/docs/operate/configuration#oauth-clients)): over the cap, `POST /oauth/register` answers `503 temporarily_unavailable`. Clients that use a metadata document are not counted.
 - **Redirect URIs**: https, or http on a loopback address (any port).
 
 ## Tokens
@@ -38,10 +39,11 @@ Open MCP Portal is an OAuth 2.1 authorization server for its own gateways, follo
 |---|---|---|
 | Authorization code | `ompac_` | 60 seconds, single use |
 | Access token | `ompat_` | 1 hour |
-| Refresh token | `omprt_` | 30 days, replaced on every use |
+| Refresh token | `omprt_` | 30 days from its last use, replaced on every use, and at most `OAUTH_REFRESH_ABSOLUTE_TTL` (default 180 days) after the person last signed the app in |
 
 - An access token is accepted only by `/mcp/{slug}` of its own gateway, and never by the management API.
-- A refresh token presented again within 30 seconds of its rotation gets another pair (a client refreshing twice at once); later reuse revokes the connection.
+- A refresh token presented again within 30 seconds of its rotation gets the **same** new pair (a client refreshing twice at once holds one chain, not two); later reuse revokes the connection.
+- After the absolute lifetime (`OAUTH_REFRESH_ABSOLUTE_TTL`, `0` for none) the next refresh answers `invalid_grant` and the connection is revoked; the app signs in again. Signing the app in again starts a new lifetime.
 - Tokens are opaque and stored only as HMAC-SHA256 digests under `API_KEY_PEPPER`.
 - Every request re-checks the token, its connection, that the person is active (`401` otherwise) and their access to the gateway (`404` otherwise).
 
@@ -51,11 +53,11 @@ A refresh token revokes the whole connection; an access token only itself. Anoth
 
 ## Rate limits
 
-Per client address, shared by every replica: 60 a minute on authorize, token and revoke, 10 a minute on register. Over the limit: `429` with `slow_down` and `Retry-After`.
+Per client address, shared by every replica: 60 a minute on authorize, token and revoke, 10 a minute on register, and 20 a minute on uncached fetches of client metadata documents. Over the limit: `429` with `slow_down` and `Retry-After`.
 
 ## Audit
 
-`oauth.client_register`, `oauth.consent` (with `how`: `allowed` or `trusted`), `oauth.token_issue` and `oauth.revoke`. Never a token.
+`oauth.client_register`, `oauth.consent` (with `how`: `allowed` or `trusted`), `oauth.grant_confirmed` (a trusted loopback client's first sign-in, confirmed on the notice), `oauth.token_issue` and `oauth.revoke`. Never a token.
 
 ## Connecting accounts
 

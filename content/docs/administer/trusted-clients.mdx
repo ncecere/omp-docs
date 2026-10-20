@@ -3,7 +3,7 @@ title: Trusted clients
 description: Choose which MCP clients skip the OAuth consent screen when people connect them to Open MCP Portal's gateways.
 ---
 
-When someone connects an MCP client to a gateway with OAuth sign-in, Open MCP Portal shows a consent page naming the client, the host that vouches for it and the gateway. **Admin › Trusted clients** lists clients that skip that page. People still sign in with their company account, and a trusted client still gets only their access, one gateway at a time.
+When someone connects an MCP client to a gateway with OAuth sign-in, Open MCP Portal shows a consent page naming the client, the host that vouches for it and the gateway. **Admin › Trusted clients** lists clients that skip that page, except for one short notice the first time one signs in from a person's own computer ([below](#the-first-sign-in-from-this-computer)). People still sign in with their company account, and a trusted client still gets only their access, one gateway at a time. The same page has the switch for [open client registration](#open-client-registration).
 
 <Screenshot slot="admin-trusted-clients" />
 
@@ -21,4 +21,25 @@ Only clients identified by a **Client ID Metadata Document**: the client ID is a
 
 **Add trusted client**: the **Client ID** (the https address of the client's metadata document, its OAuth `client_id`) and a **Label** (up to 100 characters). Up to 50 clients. **Save trusted clients** applies the list at once: it's read on every authorization.
 
-Removing a client brings the consent screen back the next time someone connects it; existing connections keep working. A trusted client's first connection is still recorded in the audit log (`oauth.consent` with `how: trusted`).
+Removing a client brings the consent screen back the next time someone connects it; existing connections keep working. A trusted client's first connection is still recorded in the audit log (`oauth.consent` with `how: trusted`); when the person confirmed it on the notice below, it is recorded as `oauth.grant_confirmed` instead.
+
+## The first sign-in from this computer
+
+A trusted client such as Claude Code receives its sign-in result on the person's own computer, at an address like `http://localhost:54321/callback` (a *loopback redirect*). Since v0.2.2 the first time a person signs a trusted client in to a gateway this way, the portal doesn't hand the client a code silently: the sign-in page shows a short notice (who trusts the client, what it receives and where, for example "on this computer, at localhost:54321") with **Continue** or **Cancel**. **Continue** connects the app; **Cancel** refuses it and records nothing.
+
+- It is asked **once per person, client and gateway**. Later sign-ins are silent, on any port. It is asked again after the person disconnects the app, for another gateway, and for another person.
+- It is never asked for a trusted client with an `https` redirect, and not for people who already connected the client before the upgrade.
+- There is no setting to skip it for a client: that would remove the protection.
+
+The notice narrows the window in which a process on someone's computer could use a trusted client's ID, rather than closing it: after the first confirmation a local process can still start a sign-in with the trusted client's ID and a loopback redirect without being asked, and a process that drives the person's real browser can press **Continue**. The person must still be signed in in their browser, the code is bound to the client's PKCE verifier, and the token works on one gateway only. See [Hardening status](/docs/operate/security#hardening-status).
+
+## Open client registration
+
+Apps that register themselves can't be trusted, but the endpoint they register at is open to anyone who can reach the portal. The page has a switch, **Allow open client registration** (on by default), saved with the trusted list. Only a person signed in to the web app can change it; automation tokens can't.
+
+- **Off:** the authorization server's metadata leaves out `registration_endpoint` and `POST /oauth/register` answers `403`. Apps already registered keep working, and apps that use a metadata document, such as Claude Code, aren't affected. Turn it off if nobody needs self-registering clients.
+- **24 hours when never used.** A registration that never received tokens is deleted after 24 hours. One that did keeps its 30 days unused, as before.
+- **A cap per address.** One source address can hold at most `OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS` (default 20) registrations that haven't received tokens yet; the next is refused with `429 slow_down`. Registrations that sign in stop counting. Behind an ingress, set `TRUSTED_PROXIES`, or every caller shares one address.
+- `open-mcp-portal doctor` shows whether registration is on and how many registrations are live against the cap.
+
+These sit beside the overall cap, `OAUTH_MAX_REGISTERED_CLIENTS`. After the upgrade to v0.2.2, registrations nobody ever used disappear after 24 hours; apps that were ever authorized are unaffected. See [Configuration](/docs/operate/configuration#oauth-clients).

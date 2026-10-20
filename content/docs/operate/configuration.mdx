@@ -29,7 +29,7 @@ An invalid value stops the process with a message naming the setting. `open-mcp-
 | `MIGRATE_ON_START` | `false` | Apply migrations when `serve` starts. For a single instance only; otherwise run `migrate` first |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
 | `LOG_FORMAT` | `json` | `json` or `text`, on stdout |
-| `TRUSTED_PROXIES` | none | Comma-separated CIDRs of proxies allowed to set `X-Forwarded-For` (your ingress), used for logging and per-address rate limits |
+| `TRUSTED_PROXIES` | none | Comma-separated CIDRs of proxies allowed to set `X-Forwarded-For` (your ingress), used for logging, audit addresses and per-address rate limits. Recommended behind an ingress: left empty, the header is ignored (safe), but every request appears to come from the ingress, and the portal warns about it. See [Behind a proxy](#behind-a-proxy-trusted_proxies) |
 | `SHUTDOWN_DELAY` | `5s` | On SIGTERM, how long `/readyz` fails before the listener stops accepting, so load balancers notice (0 to 5 minutes) |
 | `SHUTDOWN_TIMEOUT` | `60s` | Then how long in-flight requests get to finish (1 second to 30 minutes). Calls can wait up to 120 seconds for an MCP server; the Kubernetes base sets 10s and 125s |
 
@@ -53,9 +53,13 @@ An invalid value stops the process with a message naming the setting. `open-mcp-
 
 | Setting | Default | Notes |
 |---|---|---|
-| `OAUTH_MAX_REGISTERED_CLIENTS` | `1000` | The most OAuth clients that may be registered through the open `POST /oauth/register` (Dynamic Client Registration) at once: those used within the last 30 days (0 to 1,000,000). `0` means no cap. Over the cap, registration answers `503 temporarily_unavailable` and the person is told to ask the administrator; nothing is stored. Clients that identify themselves with a Client ID Metadata Document, such as Claude Code, are not counted. Added in v0.2.1 |
+| `OAUTH_MAX_REGISTERED_CLIENTS` | `1000` | The most OAuth clients that may be registered through the open `POST /oauth/register` (Dynamic Client Registration) at once: those used within the last 30 days (0 to 1,000,000). `0` means no cap. Over the cap, registration answers `503 temporarily_unavailable` and the person is told to ask the administrator; nothing is stored. Clients that identify themselves with a Client ID Metadata Document, such as Claude Code, are not counted. Added in v0.2.1. An admin can also turn open registration off ([Trusted clients](/docs/administer/trusted-clients#open-client-registration)) |
+| `OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS` | `20` | How many registrations that have not received tokens yet one source address can hold. `0` means no cap. The answer past it is `429 slow_down` and nothing is stored. A registration that signs in stops counting, and one nobody used is deleted after 24 hours. Behind an ingress, set `TRUSTED_PROXIES`, or every caller shares one address. Added in v0.2.2 |
+| `OAUTH_REFRESH_ABSOLUTE_TTL` | `180d` | How long after a person last signed an OAuth app in its refresh tokens stop working, however often they are used: the next refresh answers `invalid_grant` and the app signs in again. `180d`, or a duration such as `4320h` (1 hour to 10 years); `0` turns the limit off. API keys and service-account keys aren't affected, so headless agents should use those. Apps connected when v0.2.2 was installed got one whole window from then. Added in v0.2.2 |
 
-Registration is open to anyone who can reach the portal, so the cap bounds how many clients it keeps. The existing limit of 10 registrations a minute per address is unchanged. An install with more live registrations than the cap stops accepting new ones until some go unused for 30 days: raise the setting (or set `0`) first if that matters. See [OAuth endpoints](/docs/api/oauth-endpoints#clients).
+Registration is open to anyone who can reach the portal, so the cap bounds how many clients it keeps. The existing limit of 10 registrations a minute per address is unchanged. Since v0.2.2, a registration that never received tokens is deleted after 24 hours (one that did keeps its 30 days unused), and `OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS` limits how many such registrations one address can hold; the per-address cap counts only unused registrations on purpose, because behind an ingress without `TRUSTED_PROXIES` every caller shares one address. An install with more live registrations than the cap stops accepting new ones until some go unused for 30 days: raise the setting (or set `0`) first if that matters. See [OAuth endpoints](/docs/api/oauth-endpoints#clients).
+
+**Refresh tokens.** Without a limit, a refresh token that is used at least every 30 days keeps an app signed in for ever. `OAUTH_REFRESH_ABSOLUTE_TTL` ends that: the lifetime counts from the person's last sign-in of the app, so signing in again starts a new one. Set it before upgrading if 180 days doesn't suit you; `0` keeps the unlimited life. [Connected apps](/docs/use/connected-apps#how-long-a-connection-lasts) shows each app's **Sign-in expires**.
 
 ## Keys
 
@@ -125,6 +129,14 @@ Both are counted in PostgreSQL and shared by every replica. Limits on `/mcp/{slu
 | `UI_LOGO_URL` | none | Your logo: an https URL or a same-origin path such as `/logo.svg`. Without it, the product's mark is shown |
 | `SUPPORT_URL` | none | The **Help** link in the account menu: an http(s) URL or a `mailto:` address |
 | `TEAM_REQUEST_URL` | none | Where people request a team, such as a service desk form (http or https). Shown to people who aren't on a team |
+
+## Behind a proxy (`TRUSTED_PROXIES`)
+
+The portal serves plain http and expects TLS to end at a proxy, so `APP_URL` is `https://` and every request arrives from the proxy. The portal believes `X-Forwarded-For` only from peers inside `TRUSTED_PROXIES`. With it empty the header is ignored: that is safe (nobody can spoof an address), but per-address rate limits (sign-in, client registration, failed tokens), audit entries and access logs all name the proxy, so one noisy caller can use up everyone's allowance.
+
+- **A warning tells you.** With `TRUSTED_PROXIES` empty and a non-loopback `APP_URL`, a request that carries `X-Forwarded-For` or `Forwarded` makes the portal log `requests carry X-Forwarded-For (or Forwarded) but TRUSTED_PROXIES is empty…` at WARN level: once for the first such request, then at most once a minute. Nothing about the request changes. Setting `TRUSTED_PROXIES` to the proxy's network, such as `10.0.0.0/8`, stops it. The warning is not given when `TRUSTED_PROXIES` is set, even for a request from outside it.
+- **`open-mcp-portal doctor`** prints an info line (`configuration / trusted proxies`) when `APP_URL` is https and `TRUSTED_PROXIES` is empty. It can't see traffic, so ignore it when nothing sits in front of the portal. See [Health and doctor](/docs/operate/health-and-doctor#doctor).
+- **Sign-in cookie.** On https the sign-in state cookie is `__Host-omp_oidc_state` (host-only, `Secure`, `Path=/`), like the session cookie `__Host-omp_session`; over the development http origin the names have no prefix. For one release (v0.2.2) the old name `omp_oidc_state` is still accepted, so a person who started signing in just before an upgrade is not sent back to the start; it will be removed in v0.3.
 
 ## Safety checks
 
