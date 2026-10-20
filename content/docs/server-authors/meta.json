@@ -2,5 +2,5 @@
   "title": "For MCP server authors",
   "description": "What your server receives from Open MCP Portal and how to trust it",
   "root": true,
-  "pages": ["index", "mcp-protocol", "identity-token", "provider-tokens", "oauth-servers", "parameter-headers", "mail-example"]
+  "pages": ["index", "mcp-protocol", "identity-token", "what-servers-receive", "provider-tokens", "oauth-servers", "parameter-headers", "mail-example"]
 }

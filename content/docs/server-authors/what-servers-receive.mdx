@@ -1,0 +1,69 @@
+---
+title: What your server receives in each mode
+description: What an MCP server behind Open MCP Portal receives for each of the five authentication modes, how to verify it, what to expect of a person's own key, the portal's OAuth token and a client certificate, and where the identity token goes.
+---
+
+A team registers your server in one of five authentication modes. The mode decides what arrives next to the [identity token](/docs/server-authors/identity-token) and which header carries the token. This page is the author's side of [Register a server](/docs/teams/register-a-server#authentication-modes); [TLS](#a-client-certificate-and-a-private-ca) works with every mode.
+
+| Mode | What arrives with a call | Where the identity token is |
+|---|---|---|
+| **None** | Nothing of its own | `Authorization: Bearer` |
+| **Static credential** | The team's fixed parts (headers, bearer, Basic, query parameter) on every request | `Authorization: Bearer`, or `MCP-Gateway-Identity` when a part sets `Authorization` |
+| **Each person's own key** | The calling person's own key, as the team chose: a header, a bearer token or a query value | `Authorization: Bearer`, or `MCP-Gateway-Identity` when the key is a bearer token or in a header named `Authorization` |
+| **The portal's own OAuth client** | A token the portal got from your authorization server with the client credentials grant, in `Authorization: Bearer`, the same for every caller | `MCP-Gateway-Identity` |
+| **Sign-in with OAuth, per person** | The person's own token for your server, in `Authorization: Bearer` | `MCP-Gateway-Identity` |
+
+With **Send identity token** off, no identity token is sent in any mode. The header names keep `Gateway` and won't change.
+
+## How to verify the identity token in any mode
+
+**Read `MCP-Gateway-Identity` first; fall back to `Authorization: Bearer` only when it is absent.** In three of the five modes `Authorization` carries another credential (a person's key, the portal's token or a person's token), so a server that reads only `Authorization` would try to verify the wrong thing. The samples in [The identity token](/docs/server-authors/identity-token) already read the header in that order. Then check the signature (`ES256`, the portal's JWKS), `iss` and `aud` (your URL exactly as registered), as that page says.
+
+Then check **the other credential** your mode brings, as you would for any caller. The two answer different questions: the identity token says who the portal says is calling, and the credential is what your own system accepts.
+
+## Each person's own key
+
+The calling person's key arrives exactly as the team configured it: `Name: prefix + key` for a header, `Authorization: Bearer key` for a bearer token, or `?name=prefix+key` for a query parameter, added to each request by the portal. Check it as you check any personal key of yours. The portal doesn't test a key when a person pastes it, and it can't see what your server thinks of it.
+
+What to expect:
+
+- **Each call carries one person's key.** Different people's calls arrive with different keys, and a call is never sent with another credential in its place. When a person has no usable key, your server isn't called.
+- **A `401` or `403` makes people paste their key again.** The portal marks the key rejected, sends no retry and doesn't send that key again. Answer `401` for a key you don't accept. A `403` that is only a permission problem on one tool has the same effect, so if you want people to keep their key, report such a failure as a tool error (a normal result with `isError: true`) instead of an HTTP `403`.
+- **Discovery arrives with an editor's key.** Nobody has a key when the server is added, so the portal reads your capabilities (and runs **Test connection** and **Refresh capabilities**) with the key of an editor of the team who chose to be the setup person.
+- **Scheduled health checks arrive with no key at all.** Answer them with `401` or `403` and you count as healthy ("Reachable — requires sign-in"). Answer them with `200` and you are healthy too. Don't treat the missing key as an attack.
+- **A call an agent relays for a person** carries that person's key only if they switched on **Let my agents use this key**. You can't tell from the key; the identity token's `act` claim says an agent made the call.
+- **A query key travels in the URL.** Servers and proxies often log addresses, so don't log the query string. If your server accepts a header, tell the team to use one.
+- **If your server echoes the key** (in an error page, say), the portal removes it from the answer, in its plain, prefixed and URL-encoded forms. A server that transforms the key first (a hash, another encoding) isn't recognised, so don't echo it in any form.
+
+## The portal's own OAuth client
+
+For a server that authenticates the calling system. The portal is an OAuth client of **your authorization server**: it requests a token with `grant_type=client_credentials` at the token endpoint the team entered, and sends it as `Authorization: Bearer` on **every** request to your server: discovery, Refresh, Test, scheduled health checks and calls.
+
+What your server and your authorization server should expect:
+
+- **One token for every caller.** People, service accounts and calls an agent platform relays all arrive with the same portal token. Only the identity token in `MCP-Gateway-Identity` (and the portal's call log) says who is calling, so a server that ignores it can't tell callers apart. Health checks and Refresh carry no identity token.
+- **At the token endpoint:** a `POST` with `grant_type=client_credentials`, plus `scope`, `audience` and `resource` when the team set them. The client authenticates with HTTP Basic (`client_secret_basic`, the default) or the form body (`client_secret_post`); `private_key_jwt` and mTLS client authentication aren't supported. The answer must be JSON with an `access_token` of at most 8 KiB with no whitespace, and a `token_type` of Bearer (DPoP and MAC are refused). The request goes through the portal's address rules with no redirects and no proxy.
+- **Validate the token's audience yourself.** The portal sends `resource` (an RFC 8707 URI) and `audience` when configured, so that your authorization server can bind the token to your server. An authorization server that ignores both leaves the token usable at other servers that trust it, so check that a token is meant for your server.
+- **Token lifetime.** The portal reuses a token until 60 seconds before its `expires_in` (a token that lives under two minutes is used for half its life; with no `expires_in`, five minutes; never longer than 24 hours), so you'll see one token reused across many calls. Each replica of the portal keeps its own token, and your authorization server sees one request for concurrent callers on a replica. A token your authorization server revokes is used until your server refuses it.
+- **Answer `401` for a token you won't accept, and only when the call did not run.** A `401` makes the portal drop that token, get a new one and retry the call **once**; a second `401` fails the call with class `auth`. A server that runs the tool and then answers `401` would run it twice.
+- **If the token request fails**, the portal calls your server not at all, and the caller gets `machine_auth_unavailable` (the token endpoint is unreachable or answers an error) or an `auth` class error (the client was refused, check client ID, secret and scopes). A server that rejects every fresh token costs one token request per call until it is fixed.
+- **If your server echoes the token**, the portal removes it from the result and from recorded payloads.
+- The token request isn't covered by the server's [TLS settings](#a-client-certificate-and-a-private-ca): your authorization server must be reachable with the public roots and no client certificate.
+
+## A client certificate and a private CA
+
+Your team can give the portal a **CA bundle** and a **client certificate with its key** for your server's URL. It applies to every exchange with that URL, in every mode.
+
+What to expect from the portal, as a client:
+
+- **Your certificate must chain to the team's CA, and only that.** With a CA set it **replaces** the system roots for your server, so a public CA's certificate for your host isn't accepted, and the private CA vouches for no other server. Send the intermediates your chain needs, or the team must include them in the bundle.
+- **The host name is always checked.** The host in the URL must be in the certificate's Subject Alternative Names (a common name alone isn't enough). There is no setting that skips this or any other verification.
+- **TLS 1.2 is the minimum** (1.3 when both sides speak it). A server that doesn't speak TLS, or only older versions, fails with class `tls`.
+- **It presents the client certificate when you ask for one.** Request and verify it against your own CA. The certificate is **the portal's, for your server**: it says nothing about the caller, so use the identity token for that. The same certificate is presented for every caller of your server.
+- **A server that refuses the certificate**, by an alert or by closing the connection after the handshake, is reported to the team as class `tls`, as is one that wants a certificate and gets none.
+- **Every exchange has its own connection.** No connection, HTTP/2 session or TLS session is shared between two servers, or between two identities of one server, so expect a new handshake per exchange.
+- **Revocation isn't checked.** The portal doesn't use CRLs or OCSP to decide whether your certificate is still good.
+- **The address rule still applies on top**: your host is resolved once, every address is checked, and the connection goes to the checked address. A private address needs an internal-network entry by a platform admin; redirects are refused.
+- **Expiry is watched on the client certificate, not yours.** The team is warned 14 days before it expires, and renews it by uploading a new one. If you rotate your own server certificate or CA, tell the team so they can update the CA bundle: a changed CA sends a published server back to review.
+
+**Not covered:** the sign-in discovery and token endpoints of an OAuth server aren't read with the CA or the client certificate, so a server in per-person OAuth mode behind a private CA can't be set up yet.

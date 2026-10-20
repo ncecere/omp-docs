@@ -8,6 +8,7 @@ Your MCP server keeps running where your team runs it. Open MCP Portal connects 
 <Cards>
   <Card title="MCP protocol support" href="/docs/server-authors/mcp-protocol">The 2026-07-28 revision and every older one: how the portal negotiates with your server, relays its questions, streams progress and passes trace context.</Card>
   <Card title="The identity token" href="/docs/server-authors/identity-token">The signed JWT that says who is calling, and how to verify it against the portal's JWKS.</Card>
+  <Card title="What your server receives in each mode" href="/docs/server-authors/what-servers-receive">Per mode: none, a static credential, a person's own key, the portal's own OAuth token and per-person OAuth, plus a client certificate and a private CA, and where the identity token goes.</Card>
   <Card title="Provider tokens" href="/docs/server-authors/provider-tokens">The person's own token for GitHub, Google or another service, and the checks to make before you use it.</Card>
   <Card title="OAuth-protected servers" href="/docs/server-authors/oauth-servers">What the portal expects from a server that runs its own OAuth sign-in.</Card>
   <Card title="Parameter headers" href="/docs/server-authors/parameter-headers">Tool arguments the portal also sends as Mcp-Param-* headers.</Card>
@@ -22,7 +23,7 @@ Your MCP server keeps running where your team runs it. Open MCP Portal connects 
 
 The portal is stateless: it keeps no session with you between calls. To an older server, each call is its own MCP session with a new `initialize` handshake; to a 2026-07-28 server, each call is one request. Answer in JSON or as an SSE stream; the portal reads either. If you send `notifications/progress` for the call's progress token, the portal can stream it to a client that asked for it.
 
-Every forwarded call carries the [identity token](/docs/server-authors/identity-token) (unless your team turned off **Send identity token**, which is also the default for a new server with no authentication on a public host), your static credential if you registered one, and where relevant a [provider token](/docs/server-authors/provider-tokens) or, for an [OAuth-protected server](/docs/server-authors/oauth-servers), the person's own bearer token. The caller's own API key or OAuth token **never** reaches you.
+Every forwarded call carries the [identity token](/docs/server-authors/identity-token) (unless your team turned off **Send identity token**, which is also the default for a new server with no authentication on a public host), your static credential if you registered one (or, [depending on the mode](/docs/server-authors/what-servers-receive), the calling person's own key or the portal's own OAuth token), and where relevant a [provider token](/docs/server-authors/provider-tokens) or, for an [OAuth-protected server](/docs/server-authors/oauth-servers), the person's own bearer token. The caller's own API key or OAuth token **never** reaches you.
 
 ## What the portal does with your answers
 
