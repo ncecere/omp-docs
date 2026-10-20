@@ -1,6 +1,6 @@
 ---
 title: Metrics
-description: Open MCP Portal's Prometheus metrics on METRICS_ADDR, their labels, and useful alerts.
+description: Open MCP Portal's Prometheus metrics on METRICS_ADDR, their labels, and the Grafana dashboards and Prometheus alert rules that ship with them.
 ---
 
 Set `METRICS_ADDR` (for example `:9090`) to serve Prometheus metrics at `/metrics` on a listener of its own. It has **no authentication**: allow only your monitoring system to reach it (the Kubernetes example overlay has a NetworkPolicy from the `monitoring` namespace and an example `ServiceMonitor`).
@@ -32,7 +32,13 @@ Plus the Go runtime and process collectors. `omp_mcp_requests_total` counts requ
 
 `omp_agent_token_total{result}` counts the agent identity tokens the portal looked at (see [Agent platforms](/docs/administer/agent-platforms)). `ignored_not_relay` is a token sent with a credential that isn't a relay account's key: the call went on as that credential's own. `rejected_<reason>` is a token on a relay account's request that failed a check, so the request was refused: the reasons are `malformed`, `algorithm`, `key_id`, `type`, `untrusted_issuer`, `disabled_issuer`, `unknown_kid`, `jwks_unavailable`, `signature`, `audience`, `principal_type`, `claims`, `person_issuer`, `expired`, `not_yet_valid`, `lifetime`, `replay`, `other_platform` and `tool_mismatch`. A refused token leaves no call record, so this counter and a warning in the log are where such attempts show.
 
+## Dashboards and alert rules
+
+Since v0.3.1 the repository ships **five Grafana dashboards** (MCP traffic, MCP servers, providers and tokens, notifications, platform) and **14 Prometheus alert rules** with unit tests and a runbook entry each, built from the metrics above. A test checks every metric and label they use against the portal's metric registry. v0.3.1 adds no metric. [Tracing, dashboards and alerts](/docs/operate/tracing#dashboards) has the list, how to load them and `make prom-check`; the example overlay has a `PrometheusRule` beside the `ServiceMonitor`. They have not been checked against live data.
+
 ## Useful alerts
+
+Conditions worth alerting on, whether or not a shipped rule covers them:
 
 - `omp_payload_capture_errors_total` increasing: recordings are failing (calls still succeed).
 - No replica with `omp_loop_leader{loop="retention"} == 1` for an hour, or `omp_retention_last_success_timestamp_seconds` too old: old data isn't being deleted.
@@ -42,4 +48,4 @@ Plus the Go runtime and process collectors. `omp_mcp_requests_total` counts requ
 - `omp_agent_token_total{result=~"rejected_.*"}` increasing: a platform's agents are being refused (a wrong issuer or audience, keys that can't be fetched, a tool name that doesn't match). `jwks_unavailable` means person calls from that platform fail.
 - A high rate of `omp_mcp_rate_limited_total`, or of `omp_provider_token_refresh_total{result="unavailable"}`.
 
-There are no ready-made dashboards, alert rules or tracing yet.
+Traces are covered in [Tracing, dashboards and alerts](/docs/operate/tracing). They link to metrics only through the trace id on a call's record: exemplars are not built.

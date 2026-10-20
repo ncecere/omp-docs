@@ -5,7 +5,7 @@ description: Every Open MCP Portal setting, its default and bounds, from environ
 
 Open MCP Portal reads its settings when it starts. Everything else (publishing policy, internal networks, trusted clients, auth providers, limits, retention, redaction patterns) is set in the web app by platform admins and stored in PostgreSQL.
 
-These are the settings of Open MCP Portal v0.2.2, in the image `ghcr.io/ncecere/open-mcp-portal:v0.2.2` ([verify its signature](/docs/operate/compose#the-image)).
+These are the settings of Open MCP Portal v0.3.1, in the image `ghcr.io/ncecere/open-mcp-portal:v0.3.1` ([verify its signature](/docs/operate/compose#the-image)).
 
 ## Where settings come from
 
@@ -65,7 +65,7 @@ Registration is open to anyone who can reach the portal, so the cap bounds how m
 
 | Setting | Default | Notes |
 |---|---|---|
-| `ENCRYPTION_KEY` (secret) | none (required by `serve`) | 32 random bytes, base64 (`openssl rand -base64 32`). Encrypts MCP server header values, identity signing keys, auth provider client secrets, people's provider tokens, PKCE verifiers, consent links, recorded call contents, webhook destinations' URLs and signing secrets, and the state a client echoes back in a multi-step request |
+| `ENCRYPTION_KEY` (secret) | none (required by `serve`) | 32 random bytes, base64 (`openssl rand -base64 32`). Encrypts every part of an MCP server's static credential, identity signing keys, auth provider client secrets, people's provider tokens, PKCE verifiers, consent links, recorded call contents, webhook destinations' URLs and signing secrets, and the state a client echoes back in a multi-step request |
 | `ENCRYPTION_KEY_PREVIOUS` (secret) | none | The previous key during a rotation: values sealed with it still decrypt until `rotate-keys` re-encrypts them |
 | `API_KEY_PEPPER` (secret) | none (required by `serve`) | 32 random bytes, base64, different from the encryption key. Keys the HMAC that stores API keys, service account keys, automation tokens and OAuth tokens. Rotate it with `API_KEY_PEPPER_PREVIOUS`, never by just replacing it |
 | `API_KEY_PEPPER_PREVIOUS` (secret) | none | The previous pepper: keys and tokens made with it (automation tokens too, since v0.2.0) keep working, and keys are re-digested on use. Must differ from `API_KEY_PEPPER` |
@@ -102,6 +102,7 @@ Mail goes only to people whose address the identity provider reported as verifie
 | `HEALTH_CHECK_INTERVAL` | `5m` | How often enabled MCP servers are checked: `0` (off) or 30 seconds to 24 hours. One replica at a time |
 | `RETENTION_INTERVAL` | `15m` | How often the retention job runs (1 minute to 24 hours). Periods are set in Admin › Retention |
 | `RETENTION_BATCH_SIZE` | `1000` | Rows deleted per transaction (10 to 100,000) |
+| `PROVIDER_REFRESH_INTERVAL` | `0` (off) | How often a background pass refreshes the access tokens of connected accounts (auth providers) that expire before the next pass and were used in the last 7 days, so a grant the provider revoked is found before a call needs it. `0` is off; otherwise at least `1m`. One replica at a time. See [Auth providers](/docs/administer/auth-providers#background-refresh) |
 
 ## Rate limits
 
@@ -118,6 +119,24 @@ Both are counted in PostgreSQL and shared by every replica. Limits on `/mcp/{slu
 |---|---|---|
 | `METRICS_ADDR` | empty (off) | Serve Prometheus metrics at `/metrics` on this separate listener, such as `:9090`. No authentication: restrict it with network policy. Must differ from `LISTEN_ADDR` |
 | `METRICS_MAX_OBJECTS` | `200` | How many gateway, server and provider slugs are used as label values (10 to 10,000); others become `other` |
+
+Dashboards and alert rules for these metrics are in [Metrics](/docs/operate/metrics#dashboards-and-alert-rules).
+
+## Tracing
+
+OpenTelemetry tracing is **off** unless an endpoint is set. These are the standard OpenTelemetry variables (the YAML file takes the lower-case names). [Tracing, dashboards and alerts](/docs/operate/tracing) explains what a trace holds and how to sample.
+
+| Setting | Default | Notes |
+|---|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | empty (off) | The collector's OTLP/HTTP base URL, such as `http://otel-collector.observability:4318`; `/v1/traces` is added. Tracing is on when this or the next is set. No credentials, query or fragment in the URL |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | empty | The full traces URL, used as it is. Wins over the base URL |
+| `OTEL_TRACES_EXPORTER` | empty | `otlp` turns tracing on with the default endpoint `http://localhost:4318` when none is set; `none` turns it off whatever else is set |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | The only protocol spoken; another value is refused at start-up |
+| `OTEL_EXPORTER_OTLP_HEADERS` (secret) | empty | `key=value,key=value` sent with every export. `OTEL_EXPORTER_OTLP_HEADERS_FILE` works. Never logged or shown by `doctor` |
+| `OTEL_TRACES_SAMPLER` | `parentbased_traceidratio` | Also `always_on`, `always_off`, `traceidratio` and the `parentbased_` forms. Use `traceidratio` if untrusted clients can reach the portal |
+| `OTEL_TRACES_SAMPLER_ARG` | `0.1` | The ratio for the ratio samplers |
+| `OTEL_SERVICE_NAME` | `open-mcp-portal` | The `service.name` of the spans |
+| `TRACE_LINK_TEMPLATE` | empty | A URL containing `{trace_id}` once; a call's page shows its trace id as a link to it |
 
 ## The instance
 

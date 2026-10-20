@@ -13,6 +13,7 @@ Open MCP Portal is stateless: scale it horizontally. Any replica can serve any r
 | Identity signing-key rotation | Checked hourly | One replica at a time |
 | Notifications (fan-out, delivery of email and webhooks, the hourly scan for expiring keys) | `NOTIFICATION_INTERVAL` (15 seconds) | One replica at a time (advisory lock) |
 | Retention | `RETENTION_INTERVAL` (15 minutes) | One replica at a time |
+| Background refresh of connected accounts' tokens (optional) | `PROVIDER_REFRESH_INTERVAL` (`0`: off) | One replica at a time (advisory lock) |
 | Usage rollups | Every 5 minutes | One replica at a time |
 | Old rate-limit windows; expired sessions and consent links | Every minute; every 15 minutes | Every replica (idempotent deletes) |
 

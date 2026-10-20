@@ -32,6 +32,7 @@ kubectl -n open-mcp-portal exec deploy/open-mcp-portal -c portal -- /open-mcp-po
 |---|---|
 | `configuration` | The settings load and are valid for the mode (`serve` by default) |
 | `configuration / trusted proxies` | Information, when `APP_URL` is https and `TRUSTED_PROXIES` is empty: behind a proxy every request then appears to come from the proxy ([Behind a proxy](/docs/operate/configuration#behind-a-proxy-trusted_proxies)). `doctor` can't see traffic, so ignore it when nothing sits in front of the portal |
+| `configuration / tracing` | Information when tracing is off. When it is on, the collector's host and the sampler, never the path or the export headers. It doesn't contact the collector ([Tracing](/docs/operate/tracing#turn-tracing-on)) |
 | OAuth client registration | Information: whether open client registration is on, and the live registrations against `OAUTH_MAX_REGISTERED_CLIENTS` |
 | `safety production` | The production safety checks: no example keys, no `DEV_AUTH`, https `APP_URL` (info on a loopback `APP_URL`) |
 | `postgres connect` | PostgreSQL answers, and its version |

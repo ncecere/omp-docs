@@ -68,7 +68,7 @@ The base sets `LISTEN_ADDR=:8088`, `LOG_FORMAT=json`, `LOG_LEVEL=info`, `DEV_AUT
 - **PodDisruptionBudget**: `maxUnavailable: 1`; unhealthy pods never block a drain.
 - **ServiceAccount** with `automountServiceAccountToken: false`. The portal never calls the Kubernetes API.
 - **NetworkPolicies** (below).
-- **Metrics**: off by default. The example overlay sets `METRICS_ADDR=:9090`, adds a `metrics` port to the pods and the Service and a NetworkPolicy from the `monitoring` namespace, and keeps an example `ServiceMonitor` beside it. See [Metrics](/docs/operate/metrics).
+- **Metrics**: off by default. The example overlay sets `METRICS_ADDR=:9090`, adds a `metrics` port to the pods and the Service and a NetworkPolicy from the `monitoring` namespace, and keeps an example `ServiceMonitor` beside it. The overlay also has an example `PrometheusRule` (the alert rules) and, for [tracing](/docs/operate/tracing), an OTLP egress NetworkPolicy; neither is in the overlay's resources, so add them when the cluster has the Prometheus Operator's CRDs, or when you turn tracing on. See [Metrics](/docs/operate/metrics).
 
 ## Network policies
 
@@ -81,6 +81,8 @@ The policies select only the portal's pods, so the base can share a namespace:
 - TCP 443 to anywhere: MCP servers, the OIDC provider, auth providers' token, revocation and userinfo endpoints, and webhook destinations.
 
 **Notification email and webhooks.** The base allows TCP 443 only. If you set `SMTP_HOST`, add an egress rule for the SMTP port (587, 465 or 25) to your mail server in your overlay. Webhook destinations on another port than 443, and internal ones you list in `NOTIFY_WEBHOOK_ALLOWED_NETWORKS`, need rules too.
+
+**Tracing.** The base's default-deny egress also blocks an OpenTelemetry collector. Add the example overlay's `networkpolicy-otlp.yaml` (patch its namespace and pod labels to your collector's) and set `OTEL_EXPORTER_OTLP_ENDPOINT` in the overlay's `configMapGenerator`. See [Tracing](/docs/operate/tracing#turn-tracing-on).
 
 MCP servers on other ports (`:8443`, or plain http on 80 or 8080) need extra egress rules in your overlay, as the example shows; so do internal servers you allow in `UPSTREAM_ALLOWED_NETWORKS` or Admin › Internal networks. Many CNIs don't match pod addresses with `ipBlock`, so in-cluster servers (`*.svc.cluster.local`) usually need a `namespaceSelector`/`podSelector` rule for their namespace and port. If the portal allows an address but a policy drops the traffic, the server's health shows a timeout, not "Address not allowed".
 

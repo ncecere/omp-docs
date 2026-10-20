@@ -95,7 +95,7 @@ Which presets pre-fill it, from each provider's own documentation (checked in Oc
 
 ## Background refresh
 
-Optional, and off by default. Set `PROVIDER_REFRESH_INTERVAL` (default `0`, which is off; at least `1m`; see [Configuration](/docs/operate/configuration#background-refresh-of-provider-tokens)). One replica at a time then refreshes the connected accounts whose token expires before the next pass and that were used in the last 7 days. A grant the provider revoked then turns **needs to connect again** (and the person is told) before a call finds out. A connection is never refreshed twice for one expiry. It refreshes the stored token, also for providers that narrow.
+Optional, and off by default. Set `PROVIDER_REFRESH_INTERVAL` (default `0`, which is off; at least `1m`; see [Configuration](/docs/operate/configuration#background-work)). One replica at a time then refreshes the connected accounts whose token expires before the next pass and that were used in the last 7 days. A grant the provider revoked then turns **needs to connect again** (and the person is told) before a call finds out. A connection is never refreshed twice for one expiry. It refreshes the stored token, also for providers that narrow.
 
 ## How tokens are handled
 

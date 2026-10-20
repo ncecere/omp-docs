@@ -14,6 +14,7 @@
     "scaling",
     "health-and-doctor",
     "metrics",
+    "tracing",
     "backups",
     "security"
   ]

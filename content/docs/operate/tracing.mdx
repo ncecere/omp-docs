@@ -1,0 +1,117 @@
+---
+title: Tracing, dashboards and alerts
+description: Turn on Open MCP Portal's OpenTelemetry tracing, what a span holds and never holds, how to sample, the trace id on call records, and the Grafana dashboards and Prometheus alert rules that ship with it.
+---
+
+Open MCP Portal v0.3.1 can export **OpenTelemetry traces**, and ships **Grafana dashboards** and **Prometheus alert rules** for its [metrics](/docs/operate/metrics). Tracing shows where a slow call spent its time: in the portal, in the database, in a provider's token refresh or at the MCP server. It is **off** unless you configure an exporter. Off, the portal creates no spans, reads no trace headers and sends nothing, and a client's `traceparent`, `tracestate` and `baggage` pass through to the server exactly as they did before.
+
+<Callout type="warn" title="Not run against a real collector">
+The exporter was tested against a fake OTLP receiver, and Grafana loaded the five dashboards from files. It has not been run against a real OpenTelemetry Collector, Tempo or other backend, and the dashboards' queries have not been checked against live data.
+</Callout>
+
+## Turn tracing on
+
+Tracing is on when an OTLP endpoint is set. The portal speaks **OTLP over HTTP** (protobuf) only: point it at a collector (the OpenTelemetry Collector, Grafana Alloy or a vendor agent) and let that forward to Tempo, Jaeger or a hosted backend. The settings are the standard OpenTelemetry variables, plus one of the portal's own. The YAML file takes the lower-case names; `OTEL_EXPORTER_OTLP_HEADERS` may be read from `OTEL_EXPORTER_OTLP_HEADERS_FILE`.
+
+| Setting | Default | Notes |
+|---|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | empty (**off**) | The collector's base URL, for example `http://otel-collector.observability:4318`; `/v1/traces` is added. No credentials, query or fragment in the URL |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | empty | The full traces URL, used as it is. Wins over the base URL |
+| `OTEL_TRACES_EXPORTER` | empty | `otlp` turns tracing on with the OpenTelemetry default endpoint `http://localhost:4318` when none is set; `none` turns it off whatever else is set. Nothing else is supported |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | The only protocol spoken; another value is refused at start-up |
+| `OTEL_EXPORTER_OTLP_HEADERS` (secret) | empty | `key=value,key=value` sent with every export, for a collector or hosted backend that needs a token. Never logged or reported by `doctor` |
+| `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG` | `parentbased_traceidratio`, `0.1` | See [Sampling](#sampling) |
+| `OTEL_SERVICE_NAME` | `open-mcp-portal` | The `service.name` of the spans |
+| `TRACE_LINK_TEMPLATE` | empty | A URL containing `{trace_id}` once, which turns a call's trace id into a link. See [The trace id on a call](#the-trace-id-on-a-call) |
+
+The OpenTelemetry SDK also reads the standard `OTEL_EXPORTER_OTLP_CERTIFICATE`, `_TIMEOUT`, `_COMPRESSION` and the matching `_TRACES_` variables from the process environment (not from the YAML file). `OTEL_RESOURCE_ATTRIBUTES` is not read. The settings are also in [Configuration](/docs/operate/configuration#tracing).
+
+- **`doctor`** reports whether tracing is on, the collector's host and the sampler. It never prints the path or the headers, and it does not contact the collector.
+- **A collector that is down or slow loses spans, never requests.** Spans are exported in the background in batches, the queue is bounded and drops the excess, and on shutdown the portal flushes what is queued within `SHUTDOWN_TIMEOUT`.
+- **Use `https://` to a collector outside the cluster.** Spans are not secret, but they name your gateways and servers, and over `http://` the export headers and spans cross the network in clear text.
+
+**On Kubernetes**, the base's default-deny egress also blocks the collector. The example overlay has `networkpolicy-otlp.yaml`, an OTLP egress policy (patch its namespace and pod labels to your collector's), and you set `OTEL_EXPORTER_OTLP_ENDPOINT=http://<collector>.<namespace>:4318` in the overlay's `configMapGenerator`. The policy is an example, not in the overlay's `resources:`: add it when you turn tracing on. See [Install on Kubernetes](/docs/operate/kubernetes).
+
+## What a trace holds
+
+One trace per sampled request:
+
+- **`/mcp/{slug}`** is a server span named for the MCP method (`MCP tools/call`), with child spans for authentication (`mcp.authenticate`), gateway resolution (`mcp.resolve_gateway`), the rate limit (`mcp.rate_limit`), what the caller may use (`mcp.authorize`), the provider credential (`mcp.provider_credential`; a provider token refresh happens inside it) and one client span around the call to the server (`mcp.upstream.forward`, one per attempt).
+- **Every other request to the management API** is one server span named by its route pattern, such as `GET /v1/teams/{team}/gateways`.
+- **The registry's probes** (the scheduled health check, **Test** and **Refresh**) are `registry.probe` spans with the server's slug and the result. The scheduled health checks start their own traces.
+- Database queries are not spans.
+
+### What is in a span, and what never is
+
+Span attributes come from a **fixed allow-list**, and the code drops any other key: the MCP method, the gateway, server and provider slugs, the outcome, the principal kind (`api_key`, `oauth`, `service_account`), the protocol era, an error or rate-limit class, the HTTP method, the route pattern and the status code.
+
+Spans **never** carry a person, an email, a key or its name, a tool, prompt or resource name, arguments, results, headers, paths, client addresses or tokens. They have no events, and a failure is a class (`timeout`, `auth`, …), not the error's text. A test makes a call with sentinel secrets and scans every span.
+
+What the collector and its backend do see: the gateway, server and provider **slugs** (they name your objects; unlike metric labels they are not bounded), timings and outcomes. Treat the backend like your logs.
+
+### Trace context and the MCP servers
+
+The parent of the portal's span is the request's HTTP `traceparent` header, else the `traceparent` in `params._meta`, validated as before. When the portal's span is **sampled**, the call to the MCP server carries a `traceparent` whose parent is the portal's `mcp.upstream.forward` span, **to every server, third-party ones included**, with the client's `tracestate`. A trace id is not sensitive, but a third party can correlate calls it receives that carry the same id. `baggage` is passed exactly as the client sent it; the portal never adds any. When the trace is not sampled, or tracing is off, the client's own context passes on unchanged. Turn tracing off, or lower the sampler, to send fewer.
+
+## Sampling
+
+The default, `parentbased_traceidratio` at `0.1`, follows a sampled or unsampled parent (a client that traces its own requests decides) and samples one request in ten of the rest. Raise `OTEL_TRACES_SAMPLER_ARG` while you investigate and lower it afterwards. `always_on` traces every request and `always_off` none; `always_on`, `always_off`, `traceidratio` and the `parentbased_` forms are accepted.
+
+<Callout type="warn" title="A parent-based sampler lets a client ask for a trace">
+With a parent-based sampler, **anyone who can send a request can have it sampled** by sending a `traceparent` whose flag is `01`. The cost is bounded (about ten small spans a request, a bounded export queue that drops the excess, and the rate limits as always), but if untrusted clients can reach the portal, use `OTEL_TRACES_SAMPLER=traceidratio`, which ignores the parent. The cost is that a client's own sampled trace is then recorded only in part. A client can also choose the trace id, so a backend may show spans under an id a client picked; it can only attach spans to its own trace.
+</Callout>
+
+## The trace id on a call
+
+For a sampled request:
+
+- **Logs** carry `trace_id` and `span_id` beside `request_id`.
+- **The call record keeps the trace id** (`trace_id`; `McpCall.traceId` in the API). A call's page shows it as **Trace**. Calls recorded before v0.3.1, calls of requests the sampler dropped, and any call with tracing off have none. It is deleted with the call by [retention](/docs/administer/retention); your trace backend's own retention is separate.
+- **`TRACE_LINK_TEMPLATE` turns it into a link** (`McpCall.traceUrl`). The template holds `{trace_id}` once. For Tempo in Grafana, it is your Grafana's own Explore link with `{trace_id}` where the query goes, for example `https://grafana.example.com/explore?left=%7B%22datasource%22:%22tempo%22,%22queries%22:%5B%7B%22query%22:%22{trace_id}%22%7D%5D%7D`.
+
+Traces and metrics are linked only through this id. **Exemplars are not built.**
+
+## Dashboards
+
+Five Grafana dashboards are committed in the repository under [`deploy/grafana/dashboards/`](https://github.com/ncecere/open-mcp-portal/tree/v0.3.1/deploy/grafana/dashboards). Import each JSON file in Grafana (Dashboards › New › Import), or provision the directory with a file provider. Each asks for a Prometheus data source through its `datasource` variable.
+
+| Dashboard | Shows |
+|---|---|
+| **MCP traffic** | Tool calls, calls failing at servers, rate-limited requests, requests by outcome and method, call duration by gateway and server |
+| **MCP servers** | Servers by state (healthy, failing, not checked yet), failing health checks, forwarded calls and call duration by server |
+| **Providers and tokens** | Provider token refreshes by provider and result, refused and unavailable refreshes, agent platform and automation token results |
+| **Notifications** | Deliveries by channel and outcome, failed and retrying deliveries, events emitted and events that could not be |
+| **Platform** | HTTP requests, errors and latency by route, the PostgreSQL pool, background loop leaders, retention and usage rollup age, payload capture, process and versions |
+
+A test in the repository checks every metric and label the dashboards and rules use against the portal's metric registry, so a renamed metric fails CI instead of leaving an empty panel.
+
+## Alert rules
+
+[`deploy/prometheus/omp-alerts.yaml`](https://github.com/ncecere/open-mcp-portal/blob/v0.3.1/deploy/prometheus/omp-alerts.yaml) has **14 alert rules**, with promtool unit tests (`omp-alerts.test.yaml`). Load the file with `rule_files:` in Prometheus. For the Prometheus Operator, the example overlay has the same rules as a `PrometheusRule` (`prometheusrule.yaml`) beside the `ServiceMonitor`. Neither is in the overlay's `resources:`, because they need the operator's CRDs: add them when the cluster has them.
+
+The two "down" alerts match `job="open-mcp-portal"`, the name the example `ServiceMonitor` gives. Change it if your scrape configuration names the job otherwise.
+
+| Alert | Severity | Fires when |
+|---|---|---|
+| `OMPDown` | critical | No replica answered its `/metrics` scrape for 5 minutes (or none is scraped) |
+| `OMPReplicaDown` | warning | One replica isn't scraped while others are |
+| `OMPHTTPServerErrors` | warning | More than 5% of HTTP requests answered 5xx for 10 minutes |
+| `OMPDBPoolSaturated` | warning | A replica has had over 90% of its database connections in use for 10 minutes |
+| `OMPUpstreamErrorRatioHigh` | warning | Over 20% of tool calls end as `upstream_error`, `timeout` or `too_large` |
+| `OMPCallLatencyHigh` | info | The 95th percentile of forwarded calls to one server through one gateway is over 10 s for 15 minutes |
+| `OMPRateLimitingSustained` | warning | A rate limit refused more than 12 requests a minute for 15 minutes |
+| `OMPServersFailing` | warning | Enabled servers have failed their latest health check for 15 minutes |
+| `OMPProviderRefreshRefused` | warning | A provider refused more than 3 token refreshes in 30 minutes |
+| `OMPPayloadCaptureErrors` | info | Captures of call payloads failed (the calls themselves were served) |
+| `OMPRetentionStale` | warning | Nothing has purged a kind of data for over an hour |
+| `OMPUsageRollupStale` | warning | The usage rollup hasn't succeeded for an hour |
+| `OMPNoLoopLeader` | warning | No replica has led a background loop for 30 minutes |
+| `OMPNotificationDeliveryFailures` | warning | More than 3 notifications failed for good in an hour on one channel |
+
+Each alert links to its entry in the repository's [alert runbook](https://github.com/ncecere/open-mcp-portal/blob/v0.3.1/docs/phase6-operations.md#alert-runbook), which says what to check first. With tracing on, the runbook points you at a failing call's trace from its page.
+
+**Check the rules** from a checkout of the repository with `make prom-check`: it runs `promtool check rules` and the unit tests, with a local `promtool` or the pinned `prom/prometheus` image through Docker. CI runs it too.
+
+## Not built
+
+OTLP **logs or metrics**, **exemplars**, **database spans**, tracing the **browser**, and an in-product trace viewer.
