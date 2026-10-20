@@ -21,12 +21,15 @@ An **MCP server** is a remote server a team runs and registers in the portal: a 
 
 When a server is registered or refreshed, the portal reads what it offers. Each item is a **capability** of one of four kinds: **tool**, **prompt**, **resource** or **resource template**. The portal stores each capability's definition and a fingerprint of it, so it notices when a definition changes. See [Capabilities and change detection](/docs/teams/capabilities).
 
-A server authenticates the portal in one of three ways (its **auth mode**):
+A server authenticates the portal in one of five ways (its **auth mode**):
 
 - **None**: no credential of its own; calls carry the portal's signed identity token, unless the team turns that off (it starts off for a public server, on for an internal one).
 - **Static credential**: headers, a bearer token, Basic or a query key with fixed values, such as an API key, each stored encrypted.
+- **Each person's own key**: the server wants a personal API key or token. Each person pastes theirs once ([Keys for servers](/docs/use/keys-for-servers)), and it goes only with their own calls.
+- **The portal's own OAuth client**: the server authenticates the calling system. The portal gets a token from the server's authorization server and sends the same token for every caller.
 - **Sign-in with OAuth, per person**: the server is an OAuth resource server itself, such as GitHub's hosted MCP server. Each person signs in to it once, and their own token goes with each of their calls.
 
+In any mode a server can also have a private CA and a client certificate (mTLS). See [Register a server](/docs/teams/register-a-server#authentication-modes).
 ## The catalog
 
 The **catalog** lists the servers teams have published, with the capabilities that were approved. Anyone signed in can browse it. Publishing follows a platform **publishing policy**: under **Approval required** (the default) a platform admin reviews each server and each changed capability; under **Self-publish** a team's owners and admins publish directly. A platform admin can set a different policy for one team. See [Publishing and review](/docs/teams/publishing).

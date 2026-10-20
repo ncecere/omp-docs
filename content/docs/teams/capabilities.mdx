@@ -72,8 +72,12 @@ The server's Overview tab shows the MCP protocol revision the portal last negoti
 | No answer in time | The server's timeout passed |
 | Response too large | Over 1 MiB |
 | Address not allowed: private, loopback or a redirect | Blocked by the address guard, or the server redirected |
+| TLS problem (class `tls`) | The server's certificate isn't trusted, isn't valid for the host name or has expired, the server refused the portal's client certificate or wants one, or it doesn't speak TLS 1.2 or newer. See [TLS to the server](/docs/teams/register-a-server#tls-to-the-server) |
+| The portal couldn't get a token for this server | The server uses the portal's own OAuth client and its authorization server is unavailable or refused the client |
 
 For a server in OAuth mode, scheduled checks use nobody's token: an unauthenticated `initialize` that gets the expected `401` challenge for this server counts as healthy, shown as **Reachable — requires sign-in**. **Test connection** uses the setup person's connection.
+
+For a server that wants each person's own key, scheduled checks send nobody's key: a `401` or `403` counts as healthy, shown as **Reachable — requires sign-in**, and **Test connection** and **Refresh capabilities** use the key of the editor who chose to read the server's capabilities. A client certificate that expires within 14 days shows as a warning with the server's health.
 
 ## Disabling a server
 

@@ -20,10 +20,11 @@ What it can list, and who sees it:
 | **Review pending** | One item for the team's servers waiting for a platform admin's review | Information; warning when the oldest has waited over 3 days | Every member |
 | **Capability changes held back** | A published server with changed or new capabilities that aren't approved yet, so they're out of the catalog. Shows how many | Warning | Every member |
 | **Service account keys expiring** | Keys expiring within 14 days | Information; warning within 3 days | Owners and admins |
+| **Server certificate expiring** | An enabled server of the team, **published or not**, whose [mTLS client certificate](/docs/teams/register-a-server#tls-to-the-server) has expired or expires within 14 days | Information; warning within 3 days; critical once expired | Every member |
 | **Publisher tokens expiring** | The team's [publisher tokens](/docs/teams/publisher-tokens) expiring within 14 days | As above | Owners and admins |
 | **Notification failures** | The team's webhook destinations that keep failing or were stopped | Warning | Owners and admins |
 
-Members see what they can already open: the team's servers, review state and capability changes. Only **owners, admins and platform staff** see key and token expiries and notification problems, because only they can list those. Personal API keys and people's connections aren't on the team card: they belong to individuals.
+Members see what they can already open: the team's servers, review state and capability changes. Only **owners, admins and platform staff** see key and token expiries and notification problems, because only they can list those. A server's expiring client certificate is a server item, so every member sees it. Personal API keys and people's connections aren't on the team card: they belong to individuals.
 
 For members, the card is hidden when nothing needs the team. Owners and admins see **All clear**. An archived team shows only its archived notice. Each kind lists at most 20 items; when more are cut, the card says how many. The same data is available to scripts from `GET /v1/teams/{team}/attention` ([reference](/docs/api/reference/teams/getTeamAttention)), for team members and platform staff.
 
@@ -38,7 +39,7 @@ Notifications reach people in the inbox (the bell), by email if the operator set
 | `capability.changed` | An owner, admin or editor | A published server's definitions changed or new ones appeared, and are held back from the catalog |
 | `publish.decided` | An owner or admin | A platform admin approved or rejected a server |
 | `upstream_signin.lapsed` | An owner, admin or editor | A server's setup sign-in needs a new consent |
-| `key.expiring` | An owner or admin (for the team's service account keys and publisher tokens) | A key or token that lasted more than 7 days is within 7 days of expiring |
+| `key.expiring` | An owner or admin (for the team's service account keys and publisher tokens); an owner, admin or editor (for a server's client certificate) | A key or token that lasted more than 7 days is within 7 days of expiring; or a server's mTLS client certificate expires within 14 days (`keyKind` `server_certificate`) |
 
 You also get notifications about **your own** things, whatever your role: your personal API keys expiring and your connections needing a new consent. Each person turns events and channels on or off for themselves: see [Notification preferences](/docs/use/notification-preferences). Publication requests (`publish.requested`) go to platform admins, not to teams.
 
