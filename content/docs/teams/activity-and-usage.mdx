@@ -21,7 +21,7 @@ A gateway's **Activity** tab lists its calls, newest first, for the team's **own
 | Needed a connection | Not sent: the person had to connect or reconnect an account first, and their client got a link |
 | Rate limited | Not sent: a rate limit was exceeded |
 
-Each row names the caller: a person with an API key ("API key: Laptop"), a person through a connected app ("via Claude Code", or "via &lt;name&gt; (unverified)" for an app that registered itself), or a service account with the key used ("Service account · platform-tools · Key: GitHub Actions").
+Each row names the caller: a person with an API key ("API key: Laptop"), a person through a connected app ("via Claude Code", or "via &lt;name&gt; (unverified)" for an app that registered itself), or a service account with the key used ("Service account · platform-tools · Key: GitHub Actions"). A call an [agent platform](/docs/administer/agent-platforms) relayed for a person is recorded under the relay service account and reads like "Mail assistant via Pi Durable Platform · for Ada Lovelace" (with "(not present)" when the platform says so), or "no person named". The call's page lists the agent, the person, whether they were present, and the outcome. The person filter includes the calls their agents made for them.
 
 ## A call's page
 
