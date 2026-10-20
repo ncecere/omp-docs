@@ -1,6 +1,6 @@
 ---
 title: Registering an MCP server
-description: Add a remote MCP server to your team in Open MCP Portal, detect how it signs people in, choose none, a static credential or per-person OAuth, and reach servers on internal networks.
+description: Add a remote MCP server to your team in Open MCP Portal, detect how it signs people in, choose one of five authentication modes (none, a static credential, each person's own key, the portal's own OAuth client or per-person OAuth), set up TLS with a private CA and a client certificate, and reach servers on internal networks.
 ---
 
 Team editors, admins and owners register the MCP servers the team runs under **MCP servers** › **Add server**. Open MCP Portal reaches remote servers over **Streamable HTTP**; it doesn't host or start servers. A new server is private to the team: the team can use it in its own gateways at once, and other teams see it only after it's [published](/docs/teams/publishing).
@@ -18,7 +18,9 @@ Team editors, admins and owners register the MCP servers the team runs under **M
 - **Timeout (seconds)**: how long one exchange with the server may take, 1 to 120 (30 by default).
 - **Enabled**: turned off, nothing connects to the server, it isn't health-checked, and it can't be published.
 
-**Authentication**: how the portal authenticates to the server (below).
+**Authentication**: how the portal authenticates to the server: one of [five modes](#authentication-modes).
+
+**TLS to the server** (optional, under Settings once the server exists): a private CA and a client certificate, in any mode. See [TLS to the server](#tls-to-the-server).
 
 When you save, the portal reads the server's capabilities straight away. The server is created even if that fails; the error is shown, and you can **Refresh capabilities** later.
 
@@ -39,6 +41,20 @@ When you save, the portal reads the server's capabilities straight away. The ser
 Detection follows the MCP authorization specification: the `resource_metadata` from the `401` challenge (or the well-known fallbacks), then the authorization server's metadata in the specification's order, including path insertion (`/.well-known/oauth-authorization-server/login/oauth` for GitHub). It refuses metadata whose `resource` doesn't match the URL or whose `issuer` doesn't match, and an authorization server without PKCE S256. When the server's resource differs from your URL only by a trailing slash or letter case, the result offers to use the server's own form (GitHub's is `https://api.githubcopilot.com/mcp/`, with the slash). Every request goes through the same address guard as calls; detection makes at most 8 requests of 5 seconds each, and each person can detect 10 times a minute. **Requests made** lists them.
 
 ## Authentication modes
+
+A server is in exactly one of five modes. Each mode has its own secrets, and [TLS to the server](#tls-to-the-server) is separate and works with every mode.
+
+| Mode | Whose credential the server gets | Use it when | Where the identity token goes |
+|---|---|---|---|
+| [**None**](#none) | None of its own | The server needs no credential, or only the portal's [identity token](/docs/server-authors/identity-token) | `Authorization: Bearer` (unless **Send identity token** is off) |
+| [**Static credential**](#static-credential) | The team's: fixed values that everyone's calls carry | One shared key or header set is enough, and it is fine that every caller acts as that key | `Authorization: Bearer`, or `MCP-Gateway-Identity` when a part sets `Authorization` |
+| [**Each person's own key**](#each-persons-own-key) | Each person's own API key or token, which they paste once | The server wants a personal key or token per person, not OAuth | `Authorization: Bearer`, or `MCP-Gateway-Identity` when the key itself is in `Authorization` |
+| [**The portal's own OAuth client**](#the-portals-own-oauth-client) | The portal's: a token it gets with the OAuth client credentials grant | The server authenticates the calling system (an internal API behind an identity provider, a vendor's machine client), not the person | `MCP-Gateway-Identity` |
+| [**Sign-in with OAuth, per person**](#sign-in-with-oauth-per-person) | Each person's own sign-in to the server's own authorization server | The server is an OAuth resource server that must know the person (GitHub's hosted MCP server) | `MCP-Gateway-Identity` |
+
+The three modes with a secret of their own that isn't the team's static credential (each person's key, the portal's OAuth client, per-person OAuth) send one credential per call, so they can't be combined with a [user authorization requirement](/docs/teams/user-authorization) (`auth_conflict`). Per-person OAuth and the portal's OAuth client also exclude a static `Authorization` part. Other static parts, such as a tenant header, may stay and are sent with everyone's calls.
+
+**Switching modes cleans up the old mode's secrets.** Leaving *each person's own key* deletes everyone's keys; leaving *the portal's own OAuth client* deletes the client and its secret; leaving *OAuth* deletes the connections. The static credential and the TLS settings aren't a mode's and stay. A URL on another origin never carries any secret along, in any mode (see [Editing and deleting](#editing-and-deleting)).
 
 ### None
 
@@ -62,6 +78,60 @@ Each value is encrypted on its own with the installation's `ENCRYPTION_KEY` and 
 **A query part travels in the URL.** The portal adds it to each request at send time and never saves it in the server's URL (a saved address with a query is still refused), and it removes the value, also in its URL-encoded form, from error messages, logs, health messages and recorded payloads. But servers, proxies and their logs often record addresses, so the form warns, and a header is better whenever the server accepts one. A query value is sent only to the address you entered it for.
 
 **A server that already has one header** keeps working with no change: it shows as one header part, and its credential moves into the new storage only when you save the credential as a list. Adding, changing or removing parts doesn't send a published server back to review by itself (it sends nothing to a new address), but the review covers each part's kind and name (never a value), so a part added after a reviewer opened the server makes their approval stale (`409 changed_since_review`): they reload and look again.
+
+### Each person's own key
+
+For a server that wants a **personal API key or token**, not OAuth. A static credential would make every caller act as the key's owner; in this mode the team says **how a key travels** and **each person pastes their own**, once. The key is sealed per person and server, shown only as its last four characters, and sent only on that person's calls. Choose Authentication › **Each person's own key** and fill in:
+
+| Field | Meaning |
+|---|---|
+| **How the key is sent** (`placement`) | `header`: a header you name, with the key after an optional prefix. `bearer`: `Authorization: Bearer` and the key. `query`: a query parameter you name, added to each request and never to the saved URL |
+| **Name** | The header (any valid name the portal doesn't own; `Authorization` is allowed) or the query parameter (letters, digits, `_`, `.` and `-`, up to 64, never starting `mcp-`). Not used for `bearer` |
+| **Prefix** | Sent before the key, such as `Token `. Up to 64 characters, one line. Not used for `bearer` |
+| **Label** | What the key is called on the page where people enter it, such as "Acme API key" |
+| **Help** | Plain text on that page: where to find the key |
+
+Prefer a header or a bearer token. A query value is part of the address, and servers and proxies often log addresses, so the form warns you, and the page where people paste the key warns them. The portal itself never logs the key.
+
+**What it excludes.** A user authorization requirement, a static part that sets the same header or query parameter, and, for a bearer key or a key in a header named `Authorization`, a static part that sets `Authorization` (`auth_conflict`). When the key occupies `Authorization`, the identity token arrives in `MCP-Gateway-Identity`.
+
+**The editor's setup key.** Nobody's key exists when the server is added, so the server is created **without reading its capabilities** and shows that setup is required. An editor, admin or owner of the team enters their own key under Account › [My connections](/docs/use/keys-for-servers) › **Keys for servers** and chooses **Use my key to read this server's capabilities**. The portal reads the server with that key, **Test connection** and **Refresh capabilities** use it too, and the server's Overview names whose key it is. An editor can do this before any gateway offers the server.
+
+**Scheduled health checks send nobody's key**, because a robot shouldn't use a person's key. A `401` or `403` answer counts as healthy and shows as "Reachable — requires sign-in".
+
+**Allow agents.** An agent acting for a person through an [agent platform](/docs/administer/agent-platforms) uses that person's key only if they switched on **Let my agents use this key** for the server (off by default). It never gets a link to enter a key: a tool error says to enter it under My connections. A service account has no key and is refused (`-32010`, reason `service_account`).
+
+**What a person sees.** The first call that needs their key doesn't reach the server: the client shows a link to a page that names the server, its team, the address the key goes to and how it is sent; they paste the key in a password field, once. They can also add, replace or remove it ahead of time. Nobody can read a key back, the owner included. If the server answers `401` or `403` to a call, the key is marked **rejected**, isn't sent again and the person is asked for it again. Everything they do is in [Keys for servers](/docs/use/keys-for-servers).
+
+**What deletes people's keys.** Everyone's keys for the server are deleted (audited as `mcp_server.person_secrets_reset`, with a count) when its URL moves to another origin, when its mode changes, when the placement changes (a header to a query parameter puts keys where they weren't meant to go) and when the server is deleted. An edit to the path, the name, the prefix, the label or the help keeps them. A published server goes back to review under **Approval required** when it switches to this mode, or when the placement, name or prefix changes. The form warns before you save, and warns in whichever mode you choose if you are leaving this one. An [automation token](/docs/teams/publisher-tokens) can't switch a server to this mode or send its settings.
+
+A server author's view of what arrives is in [The identity token](/docs/server-authors/identity-token#where-it-arrives) and [What a server receives in each mode](/docs/server-authors/what-servers-receive).
+
+### The portal's own OAuth client
+
+For a server that authenticates **the calling system**: an internal API behind an identity provider, or a vendor's server with a machine client. The portal is an OAuth client of the server's authorization server. It gets a token with the **client credentials grant**, keeps it in memory and sends it as `Authorization: Bearer` on every request to the server (discovery, Refresh, Test, health checks and calls); the identity token moves to `MCP-Gateway-Identity`.
+
+<Callout type="warn" title="Everyone who calls the server shares the portal's token">
+The token is the portal's, not a person's. Every caller gets the same one: people, service accounts and calls an agent platform relays. The server can tell callers apart only through the [identity token](/docs/server-authors/identity-token), and the call log is the other record of who called. If the server must know the person, use [per-person OAuth](#sign-in-with-oauth-per-person) or [each person's own key](#each-persons-own-key).
+</Callout>
+
+Choose Authentication › **The portal's own OAuth client**. It needs no detection, but **Detect sign-in** helps: when the server publishes OAuth metadata, the result also says whether its authorization server lists `client_credentials`, and offers the token endpoint and resource to fill in. A server with no OAuth metadata at all is set up by hand.
+
+| Field | Meaning |
+|---|---|
+| **Token endpoint** | Required. https, unless the address rules allow plain http for it; no user name, query or fragment. Checked against the address rules when saved and on every token request |
+| **Client ID** and **client secret** | Required the first time. The secret is sealed with `ENCRYPTION_KEY` and never shown again: the page shows only a hint |
+| **Token method** | `client_secret_basic` (the default: the ID and secret in a Basic header) or `client_secret_post` (in the body) |
+| **Scopes** | Optional |
+| **Resource** and **audience** | Optional. `resource` (an absolute URI) binds the token to this server where the authorization server honours it; some, such as Auth0, want `audience` instead. An authorization server that ignores both leaves the token usable at other servers that trust it, so set what yours supports |
+
+Team editors may set it up. An automation token may not, even on a server with no credentials (`403 token_not_allowed`). The mode excludes a static `Authorization` part and a user authorization requirement.
+
+**If it fails.** When the authorization server is unavailable, a call fails with `machine_auth_unavailable` and the server isn't contacted. When it refuses the client, the error class is `auth` with a message that says to check the client ID, secret and scopes. A `401` from the server renews the token once and retries the call once. Only an OAuth error code is ever kept from the authorization server, never its text.
+
+**What changes it.** A different token endpoint, client ID or server origin needs the **client secret entered again in the same request** (`422 client_secret_required`), and nothing is sent to the new endpoint or host. A changed path, scope, method, audience or resource keeps the secret. A published server goes back to review under **Approval required** when it switches to this mode, or when its token endpoint, client ID, audience or resource changes or a scope is added; a new secret doesn't. Leaving the mode deletes the client and its secret.
+
+The token request doesn't use the server's [TLS settings](#tls-to-the-server): an authorization server behind a private CA isn't supported yet. The details a server author needs are in [What a server receives in each mode](/docs/server-authors/what-servers-receive#the-portals-own-oauth-client).
 
 ### Sign-in with OAuth, per person
 
@@ -132,12 +202,39 @@ Out of the box, servers must be at **public** addresses over https. A server on 
 
 The check happens when you save (the URL's form and literal addresses), before every exchange, and every time the portal connects: each address the host name resolves to must be allowed. Redirects are never followed, and proxies aren't used. If the platform's list changes so that your server is no longer allowed, its next check fails with "Address not allowed".
 
+## TLS to the server
+
+An internal server often sits behind a **private certificate authority** and wants a **client certificate** (mutual TLS, mTLS). Both are optional, work in every authentication mode, and are saved under Settings › **TLS to the server**: paste PEM text or choose a file.
+
+| Field | What it is |
+|---|---|
+| **CA bundle** | The CA that signed the server's certificate, with any intermediates (PEM certificates only, at most 10 and 64 KiB) |
+| **Client certificate** and **private key** | The certificate the portal presents when the server asks, with its key. The key must be unencrypted (remove a passphrase first) and belong to the first certificate. The key is write-only: sealed with `ENCRYPTION_KEY`, never shown, logged, audited or recorded |
+| **Remove TLS settings** | Removes everything |
+
+**The CA replaces the system roots for this server only.** With a CA set, the server's certificate must chain to it and nothing else is trusted for it, so a public CA can't vouch for an internal host, and your private CA vouches for no other server. There is no "system roots plus this CA" choice.
+
+**Verification can't be turned off.** There is no option to skip it anywhere. The host name in the URL is always checked against the certificate's Subject Alternative Names (a common name alone doesn't count), and the minimum is TLS 1.2. A certificate that doesn't list the host name fails with an error that says so. The [address rules](#internal-servers) are separate and unchanged: a private address still needs an internal-network entry, redirects are refused and no proxy is used.
+
+**What is checked when you save.** The form refuses (`invalid_tls`, with the field and a reason): input that isn't PEM, a private key where a certificate belongs, a passphrase-protected key, a key that doesn't belong to the certificate, RSA keys under 2048 bits, ECDSA curves other than P-256, P-384 and P-521, MD5 or SHA-1 signatures, a client certificate that has expired, and a CA bundle in which every certificate has expired. Responses show fingerprints, subjects, issuers and dates, never the key.
+
+**Expiry.** A client certificate that expires within **14 days** shows a warning on the server's Health and Overview, on the [admin overview](/docs/administer/overview#what-counts-as-needing-attention) and in the team's [attention list](/docs/teams/attention-and-notifications) (`server_certificate_expiring`), and the team's owners, admins and editors get a `key.expiring` [notification](/docs/administer/notifications) for it. A renewed certificate warns again when its turn comes.
+
+**What triggers a review.** Under **Approval required**, a new, changed or removed **CA** sends a published server back to review, because it changes who the portal trusts for that server (reason `upstream_tls_changed`). A new client certificate doesn't. The review covers both fingerprints, so a reviewer who opened the server before either changed gets `409 changed_since_review` and reloads. Any change to the TLS settings reads the capabilities again at once.
+
+**Another origin never keeps the key or the CA.** If the new URL has another scheme, host or port, the change is refused (`tls_key_required`) unless the same edit sends a new client certificate and key, removes the certificate or removes the TLS settings.
+
+**When a handshake fails**, the error class is `tls`, with a message for each case: an untrusted certificate (with a hint to add the private CA), a name that isn't in the certificate, an expired certificate, a client certificate the server refused or wanted, or a server that doesn't speak TLS 1.2 or newer. It shows on Health, Test and Refresh, and on call records.
+
+**Limits.** The settings are for the MCP server's own URL only. The sign-in discovery and the token endpoints aren't read with the server's CA or client certificate, so a server in **per-person OAuth** mode behind a private CA can't be set up yet, and the token endpoint of **the portal's own OAuth client** must be reachable with the system roots and no client certificate. The portal doesn't check CRLs or OCSP, doesn't issue or renew certificates, and has no platform-wide CA library. An [automation token](/docs/teams/publisher-tokens) can't send TLS settings.
+
 ## Editing and deleting
 
 The server's **Settings** tab changes everything except the slug. Some changes have side effects, and the form warns before you save:
 
 - **A URL change** reads the capabilities again from the new URL at once and clears the stored health checks. On a published server under **Approval required**, it sends the server back to review.
-- **A URL on another origin never keeps a stored credential value, of any part.** If the new URL has another scheme, host or port, the change is refused (`auth_value_required`, naming the part) unless the same edit enters **every part's value again** (a Basic part needs the user name and the password) or removes the credential, so a stored secret, a query key included, can't be sent to a new host by editing the URL. A server in OAuth mode loses everyone's connections and goes back to the setup sign-in. A change to the path, a trailing slash or letter case isn't another origin. The audit entry records the old and new origin.
+- **A URL on another origin never keeps a stored credential value, of any part.** If the new URL has another scheme, host or port, the change is refused (`auth_value_required`, naming the part) unless the same edit enters **every part's value again** (a Basic part needs the user name and the password) or removes the credential, so a stored secret, a query key included, can't be sent to a new host by editing the URL. A server in OAuth mode loses everyone's connections and goes back to the setup sign-in. The same rule covers the other secrets: the portal's OAuth client secret must be entered again (`client_secret_required`), the TLS client key and CA must be entered again or removed (`tls_key_required`), and every person's key is deleted. A change to the path, a trailing slash or letter case isn't another origin. The audit entry records the old and new origin.
+- **Changing the mode** deletes the old mode's secrets, as [above](#authentication-modes). Switching a published server into each person's own key or the portal's own OAuth client, or changing what a reviewer approved in them or the CA, sends it back to review under **Approval required**; the review covers all of it in one digest.
 - **Changing the authentication** of a published server to OAuth, to another authorization server, or to wider scopes sends it back to review under **Approval required**. A URL change, another authorization server or another client ID signs everyone out of an OAuth server (their tokens are erased; they sign in again). Leaving OAuth mode deletes the connections and revokes them where possible.
 - **Delete** (owners and admins) removes the server and its capabilities and, for an OAuth server, revokes and deletes everyone's connections to it. Its call records are kept.
 
