@@ -1,6 +1,6 @@
 ---
 title: Registering an MCP server
-description: Add a remote MCP server to your team in Open MCP Portal, detect how it signs people in, choose none, a static header or per-person OAuth, and reach servers on internal networks.
+description: Add a remote MCP server to your team in Open MCP Portal, detect how it signs people in, choose none, a static credential or per-person OAuth, and reach servers on internal networks.
 ---
 
 Team editors, admins and owners register the MCP servers the team runs under **MCP servers** › **Add server**. Open MCP Portal reaches remote servers over **Streamable HTTP**; it doesn't host or start servers. A new server is private to the team: the team can use it in its own gateways at once, and other teams see it only after it's [published](/docs/teams/publishing).
@@ -14,7 +14,7 @@ Team editors, admins and owners register the MCP servers the team runs under **M
 
 **Connection**
 
-- **URL**: the server's Streamable HTTP endpoint, such as `https://tools.example.com/mcp`. It must be https, unless a platform admin allowed plain http for an internal host. It can't contain a user name and password, a query or a fragment: credentials go in the authentication settings.
+- **URL**: the server's Streamable HTTP endpoint, such as `https://tools.example.com/mcp`. It must be https, unless a platform admin allowed plain http for an internal host. It can't contain a user name and password, a query or a fragment: credentials go in the authentication settings (a key that belongs in the query is a query part of the [static credential](#static-credential)).
 - **Timeout (seconds)**: how long one exchange with the server may take, 1 to 120 (30 by default).
 - **Enabled**: turned off, nothing connects to the server, it isn't health-checked, and it can't be published.
 
@@ -28,9 +28,9 @@ When you save, the portal reads the server's capabilities straight away. The ser
 
 | Result | Means |
 |---|---|
-| **Answers without sign-in** | Use **None**, or **Static header** if the server needs a key the challenge doesn't reveal |
+| **Answers without sign-in** | Use **None**, or **Static credential** if the server needs a key the challenge doesn't reveal |
 | **OAuth: each person signs in** | The server is an OAuth resource server. The result shows the authorization server, whether PKCE S256 is supported, the scopes it supports and how the portal can get a client. **Sign-in with OAuth, per person** becomes available |
-| **Needs credentials, but doesn't offer OAuth sign-in** | It answered `401` or `403` without usable OAuth metadata: use a **Static header** |
+| **Needs credentials, but doesn't offer OAuth sign-in** | It answered `401` or `403` without usable OAuth metadata: use a **Static credential** |
 | **Couldn't reach the server** | A network error or a `5xx` |
 | **The portal won't connect to this address** | The address is blocked or not allowed (see [Internal servers](#internal-servers)) |
 
@@ -44,11 +44,24 @@ Detection follows the MCP authorization specification: the `resource_metadata` f
 
 No credential of its own: calls carry the portal's signed identity token, in `Authorization: Bearer`, unless you turn **Send identity token** off ([below](#send-identity-token)). The server can verify the token like any OAuth bearer token. See [The identity token](/docs/server-authors/identity-token).
 
-### Static header
+### Static credential
 
-One header with a fixed value, such as `Authorization: Bearer …` or `X-API-Key: …`, sent with every request (discovery, tests, health checks and calls). The value is encrypted with the installation's `ENCRYPTION_KEY` and never shown again: the server's pages show only that a value is set and, for values of at least 8 characters, its last 4. When you edit the server, leaving the value empty keeps it; **Remove the header and its stored value** removes both.
+The server's own credential, with fixed values, sent with every request (discovery, tests, health checks and calls). It is a list of up to **eight parts**, edited under Authentication › **Static credential** with **Add part**:
 
-If the header is `Authorization`, the identity token moves to `MCP-Gateway-Identity`. The names `MCP-Gateway-Identity`, `MCP-Gateway-Provider` and `MCP-Gateway-Provider-Token` are reserved.
+| Part | Sent as | You enter |
+|---|---|---|
+| **Header** | The header you name, with the value, such as `X-API-Key: …` | Header name, value |
+| **Bearer token** | `Authorization: Bearer <token>` | Token |
+| **Basic** | `Authorization: Basic` with the user name and password | User name, password |
+| **Query parameter** | The parameter you name, added to the request's query, such as `?key=…` | Parameter name, value |
+
+Each value is encrypted on its own with the installation's `ENCRYPTION_KEY` and never shown again: the server's pages show each part's kind and name and, for values of at least 8 characters, the last 4 characters. When you edit the server, leaving a stored part's value empty keeps it; removing the part removes its value. Two parts can't have the same kind and name, and the names `MCP-Gateway-Identity`, `MCP-Gateway-Provider` and `MCP-Gateway-Provider-Token` are reserved.
+
+**One part can set `Authorization`.** A header named `Authorization`, a bearer token and Basic each set it, so at most one of them is allowed (`auth_conflict`). When a part sets `Authorization`, the identity token moves to `MCP-Gateway-Identity` (also on calls an [agent platform](/docs/administer/agent-platforms) relays), as it did for a static `Authorization` header. Otherwise it arrives as `Authorization: Bearer`. See [The identity token](/docs/server-authors/identity-token#where-it-arrives).
+
+**A query part travels in the URL.** The portal adds it to each request at send time and never saves it in the server's URL (a saved address with a query is still refused), and it removes the value, also in its URL-encoded form, from error messages, logs, health messages and recorded payloads. But servers, proxies and their logs often record addresses, so the form warns, and a header is better whenever the server accepts one. A query value is sent only to the address you entered it for.
+
+**A server that already has one header** keeps working with no change: it shows as one header part, and its credential moves into the new storage only when you save the credential as a list. Adding, changing or removing parts doesn't send a published server back to review by itself (it sends nothing to a new address), but the review covers each part's kind and name (never a value), so a part added after a reviewer opened the server makes their approval stale (`409 changed_since_review`): they reload and look again.
 
 ### Sign-in with OAuth, per person
 
@@ -93,7 +106,7 @@ GitHub's server needs some tool arguments as HTTP headers too; the portal sends 
 **The default depends on the server.** When you add a server, the switch starts:
 
 - **off** for a server with **no authentication on a public host**, and for a host name the portal can't resolve in time (nothing shows it is your company's, and sending less is the safer mistake);
-- **on** for a server on an **internal host** (one that **Admin › [Internal networks](/docs/administer/internal-networks)** names, or a private address), and for the [static header](#static-header) and [OAuth](#sign-in-with-oauth-per-person) modes.
+- **on** for a server on an **internal host** (one that **Admin › [Internal networks](/docs/administer/internal-networks)** names, or a private address), and for the [static credential](#static-credential) and [OAuth](#sign-in-with-oauth-per-person) modes.
 
 The add form shows the default for the address you type and says why, and you can change it before you save. If a public server expects the token, turn the switch on. **Servers you registered before v0.2.2 keep their setting**, which was on unless a team turned it off; nothing is changed for them. Afterwards you can change the switch at any time.
 
@@ -124,8 +137,8 @@ The check happens when you save (the URL's form and literal addresses), before e
 The server's **Settings** tab changes everything except the slug. Some changes have side effects, and the form warns before you save:
 
 - **A URL change** reads the capabilities again from the new URL at once and clears the stored health checks. On a published server under **Approval required**, it sends the server back to review.
-- **A URL on another origin never keeps the stored header value.** If the new URL has another scheme, host or port, the change is refused (`auth_value_required`) unless the same edit also supplies a new header value or removes the header, so a stored secret can't be sent to a new host by editing the URL. A server in OAuth mode loses everyone's connections and goes back to the setup sign-in. A change to the path, a trailing slash or letter case isn't another origin. The audit entry records the old and new origin.
+- **A URL on another origin never keeps a stored credential value, of any part.** If the new URL has another scheme, host or port, the change is refused (`auth_value_required`, naming the part) unless the same edit enters **every part's value again** (a Basic part needs the user name and the password) or removes the credential, so a stored secret, a query key included, can't be sent to a new host by editing the URL. A server in OAuth mode loses everyone's connections and goes back to the setup sign-in. A change to the path, a trailing slash or letter case isn't another origin. The audit entry records the old and new origin.
 - **Changing the authentication** of a published server to OAuth, to another authorization server, or to wider scopes sends it back to review under **Approval required**. A URL change, another authorization server or another client ID signs everyone out of an OAuth server (their tokens are erased; they sign in again). Leaving OAuth mode deletes the connections and revokes them where possible.
 - **Delete** (owners and admins) removes the server and its capabilities and, for an OAuth server, revokes and deletes everyone's connections to it. Its call records are kept.
 
-Every change is in the team's audit log; header values and secrets never are.
+Every change is in the team's audit log; credential values and secrets never are (the log names each part's kind and name).

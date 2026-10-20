@@ -5,7 +5,7 @@ description: Make a server's tools act as the caller on GitHub, Google or anothe
 
 Some servers need to act **as the person calling**: create a GitHub issue as them, search their Gmail. With **user authorization**, Open MCP Portal gets each person's own token for a service, with their consent, and sends it to your server with each call that needs it. Your server stores no tokens and runs no OAuth flow of its own.
 
-This is for servers in **None** or **Static header** mode that call a third-party API. A server that *is* OAuth-protected itself uses [Sign-in with OAuth, per person](/docs/teams/register-a-server#sign-in-with-oauth-per-person) instead; the two can't be combined on one server.
+This is for servers in **None** or **Static credential** mode that call a third-party API. A server that *is* OAuth-protected itself uses [Sign-in with OAuth, per person](/docs/teams/register-a-server#sign-in-with-oauth-per-person) instead; the two can't be combined on one server.
 
 ## Set the requirement
 

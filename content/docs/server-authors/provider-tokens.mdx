@@ -38,7 +38,7 @@ The portal doesn't check that the provider account belongs to the person (for ex
 
 ## Recorded call contents
 
-When your team (or a gateway's) turns on recording of call contents, the portal stores each call's arguments and your result, redacted. Headers are never stored, and the identity token, the provider token and your static header value are replaced by `[REDACTED]` wherever they appear in a result. Still, don't echo credentials: other secrets in your results are caught only by the redaction rules.
+When your team (or a gateway's) turns on recording of call contents, the portal stores each call's arguments and your result, redacted. Headers are never stored, and the identity token, the provider token and every part of your static credential are replaced by `[REDACTED]` wherever they appear in a result. Still, don't echo credentials: other secrets in your results are caught only by the redaction rules.
 
 ## Example
 

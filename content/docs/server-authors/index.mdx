@@ -22,7 +22,7 @@ Your MCP server keeps running where your team runs it. Open MCP Portal connects 
 
 The portal is stateless: it keeps no session with you between calls. To an older server, each call is its own MCP session with a new `initialize` handshake; to a 2026-07-28 server, each call is one request. Answer in JSON or as an SSE stream; the portal reads either. If you send `notifications/progress` for the call's progress token, the portal can stream it to a client that asked for it.
 
-Every forwarded call carries the [identity token](/docs/server-authors/identity-token) (unless your team turned off **Send identity token**, which is also the default for a new server with no authentication on a public host), your static header if you registered one, and where relevant a [provider token](/docs/server-authors/provider-tokens) or, for an [OAuth-protected server](/docs/server-authors/oauth-servers), the person's own bearer token. The caller's own API key or OAuth token **never** reaches you.
+Every forwarded call carries the [identity token](/docs/server-authors/identity-token) (unless your team turned off **Send identity token**, which is also the default for a new server with no authentication on a public host), your static credential if you registered one, and where relevant a [provider token](/docs/server-authors/provider-tokens) or, for an [OAuth-protected server](/docs/server-authors/oauth-servers), the person's own bearer token. The caller's own API key or OAuth token **never** reaches you.
 
 ## What the portal does with your answers
 

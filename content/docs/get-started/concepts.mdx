@@ -24,7 +24,7 @@ When a server is registered or refreshed, the portal reads what it offers. Each 
 A server authenticates the portal in one of three ways (its **auth mode**):
 
 - **None**: no credential of its own; calls carry the portal's signed identity token, unless the team turns that off (it starts off for a public server, on for an internal one).
-- **Static header**: one header with a fixed value, such as an API key, stored encrypted.
+- **Static credential**: headers, a bearer token, Basic or a query key with fixed values, such as an API key, each stored encrypted.
 - **Sign-in with OAuth, per person**: the server is an OAuth resource server itself, such as GitHub's hosted MCP server. Each person signs in to it once, and their own token goes with each of their calls.
 
 ## The catalog

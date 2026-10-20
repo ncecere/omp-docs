@@ -26,7 +26,7 @@ Always on. Values that look like these are replaced with `[REDACTED]` in every r
 
 **Sensitive member names**: JSON members named `password`, `passwd`, `secret`, `token`, `accesstoken`, `refreshtoken`, `idtoken`, `apikey`, `authorization`, `cookie`, `setcookie`, `clientsecret`, `privatekey` or `sessionid` (compared in lower case, without `-` and `_`) always have their value replaced.
 
-Each call's own secrets (the identity token, a provider token, the caller's credential and the server's static header value) are also replaced wherever they appear, and binary content becomes `[binary N bytes]`. Headers are never recorded.
+Each call's own secrets (the identity token, a provider token, the caller's credential and every part of the server's static credential) are also replaced wherever they appear, and binary content becomes `[binary N bytes]`. Headers are never recorded.
 
 ## Your patterns
 

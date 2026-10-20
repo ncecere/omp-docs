@@ -27,7 +27,7 @@ Tool annotations and model output are never used for authorization. Definitions 
 - A person's provider token goes only to a server whose requirement for that capability names that provider **and that the person allowed**, at the address (scheme, host and port) it had when they allowed it; never on lists, discovery, tests or health checks. Moving a server to another host, or making it require another provider, ends everyone's permission. The token still holds every scope the person granted that provider, so a server they allowed receives all of them.
 - A server's stored header value never follows a change of URL to another origin: the edit is refused unless it supplies a new value or removes the header.
 - A person's token for an OAuth-protected server goes only to that server's URL, which must equal its metadata's `resource`, and to its own token and revocation endpoints.
-- Header names `MCP-Gateway-Identity`, `MCP-Gateway-Provider` and `MCP-Gateway-Provider-Token` are reserved, so a team can't forge them with a static header.
+- Header names `MCP-Gateway-Identity`, `MCP-Gateway-Provider` and `MCP-Gateway-Provider-Token` are reserved, so a team can't forge them with a static credential.
 
 ## Credentials at rest
 
