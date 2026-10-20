@@ -1,0 +1,248 @@
+---
+title: Agent platforms
+description: "Trusting an agent platform such as Pi Durable Platform to name the person an agent acts for: the trust model, setting it up end to end, relay accounts, the call log, the limits, and what was and wasn't verified."
+---
+
+An **agent platform** such as [Pi Durable Platform](https://github.com/ncecere/pi-durable-platform) runs agents for people and for teams. When an agent calls a tool through a gateway of Open MCP Portal, the portal can treat the call as **the person's own**: their gateway access, their minimum roles, their own connections (their GitHub, their mail), recorded under their name, with the agent named as the actor. This page is for platform admins, and for team owners who run a relay. It was added in v0.3.0 ([release notes](/docs/releases/v0-3-0)).
+
+Without this, an agent of Pi Durable Platform reaches the portal as a team [service account](/docs/teams/service-accounts), and everything it does is the service account's. Nothing here changes that for a service account key used on its own.
+
+<Callout type="warn" title="Not yet run against a live Pi Durable Platform">
+The verifier was checked against tokens produced by Pi Durable Platform v0.4.0's real signing code, and the rest with a fake issuer. A run against a live Pi Durable Platform has not been done; [Check it end to end](#check-it-end-to-end) is the procedure for doing it once before you rely on this. See [What was and wasn't verified](#what-was-and-wasnt-verified).
+</Callout>
+
+**Nothing changes until a platform admin adds a trusted platform and marks a relay service account.**
+
+## The trust model in plain words
+
+Two things have to be true for an agent's call to become a person's call:
+
+1. **A team service account that a platform admin marked as the platform's relay** makes the call. Pi Durable Platform holds that account's key, as it holds a key for any server. The key alone gives the account's own access and nothing more.
+2. **The call carries a signed token from the platform**, in the `MCP-Gateway-Identity` header, that says which agent is calling and, when the platform's own records say so, which person the agent acts for and whether that person is present. The token lasts five minutes and is good for one request.
+
+The portal trusts the platform for **one statement only**: *this call is for person P*, made from the platform's own records. It does not trust the platform for the person's roles, teams or email, for which gateways they may use, or for whether they connected an account. Those come from the portal's database on every call. The person is found by their sign-in at your identity provider, never by email.
+
+Three limits follow from that:
+
+- **A token only counts with a relay's key.** The platform alone, or the key alone, is not enough. On any other credential (a personal key, a connected app, a service account that is not a relay) the token is ignored and counted.
+- **The call can reach no more than the relay could.** The call is allowed as the person *and* as the relay account, so the relay's team decides which gateways its agents can ever use, and a person never gets more through an agent than they have themselves.
+- **An agent never gets a consent link.** An agent has nobody to open one.
+
+What a compromised key or platform can do is in [Security](/docs/operate/security#agent-platforms) and the repository's [threat model](https://github.com/ncecere/open-mcp-portal/blob/v0.3.0/docs/threat-model.md#68-the-agent-platform-relay-decisions-65-to-67).
+
+## Set it up
+
+You need the portal and Pi Durable Platform signed in with **the same identity provider** (the person's issuer and subject in the token must be the ones the portal stored when they signed in, and the issuer must equal the portal's `OIDC_ISSUER` exactly, trailing slash or not, as your provider writes it), Pi Durable Platform v0.4 or later in proxy mode, and a platform admin.
+
+<Steps>
+<Step>
+
+### Create a service account and a key
+
+In the team that will own the connection: **Service accounts** › **Create service account** (role **Member**, or **Editor** if agents need capabilities that ask for editors), then **Keys** › **Create key**. Copy the key; it is shown once. The account decides which gateways agents can reach at all: the team's own gateways and platform gateways granted to the team. A key can be limited to some gateways. See [Service accounts](/docs/teams/service-accounts).
+
+</Step>
+<Step>
+
+### Register the portal's gateway in Pi Durable Platform
+
+As an MCP server there (a platform server, or a team's own): URL `<APP_URL>/mcp/<gateway slug>`, header `Authorization: Bearer omp_sa_…` (the key), **Send identity** on, and `identityAudience` set to the portal's `APP_URL` exactly, for example `https://mcp.example.com`. Only platform admins at Pi Durable Platform should be able to set `identityAudience` on a server (see [the limits](#limits-you-should-know)). Leave `identityEmail` off unless you want the platform to send people's email: the portal never uses the email to find anyone.
+
+</Step>
+<Step>
+
+### Trust the platform in the portal
+
+**Admin › Trusted agent platforms** › **Trust a platform**:
+
+- **Issuer:** the platform's `APP_URL`, exactly as it writes it in a token's `iss` (an https address).
+- **Keys address:** leave empty for `<issuer>/.well-known/mcp-identity-jwks.json`. It follows the address rule of MCP servers: an internal address only if a platform admin allowed it under [Internal networks](/docs/administer/internal-networks) (add the platform there first if it runs inside your network); loopback, link-local and metadata addresses are never allowed. **The address is always https.** An Internal networks entry that allows plain http for the host does not apply here, and an `http://` keys address is refused when saved and again before each fetch, because the keys decide who the portal believes a person is. Put the platform behind TLS, with a certificate your portal trusts, even inside the cluster.
+- **Audience:** leave empty for this portal's `APP_URL`.
+
+Only a platform admin can add, change, test or delete a platform. No automation token can, whatever its scope.
+
+</Step>
+<Step>
+
+### Test the keys
+
+On the platform's row menu, **Test the keys**: the portal fetches the platform's key set the way a verification does and shows the key IDs, or says why it couldn't (not allowed, redirect, timeout, status, content type, too large, not a key set, no usable keys). The result stays on the page as the *last fetch*.
+
+</Step>
+<Step>
+
+### Mark the relay
+
+On the platform's row, **Relay accounts…** › search for the service account and mark it as a relay (or **Mark as a relay** on the service account's own page). Only a platform admin can. The team's owners and admins see the mark and can't change it.
+
+</Step>
+<Step>
+
+### People connect their accounts
+
+A person needs a portal account (they signed in once) and, for capabilities that act as them on another service, their own connection under [Account › My connections](/docs/use/connecting-accounts), with each server they want agents to use allowed. Agents can't ask: a call that needs a connection that isn't there fails with a message that says where to connect.
+
+</Step>
+<Step>
+
+### Try it, then read the call log
+
+Follow [Check it end to end](#check-it-end-to-end), then open the calls ([below](#what-the-call-log-shows)).
+
+</Step>
+</Steps>
+
+## Relay accounts
+
+A relay is an ordinary team service account with a mark. An account is a relay for **one** platform; marking it again for another moves it. Platform admins mark and clear relays; team owners and admins see the mark on the account (**Agent platform relay**) and in the service account list. Marking and clearing are audited. See [Service accounts](/docs/teams/service-accounts#relay-accounts) for the team's side.
+
+What the relay's team should know: its admins hold the relay's key by design, and the people its agents act for appear in the team's call log. That is the point of an audit, and it follows from the relay account being the team's.
+
+## What the portal checks
+
+For a request whose credential is a relay account's key and that carries `MCP-Gateway-Identity`:
+
+| Check | Rule |
+|---|---|
+| Shape | One header, at most 8 KiB, a compact signed token. Only `ES256`; `none`, HS256, RS256 and every other algorithm are refused, and the key is never taken from the token |
+| Issuer | The platform's `iss`, exactly, added **and turned on**. An unknown or disabled issuer is refused before any key is fetched |
+| Signature | By the key the platform's key set publishes for that key ID |
+| Audience | `aud` contains the platform's audience |
+| Claims | `principal_type` is `agent`; the agent, team and token IDs are present; a named person has an issuer equal to `OIDC_ISSUER` and a subject |
+| Time | 30 seconds of skew either way; a lifetime of at most 10 minutes (the platform uses 5) |
+| Replay | A token is accepted once, by any replica |
+| The credential | The key's account is a relay **for this platform** |
+| The request | On a tool call, the token's `tool` claim is present and equals the name the client called (the name the portal exposes, such as `github__create_issue`). On every other method it is absent. A token minted for one tool can't be used for another tool or for another kind of request |
+
+The agent's name and the team slug in the token are shown in the call log, clipped and cleaned of control characters and of Unicode formatting characters such as right-to-left overrides and zero-width spaces. The portal decides on the person's sign-in and the team's own rules, never on a claim's name or email.
+
+### What a failed check does
+
+| Case | Result |
+|---|---|
+| A token with any credential that isn't a relay account's key | **Ignored**: the call is that credential's own. Counted (`omp_agent_token_total{result="ignored_not_relay"}`) and logged as a warning, at most once a minute per credential |
+| A token on a relay account's request that fails a check, or is another platform's | **The request is refused**: HTTP `403`, JSON-RPC `-32001`, "The agent identity token was refused (reason). The request was not run." Nothing runs, and the portal does not fall back to the account's own call, because that would turn a person's call into the team's |
+| A relay account's request with no token | The account's own call, as before (but refused for a capability that [requires a present person](#calls-that-need-the-person-there)) |
+| A valid token that names nobody (a team agent's shared thread, or a team agent's work with no thread) | The account's own call; the agent and platform are recorded, and the server behind the gateway gets no `act` claim. Also refused for a capability that requires a present person |
+| A valid token naming a person the portal doesn't know, or who is suspended | A tool error ("This agent acts for a person who has no active Open MCP Portal account…", or "…whose account is suspended"); other methods answer `-32010`. **Never** the account's own call |
+
+The refusal reasons are the `rejected_…` values of the metric, listed in [Metrics](/docs/operate/metrics#agent-identity-tokens). The person is read from the database on **every** call: suspending them, or removing them from a team, takes effect on their agents' next call, and nothing about who a person is is cached. Calls already running are not cancelled.
+
+## What a call may do
+
+The call is allowed as the person **and** as the relay account:
+
+- **Gateways.** A gateway is usable only if the person may use it (their team membership, or a grant to them, their team or their SSO group) **and** the relay account may (its team's own gateways, or a platform gateway granted to its team). A person outside the relay's team can't use the team's gateways through it, and a gateway granted only to the person isn't reachable through the relay.
+- **Minimum roles.** A capability with a minimum role on a team gateway needs both the person's role in the team and the account's role (`member` or `editor`) to meet it: the lower of the two decides. An owner reaches no more through an `editor` relay than the relay could.
+- **The key's own limits** (a key limited to some gateways) apply as for any key.
+- **Rate limits.** The relay account's limit counts the call, and so does the person's own per-person limit.
+
+## Agents and connections
+
+A relayed person call uses the person's own connections (`MCP-Gateway-Provider-Token`), as their own call would, and only for servers they allowed.
+
+An agent has nobody to open a link. For a relayed person call the portal **never** answers `-32042`, a consent link or an `input_required` result, whatever the client declared, and stores no consent request. A capability that needs a connection the person hasn't made returns a **tool error** (a prompt or resource read: `-32010` with the same text) that names the provider and says where to connect, for example:
+
+> `github__create_issue needs your Github account (repo). Connect your Github account under Account › My connections in Open MCP Portal, then try again.`
+
+This covers a missing, lapsed or too narrow connection, an MCP server's own sign-in (in OAuth mode, including an upstream `401` that can't be refreshed and a `403 insufficient_scope`), and a server the person hasn't allowed to use their account. The call is recorded as `needs_authorization` with the error class `needs_connection`. If a server asks for input while serving a relayed call, the call fails with a tool error: an agent can't answer it.
+
+**Allowing a server without a call.** The person allows a *server* from Account › My connections: **Allow servers…** on the connection lists the servers that need that provider and that the person may use through a gateway now, each with its team, address and the scopes it asks for, and **Allow**. When an agent's call fails with "needs you to allow STATUS (tools) to use your Github account", the person does exactly that. See [Connecting accounts](/docs/use/connecting-accounts#allow-servers-from-my-connections).
+
+## Calls that need the person there
+
+Some tools shouldn't run while nobody is watching: send mail, post, spend. The platform's token says whether the person is **present**: true for a thread of their own conversation, false for scheduled work, webhooks and other runs. A server's editors can turn on **Require a present person for calls from agents** on the server's **Settings** and override it per capability. It is off by default. See [Register a server](/docs/teams/register-a-server#require-a-present-person) and [Capabilities](/docs/teams/capabilities#require-a-present-person).
+
+On a **relay account**, a call to such a capability is refused with a tool error (a prompt or resource read: `-32010`), recorded as denied with the error class `person_not_present`, unless its token names a person and says that person is present. That covers a named person who isn't present, a valid token that **names nobody** (a team agent's shared thread or background run), and a relay key with **no token at all**. Calls that don't arrive on a relay account are never affected.
+
+Requiring a present person narrows what agents can do, so turning it on needs no review. Relaxing it on a published server sends the server back to review, because what was approved relied on it.
+
+## What the server behind the gateway sees
+
+The identity token the portal signs for the MCP server has the **person** as the principal, `client` set to the relay account's name, and an `act` claim naming the agent, on relayed person calls and never otherwise. See [The identity token](/docs/server-authors/identity-token#calls-from-agents).
+
+**Leave Send identity on for a server that must tell agents from people.** `act` lives in the identity token, so a server whose **Send identity token** switch is off gets no identity token and no `act`, **but a relayed call still carries the person's own provider token** when the capability needs one. That server can't tell an agent's call from the person at the keyboard. If a server that receives people's tokens must know who is calling, or must refuse unattended calls itself, turn Send identity on; use **Require a present person** when the rule is the same for every caller.
+
+## What the call log shows
+
+- **Calls** (team: owners and admins; platform: admins and auditors): the principal is the relay service account, because it owns the key, and the row reads like "Mail assistant via Pi Durable Platform · for Ada Lovelace", with "(not present)" when the platform says so, or "no person named". The call's page lists the agent, the person, whether they were present, and the outcome and error class: `needs_authorization` / `needs_connection`, `denied` / `person_not_present`, `person_no_account`, `person_suspended`, and the usual `no_access` / `role` when the intersection leaves nothing.
+- **A person's calls.** The call list's person filter includes the calls their agents made for them, because the record names the person.
+- **The audit log:** `agent_platform.create`, `agent_platform.update`, `agent_platform.delete` (with how many relays it had), `service_account.relay_set`, `service_account.relay_clear` (on the account's team), `mcp_server.update` (the present-person switch) and `mcp_capability.presence_set`. A token, a key or a person's claim is never in them. See [Audit log](/docs/administer/audit-log).
+- **Metrics and logs:** `omp_agent_token_total{result}`. Tokens, keys and the `MCP-Gateway-Identity` header are never logged, recorded or returned.
+
+A refused token leaves no call record or audit entry, only the counter and a warning in the log, so a team's admins can't see failed attempts on their relay in Calls.
+
+## Keys, rotation and outages
+
+- **Cache.** Each replica caches a platform's keys for the shorter of the platform's `Cache-Control max-age` and 5 minutes: 60 seconds when the answer has no `max-age`, never less than 10 seconds.
+- **Rotation.** A token with a key ID the portal hasn't seen makes the portal fetch the key set again, at most twice a minute per platform per replica. While the platform publishes both an old and a new key, both are accepted. A key the platform withdraws is refused once the replica's cache expires: at most 5 minutes later.
+- **Outage.** If the portal can't refresh a platform's keys, the keys it already has keep verifying for **15 minutes past their expiry**. After that every token fails (`jwks_unavailable`) and agent calls with a person are refused until the keys can be fetched again. Calls by relay accounts with no token are unaffected, and a platform that has never been reached verifies nothing.
+- **Time.** The portal's replicas and the platform need reasonably synchronised clocks; 30 seconds of skew are allowed.
+
+## Check it end to end
+
+**This has not been run.** Before relying on it, do it once on a real deployment:
+
+1. In the portal: a team, a service account `pdp-relay` (role **Editor**) and a key; a gateway with a harmless tool that echoes who called (`whoami` of the repository's fake server, or any tool that does) and a tool that needs a provider connection (for example GitHub's `get_me`, with the person's connection and server permission).
+2. In Pi Durable Platform: register `<APP_URL>/mcp/<slug>` with the key as `Authorization`, **Send identity** on and `identityAudience` set to `APP_URL`. Create a personal workspace agent for a person who has signed in to both.
+3. In the portal: trust the platform (issuer = its `APP_URL`), **Test the keys** (expect its key ID), mark `pdp-relay` as its relay.
+4. In a private thread of that person, ask the agent to call `whoami`. Expect `principal_type: user`, the person's ID and email, `client: pdp-relay`, and `act` with the agent's ID, name, the platform's issuer and `person_present: true`. The call log shows the agent, the platform and the person. **If the call is refused as `tool_mismatch`, Pi Durable Platform puts a different name in `tool` than the portal's exposed tool name.**
+5. Ask for the provider tool before the person has connected: expect a tool error naming the provider and Account › My connections, and no link. Connect and allow the server, ask again: it works as them.
+6. In a shared thread, or from a schedule: the call is the relay's own (no `act`) or has `person_present: false`. With **Require a present person** on the capability, the scheduled call and a shared thread's call (which names nobody) are refused (`person_not_present`).
+7. Suspend the person in the portal: the next agent call is refused ("account is suspended"). Remove them from the team: the gateway is gone for them at once. Reactivate: it works again.
+8. Turn the platform off (**Admin › Trusted agent platforms**, the row's **Turn off**; **Stop trusting…** deletes it): the next call is refused (`disabled_issuer`). Rotate the platform's signing key and check that calls keep working after one unknown-key fetch.
+
+To try the portal's side without the platform, the repository's [agent platforms guide](https://github.com/ncecere/open-mcp-portal/blob/v0.3.0/docs/agent-platforms.md#try-it) describes minting a token with any ES256 key whose public half you serve as a key set.
+
+## Limits you should know
+
+These are accepted for now.
+
+**A token is bound to the platform's audience and to the tool it was minted for, not to a relay or a gateway** (review finding M-1, tracked in [#62](https://github.com/ncecere/open-mcp-portal/issues/62)). The audience is one value for the whole platform, so a valid, unexpired, unused token is accepted with **any** relay key marked for that platform, for any gateway. The tool check stops a token being used for another tool or another kind of request, but a hostile server can name its tool like a high-value portal tool, so it does not close this scenario, which needs several things at once:
+
+1. At the platform, someone who may set `identityAudience` on a server (a team admin, if the platform allows it) registers a server they control with `identityAudience` equal to the portal's `APP_URL`, and gets it into an agent a colleague talks to in a private thread.
+2. When the agent calls that server, the platform sends it a token naming the colleague, with that audience, valid for five minutes.
+3. That person also holds the key of **any** relay service account of that platform (for example as an admin of a portal team that has one), and presents the stolen token with that key, for a call whose tool name matches the token's `tool`, once, within about five and a half minutes.
+4. The portal then runs that call as the colleague, limited to the relay's reach, including the colleague's own delegated provider tokens for servers they allowed.
+
+It is limited because a token is single-use, short-lived, needs a relay's key and a matching tool name, and the call is bounded by the relay's reach. What to do **at the platform**, because the portal can't enforce it: only platform admins may set `identityAudience`, a team server must never get a token whose audience equals a trusted portal audience, and each portal gateway or relay should have its own platform server with its own audience. A per-gateway audience and a claim that names the intended relay are **not built**.
+
+**A server with Send identity off** gets the person's provider token on a relayed call and no `act` claim. Leave Send identity on for servers that must tell agents from people.
+
+**A compromised platform signing key** can speak as any person who has a portal account, for any call the relay could make itself, using those people's delegated tokens for servers they allowed. Turn the platform off or have it withdraw the key to stop it; the call log names the agent, the person and the platform for every call.
+
+**A person removed at the identity provider** stays reachable through agents until suspended or removed in the portal, as with any credential. SCIM is on the [roadmap](/docs/releases/roadmap).
+
+**Smaller limits.** The portal can't know that `person_present: true` is true: the platform says so, and a token with inconsistent claims is not refused. The refetch budget for an unknown key ID is per platform and replica, so someone holding a relay key can use it up and make a token with a just-rotated key ID wait about a minute. A token is spent when it verifies, before the request's content type, size, rate limit and gateway are checked, so a request that then fails (`415`, `429`, `404`) can't be retried with the same token; the platform sends a fresh token with every request.
+
+## What was and wasn't verified
+
+**Checked:**
+
+- The verifier against tokens and key sets produced by Pi Durable Platform v0.4.0's own signing and key-serving code: 19 tokens and 5 key sets, with every accept and reject matching the platform's design note, including key rotation, clock-skew edges, replay and tampering.
+- The rest (relay marks, the person lookup, the call) against a fake issuer that serves a key set over TLS and signs with locally generated keys, in the test suite.
+- An independent security review of this work: no Critical or High findings. Its findings were applied or documented, and are in the [release notes](/docs/releases/v0-3-0#what-changed).
+- A browser check of Admin › Trusted agent platforms: the empty state and the add dialog, where a plain-`http` keys address is refused with an explanation.
+
+**Not checked:**
+
+- **A live Pi Durable Platform:** its gateway and runtime end to end (which token it attaches to which request, and what it puts in `tool`), and a live deployment (real DNS and TLS, your identity provider's real issuer spelling, clock skew). Tracked in [#63](https://github.com/ncecere/open-mcp-portal/issues/63).
+- **A browser look** at the relay control on service accounts, the present-person switches and the **Allow servers…** dialog; they are covered by web and integration tests.
+- **Several replicas behind a balancer** (tested as separate service instances sharing one database), and **clock skew** between the portal and the platform on a real host (tested with a controllable clock).
+- **Several identity providers for people:** a person's issuer must equal `OIDC_ISSUER`.
+
+## Troubleshooting
+
+| You see | Likely cause |
+|---|---|
+| Calls through the relay work but ignore the person (no `act`) | The token isn't sent (Send identity is off at the platform), names nobody (a shared thread), or the key's account isn't marked as a relay. Look for `ignored_not_relay` in the metrics and a warning in the logs |
+| `403` with `(untrusted_issuer)` | The issuer isn't added, or differs from the platform's `iss` by a character (a trailing slash) |
+| `(audience)` | The platform's `identityAudience` isn't the platform's audience here (default `APP_URL`). A platform server **without** an `identityAudience` gets tokens whose audience is that server's own URL, which for the portal's gateway is `<APP_URL>/mcp/<slug>`. Set `identityAudience` to `APP_URL` at the platform instead |
+| `(person_issuer)` | The person's issuer isn't `OIDC_ISSUER`: the platform and the portal sign people in with different providers, or spell the issuer differently |
+| `(unknown_kid)` or `(signature)` | The key set the portal sees isn't the one the platform signs with: **Test the keys**, and check the platform's rotation |
+| `(jwks_unavailable)` | The platform's keys can't be fetched and the cached ones are more than 15 minutes past expiry. **Test the keys**; the address may need an entry in Internal networks |
+| `(replay)` | The platform sent a token twice (a transport retry); its tokens are one request each |
+| `(tool_mismatch)` | The token's `tool` isn't the tool called, or a call has no `tool`, or another method has one. Look at what the platform puts in `tool` for a tool call: it must be the name the portal exposes |
+| `(expired)` or `(not_yet_valid)` | Clocks differ by more than 30 seconds |
+| A tool error "has no active Open MCP Portal account" | The person never signed in to the portal (or signs in with another issuer): ask them to sign in once |
+| A tool error "Connect your … account" or "allow … to use your … account" | The person hasn't connected the provider, or hasn't allowed the server: Account › My connections |

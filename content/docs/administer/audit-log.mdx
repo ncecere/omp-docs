@@ -17,11 +17,12 @@ Areas include:
 |---|---|
 | Sign-in | `auth.login`, `auth.login_denied` |
 | Teams and members | `team.member_add`, `team.invite_create`, `team.invite_accept`, `team.owner_assign`, `team.publishing_override`, `team.limits_update`, `team.retention_update` |
-| Servers | `mcp_server.create`, `.update`, `.auth_update`, `.delete`, `.refresh`, `.publish_request`, `.publish`, `.reject`, `.unpublish`, `mcp_capability.approve`, `mcp_capability.requirement_set` |
+| Servers | `mcp_server.create`, `.update`, `.auth_update`, `.delete`, `.refresh`, `.publish_request`, `.publish`, `.reject`, `.unpublish`, `mcp_capability.approve`, `mcp_capability.requirement_set`, `mcp_capability.presence_set` |
 | Gateways and keys | `gateway.create`, `.update`, `.delete`, `.capabilities_set`, `.grant_add`, `.grant_remove`, `api_key.create`, `.revoke`, `.pepper_rehash` |
-| Service accounts | `service_account.create`, `.update`, `.delete`, `service_account_key.create`, `.revoke` |
+| Service accounts | `service_account.create`, `.update`, `.delete`, `service_account_key.create`, `.revoke`, `service_account.relay_set`, `.relay_clear` (a platform admin marked or cleared an agent platform relay) |
+| Agent platforms | `agent_platform.create`, `.update`, `.delete` (with how many relays it had). See [Agent platforms](/docs/administer/agent-platforms) |
 | OAuth clients | `oauth.client_register`, `oauth.consent`, `oauth.token_issue`, `oauth.revoke` |
-| Delegated credentials | `auth_provider.create`, `.update`, `.delete`, `provider_connection.create`, `.refresh_failed`, `.revoke`, `provider_connection.server_allow` (a person allowed a server to use their account), `mcp_server.provider_grants_reset` (permissions ended because a server moved to another origin, now requires another provider, or was deleted; in the team's log) |
+| Delegated credentials | `auth_provider.create`, `.update`, `.delete`, `provider_connection.create`, `.refresh_failed`, `.revoke`, `provider_connection.server_allow` (a person allowed a server to use their account), `provider_connection.server_revoke` (they took one back), `mcp_server.provider_grants_reset` (permissions ended because a server moved to another origin, now requires another provider, or was deleted; in the team's log) |
 | Automation tokens | `automation_token.create`, `.revoke`, `.pepper_rehash`, `.request` |
 | Notifications | `notification_destination.create`, `.update`, `.delete`, `.test`, `.rotate_secret`, `.disable`, `settings.notifications_test_email` |
 | Settings | `settings.publishing_update`, `settings.network_update`, `settings.oauth_clients_update`, `settings.limits_update`, `settings.capture_update`, `settings.retention_update` |

@@ -15,6 +15,7 @@
     "---Access---",
     "platform-gateways",
     "trusted-clients",
+    "agent-platforms",
     "auth-providers",
     "automation-tokens",
     "---Records---",

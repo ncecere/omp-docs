@@ -5,7 +5,7 @@ description: The short-lived ES256 JWT Open MCP Portal sends with every forwarde
 
 When someone calls a tool, gets a prompt or reads a resource through a gateway, Open MCP Portal forwards the request to your MCP server with a short-lived **identity token**: a JWT signed by the portal that says who is calling, through which gateway and for which tool. Verify it before you trust it. It is the only credential from the caller that reaches your server: the portal never forwards the client's own API key, service account key or OAuth token.
 
-The caller is either a **person** (with a personal API key, or through an MCP client they connected with OAuth sign-in) or a team **service account** (a headless agent, CI job or script). The `principal_type` claim says which.
+The caller is either a **person** (with a personal API key, or through an MCP client they connected with OAuth sign-in) or a team **service account** (a headless agent, CI job or script). The `principal_type` claim says which. When a trusted [agent platform](/docs/administer/agent-platforms) relays an agent's call for a person, the caller is that **person** and an `act` claim names the agent ([Calls from agents](#calls-from-agents)).
 
 ## Where it arrives
 
@@ -46,6 +46,7 @@ Signing keys rotate every 30 days. A cached set normally already holds the next 
 | `resource` | The exposed URI read (`resources/read`): `omp://{server-slug}/{your-uri}`, for example `omp://status/status://services/email`. Exactly one of `tool`, `prompt` and `resource` is set |
 | `client` | For a client connected with OAuth, the client's name as it signed in (such as `Claude Code`), with `client_verified`. Otherwise the MCP client's `clientInfo.name` when the request carried it, else the name of the API key or service account key |
 | `client_verified` | Present whenever `client` comes from an OAuth client. `true`: the client is identified by a Client ID Metadata Document, so its name is vouched for by the host that publishes it. `false`: it registered itself and its name is **self-asserted**. Absent for keys |
+| `act` | **Only on a call an agent platform relayed for a person**: the agent that made it. See [Calls from agents](#calls-from-agents). Absent on every other call |
 | `provider` | The slug of the auth provider whose token came with this call in `MCP-Gateway-Provider-Token`. **Absent** when the call carries none. See [Provider tokens](/docs/server-authors/provider-tokens) |
 | `jti` | A unique ID for the token, useful in your logs |
 | `iss`, `aud`, `iat`, `nbf`, `exp` | As above |
@@ -62,6 +63,48 @@ A service account's token, for example:
  "gateway": "support", "tool": "status__check_outage", "client": "deploy", "jti": "…",
  "iat": 1760650000, "nbf": 1760649970, "exp": 1760650300}
 ```
+
+## Calls from agents
+
+A trusted [agent platform](/docs/administer/agent-platforms) can relay its agents' calls through a team service account and name the person each agent acts for. When it does, the portal runs the call as that person, and the token it signs for your server says so:
+
+```json
+{"iss": "https://mcp.example.com", "aud": "https://mail.example.com/mcp", "principal_type": "user",
+ "sub": "10101010-1010-4101-8101-101010101010", "email": "ada@example.com", "name": "Ada Lovelace", "teams": ["platform-tools"],
+ "gateway": "support", "tool": "mail__search", "client": "pdp-relay",
+ "act": {"sub": "0e6a3d4c-5f1b-4f0e-9b8e-2d7c1a9f3b21", "name": "Mail assistant", "iss": "https://agents.example.com",
+         "principal_type": "agent", "person_present": true},
+ "jti": "…", "iat": 1792500000, "nbf": 1792499970, "exp": 1792500300}
+```
+
+- `principal_type`, `sub`, `email`, `name` and `teams` are **the person's**, as for a call from them with their own key. The portal has checked that they may use this tool **and** that the relay service account may: the call can reach no more than either could alone.
+- `client` is the name of the relay service account.
+- `act` is the actor, in the style of RFC 8693. `sub` and `name` are the agent's ID and name **at the platform** (`name` is chosen by the agent's team: informational), `iss` is the platform's issuer, `principal_type` is always `agent`, and `person_present` is the platform's statement that the call belongs to a conversation the person is in. `false` means scheduled or background work that nobody watches.
+- **`act` appears exactly on relayed person calls, and only in the identity token.** A call with the person's own key or app never has it. A call by a service account, including the relay account itself when the platform names no person, has `principal_type: service_account` and no `act`.
+- Provider tokens work as for the person: `MCP-Gateway-Provider-Token` is *their* token. An agent has no browser, so the portal never sends an agent's caller a consent link: a person who hasn't connected the provider gets an error naming where to connect, and your server isn't called.
+- The platform's own token stops at the portal and is never forwarded to you.
+
+**Telling "Ada" from "Ada's agent".** Check `act` before treating the call as a person at the keyboard:
+
+- **Refuse agent calls** for a tool that must never run unattended: reject the request if `act` is present.
+- **Require the person to be there** for actions that need them (sending mail, spending): reject it if `act` is present and `act.person_present` is not `true`. A server's team can also make the portal refuse such calls before they reach you, with **Require a present person for calls from agents** ([Registering an MCP server](/docs/teams/register-a-server#require-a-present-person)). Use that for a rule that is the same for every caller, and check `act` yourself for a rule that depends on the call.
+- **Log `act.sub` and `act.name`** next to `sub`, so an audit says which agent did what. Don't base decisions on `act.name`, and treat `act.iss` as the platform the portal trusts, not as a login.
+
+The verification snippets for [Python](#python-pyjwt), [TypeScript](#typescript-jose) and [Go](#go-go-jose) below need no change: `act` is one more claim in the same token, signed by the same keys and checked the same way. Read it from the claims they return. In Go, add a field to the `Identity` struct:
+
+```go
+Act *struct {
+	Sub           string `json:"sub"`
+	Name          string `json:"name"`
+	Iss           string `json:"iss"`
+	PrincipalType string `json:"principal_type"` // always "agent"
+	PersonPresent bool   `json:"person_present"`
+} `json:"act"` // nil unless an agent platform relayed the call for a person
+```
+
+<Callout type="warn" title="Leave Send identity token on for a server that must tell agents from people">
+`act` is in the identity token. A server whose **Send identity token** switch is off gets no identity token, so no `act`, **but a relayed call still carries the person's own provider token** when the capability needs one. That server can't tell an agent's call from the person at the keyboard. If it receives people's tokens and must refuse unattended calls, turn the switch on, or use **Require a present person**.
+</Callout>
 
 ## What a Test sends
 

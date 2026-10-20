@@ -47,6 +47,16 @@ Only then does that server receive your token for the service, at the address it
 
 Allowing a server gives it your token for the service, which holds **every permission you have ever granted that service**, not only the ones this server asked for. Allow only servers you trust. The portal doesn't narrow the token per call yet.
 
+### Allow servers from My connections
+
+You can also allow a server **without making a call**. On Account › **My connections**, choose **Allow servers…** on a connection. The dialog lists the servers that need that service and that you can use through a gateway now (your teams' servers on gateways you can use, and published servers on gateways you have access to), each with its team, its address and the permissions it asks for. Choose **Allow** for the ones you trust. A server that isn't on a gateway you can use isn't listed and can't be allowed.
+
+<Callout type="info" title="Why this exists: agents">
+An AI agent acting for you through an [agent platform](/docs/administer/agent-platforms) can't open a link. When its call needs something you haven't set up, the tool answers with a **link-free message** that says what to do, for example "github__create_issue needs you to allow Status (Support Tools) to use your GitHub account (repo), which you haven't. Allow Status under Account › My connections in Open MCP Portal, then try again." Do that, then ask the agent again.
+</Callout>
+
+Allowing records the same permission a consent link's confirm step would: the server's address now and the permissions it requires, with nothing sent to the service. It is your own act in your browser session: an API key, an automation token, a service account or an agent can't do it for you, and it is audited. If the connection doesn't have the permissions yet, the dialog offers **Grant more access**, which is the normal round trip to the service. If the server moved or asks for more than the list showed when you pressed **Allow**, nothing is recorded and you're asked to look again. Each server you allowed is listed on its connection, and **Take back** removes one server's permission without disconnecting the account.
+
 ### When the result page says something else
 
 | Result | Means |
@@ -69,7 +79,7 @@ You don't have to wait for a tool to ask:
 
 ## My connections
 
-Account › **My connections** lists your connected accounts: the service (or MCP server, with an "MCP server" badge and its team), the account it is (such as your GitHub login), the permissions granted, the **servers you allowed** to use it (name, team and address; read-only), the status, when it was last used and when the token expires. From there you can **Connect**, **Reconnect** and **Disconnect**.
+Account › **My connections** lists your connected accounts: the service (or MCP server, with an "MCP server" badge and its team), the account it is (such as your GitHub login), the permissions granted, the **servers you allowed** to use it (name, team and address; read-only), the status, when it was last used and when the token expires. From there you can **Connect**, **Reconnect**, **Disconnect**, and use **Allow servers…** to allow or take back a server (see above).
 
 <Screenshot slot="my-connections" />
 
@@ -89,6 +99,6 @@ For a server in OAuth mode, the link reads, for example, "github__get_me needs y
 
 Anything else the server refuses comes back as `-32010` with the reason.
 
-## Service accounts
+## Service accounts and agents
 
-Service accounts can't use tools that act as a person: their calls answer `-32010` with `data.reason` `service_account`. Those tools still appear in lists, marked "Service accounts can't use this" in team views.
+Service accounts can't use tools that act as a person: their calls answer `-32010` with `data.reason` `service_account`. Those tools still appear in lists, marked "Service accounts can't use this" in team views. The exception is an agent that an [agent platform](/docs/administer/agent-platforms) relays *for you*: the call is yours, uses your connections, and never gets a consent link (a tool error tells you where to connect or which server to allow).

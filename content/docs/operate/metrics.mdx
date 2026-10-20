@@ -23,9 +23,14 @@ Labels never carry user, key, service account, team or request IDs. Gateway, ser
 | `omp_notification_deliveries_total` | `channel`, `event`, `outcome` |
 | `omp_notification_emit_errors_total` | |
 | `omp_automation_token_auth_total` | `result` |
+| `omp_agent_token_total` | `result`: `ok`, `ignored_not_relay` or `rejected_<reason>` (see [Agent identity tokens](#agent-identity-tokens)) |
 | `omp_db_pool_*` | Connections acquired, idle, total and maximum; acquires, empty acquires and wait time |
 
 Plus the Go runtime and process collectors. `omp_mcp_requests_total` counts requests to `/mcp/{slug}` that reached a gateway.
+
+## Agent identity tokens
+
+`omp_agent_token_total{result}` counts the agent identity tokens the portal looked at (see [Agent platforms](/docs/administer/agent-platforms)). `ignored_not_relay` is a token sent with a credential that isn't a relay account's key: the call went on as that credential's own. `rejected_<reason>` is a token on a relay account's request that failed a check, so the request was refused: the reasons are `malformed`, `algorithm`, `key_id`, `type`, `untrusted_issuer`, `disabled_issuer`, `unknown_kid`, `jwks_unavailable`, `signature`, `audience`, `principal_type`, `claims`, `person_issuer`, `expired`, `not_yet_valid`, `lifetime`, `replay`, `other_platform` and `tool_mismatch`. A refused token leaves no call record, so this counter and a warning in the log are where such attempts show.
 
 ## Useful alerts
 
@@ -34,6 +39,7 @@ Plus the Go runtime and process collectors. `omp_mcp_requests_total` counts requ
 - `omp_usage_rollup_last_success_timestamp_seconds` older than 15 minutes: dashboards are stale.
 - `omp_mcp_servers{state="failing"} > 0`: a team's server is down.
 - `omp_notification_emit_errors_total` increasing: a change couldn't record its notification (the change itself succeeded). No replica with `omp_loop_leader{loop="notifications"} == 1`: nothing is being delivered.
+- `omp_agent_token_total{result=~"rejected_.*"}` increasing: a platform's agents are being refused (a wrong issuer or audience, keys that can't be fetched, a tool name that doesn't match). `jwks_unavailable` means person calls from that platform fail.
 - A high rate of `omp_mcp_rate_limited_total`, or of `omp_provider_token_refresh_total{result="unavailable"}`.
 
 There are no ready-made dashboards, alert rules or tracing yet.

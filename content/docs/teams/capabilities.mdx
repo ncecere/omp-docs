@@ -36,6 +36,12 @@ A refresh never approves anything. The server's pending-changes count covers cha
 
 Who approves: a platform admin under **Approval required**; the team's owners and admins under **Self-publish** (**Approve change** on the capability, after reading its definition). The approval names the fingerprint that was read: if the definition changed again before the button was pressed, it is refused (`changed_since_review`) and you read it again. Private servers need no approval for the team's own gateways: a team gateway serves the team's own servers' capabilities as they are now. See [Publishing and review](/docs/teams/publishing).
 
+## Require a present person
+
+Each capability has a **Present person** setting, changed with **Present person…** on the **Capabilities** tab (editors and above): **Same as the server** (the default), **Needs a present person** or **Doesn't need a present person**. The capability's own value wins over the server's **Require a present person for calls from agents** switch ([Registering an MCP server](/docs/teams/register-a-server#require-a-present-person)). A capability that needs one is marked **Needs a present person** in the list.
+
+When a capability needs a present person, a call that arrives through an agent platform's relay account is refused unless the platform says the person it names is present. Use it for capabilities that send, post or spend. Setting it to **Needs a present person** needs no review; relaxing it (a capability that needed one no longer does, or one that followed the server's switch is set to **Doesn't need**) sends a published server back to review, and the form says so before you save. The change is in the audit log as `mcp_capability.presence_set`. See [Agent platforms](/docs/administer/agent-platforms#calls-that-need-the-person-there).
+
 ## Health
 
 Each server's health comes from checks:
