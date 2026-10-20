@@ -7,7 +7,7 @@ Open MCP Portal records every list and call through a gateway as **metadata**: w
 
 ## Activity
 
-A gateway's **Activity** tab lists its calls, newest first, for the team's **owners and admins** (members are told to ask one of them). Filter by outcome, service account and date. A **Recorded** mark means the call's contents were recorded; open the call to view them.
+A gateway's **Activity** tab lists its calls, newest first, for the team's **owners and admins** (members are told to ask one of them). Filter by outcome, service account and date. A **Recorded** mark means the call's contents were recorded; open the call to view them. An optional **Identity token** column says whether the portal sent the identity token to the server for each call ([below](#a-calls-page)).
 
 | Outcome | Means |
 |---|---|
@@ -25,7 +25,7 @@ Each row names the caller: a person with an API key ("API key: Laptop"), a perso
 
 ## A call's page
 
-Opening a call shows when it happened, who made it, the method, the exposed name called, the gateway, the server, the outcome with its error class, the account it needed (if any), its duration and sizes, the client's name when it was known, and its **Request ID** (also in the portal's logs). If the call's contents were recorded, **View contents** shows them; see [Recording call contents](/docs/teams/payload-capture).
+Opening a call shows when it happened, who made it, the method, the exposed name called, the gateway, the server, the outcome with its error class, the account it needed (if any), its duration and sizes, the client's name when it was known, whether the **Identity token** was sent to the server, and its **Request ID** (also in the portal's logs). It shows whether the token was attached to the request or the server's **Send identity token** switch was off; it is empty for a call that wasn't forwarded (refused, rate limited, or a list the portal answered itself) and for calls recorded before v0.2.2. When a server rejects calls only when a tool runs, look here first: see [Send identity token](/docs/teams/register-a-server#send-identity-token). The call lists also accept `?identitySent=true` or `false` through the API. If the call's contents were recorded, **View contents** shows them; see [Recording call contents](/docs/teams/payload-capture).
 
 <Screenshot slot="call-detail-payload" />
 

@@ -42,7 +42,7 @@ Detection follows the MCP authorization specification: the `resource_metadata` f
 
 ### None
 
-Calls carry only the portal's signed identity token, in `Authorization: Bearer`. The server can verify it like any OAuth bearer token. See [The identity token](/docs/server-authors/identity-token).
+No credential of its own: calls carry the portal's signed identity token, in `Authorization: Bearer`, unless you turn **Send identity token** off ([below](#send-identity-token)). The server can verify the token like any OAuth bearer token. See [The identity token](/docs/server-authors/identity-token).
 
 ### Static header
 
@@ -88,13 +88,22 @@ GitHub's server needs some tool arguments as HTTP headers too; the portal sends 
 
 ## Send identity token
 
-**Send identity token** (on by default) adds the portal's signed identity token to every call: the caller's name, email and teams, the gateway and the tool. Turn it off for servers run outside your company, such as GitHub's hosted server, so that personal data isn't sent to a third party. The server then gets no identity token on any call or Test. Turning it off isn't a review trigger: it sends less.
+**Send identity token** adds the portal's signed identity token to every call: the caller's name, email and teams, the gateway and the tool. Turn it off for servers run outside your company, such as GitHub's hosted server, so that personal data isn't sent to a third party. The server then gets no identity token on any call or Test. Turning it off isn't a review trigger: it sends less.
 
-The token travels as `Authorization: Bearer …`. Some public servers refuse any request that carries an Authorization header. DeepWiki's public endpoint (`https://mcp.deepwiki.com/mcp`) is one: it answers "Authentication is not allowed on the public DeepWiki endpoint". Adding such a server and reading its tools works, because discovery and refresh send no identity token.
+**The default depends on the server.** When you add a server, the switch starts:
+
+- **off** for a server with **no authentication on a public host**, and for a host name the portal can't resolve in time (nothing shows it is your company's, and sending less is the safer mistake);
+- **on** for a server on an **internal host** (one that **Admin › [Internal networks](/docs/administer/internal-networks)** names, or a private address), and for the [static header](#static-header) and [OAuth](#sign-in-with-oauth-per-person) modes.
+
+The add form shows the default for the address you type and says why, and you can change it before you save. If a public server expects the token, turn the switch on. **Servers you registered before v0.2.2 keep their setting**, which was on unless a team turned it off; nothing is changed for them. Afterwards you can change the switch at any time.
+
+The token travels as `Authorization: Bearer …`. Some public servers refuse any request that carries an Authorization header. DeepWiki's public endpoint (`https://mcp.deepwiki.com/mcp`) is one: it answers "Authentication is not allowed on the public DeepWiki endpoint". Adding such a server and reading its tools worked even when the switch was on, because discovery and refresh send no identity token, and its tool calls failed. A new server like that starts with the switch off, so its calls work; one you registered earlier keeps its setting, so turn the switch off for it.
+
+**Which calls sent it.** Each call records whether the identity token was sent (`identity_sent`): the **Identity token** detail on the call's page and an optional column in the call lists ([Activity and usage](/docs/teams/activity-and-usage), [Usage and calls](/docs/administer/usage-and-calls)). If a server rejects calls only when a tool runs, check this first.
 
 **What Test connection sends.** A manual **Test connection** behaves like a call as far as the server can see: when **Send identity token** is on, it sends the identity token of the editor who pressed the button (their name, email and team slugs, with the gateway `omp:test` and the client `Test connection`; see [what a Test sends](/docs/server-authors/identity-token#what-a-test-sends)). If the server answers `401` or `403` to that but accepts the same request without the token, the Test fails with "The server accepts the portal's requests without its identity token but refused them with it. Turn off Send identity token for this server, or have the server accept the token." Scheduled health checks and refresh send no token, and neither does a Test run with an automation token (there is no person to name). The token is never returned, logged or written to the audit log.
 
-**What Test can't catch.** Test lists the server's capabilities and calls no tool, so a server that accepts the request and refuses the token only when a tool runs still passes. DeepWiki's public endpoint is one: it answers HTTP 200 with an error result, so its Test passes and the first real call fails. For such a server outside your company, turn **Send identity token** off; if a tool of a public server fails like that, turn it off and try again.
+**What Test can't catch.** Test lists the server's capabilities and calls no tool, so a server that accepts the request and refuses the token only when a tool runs still passes. DeepWiki's public endpoint is one: it answers HTTP 200 with an error result, so with the switch on its Test passes and the first real call fails. The new default avoids this for a new server with no authentication on a public host, but not for a server that has the switch on (an older one, or one you turned on, or one with a header or OAuth), so a passing Test is still not proof that calls work. For such a server outside your company, turn **Send identity token** off; if a tool of a public server fails like that, check the call's **Identity token**, turn the switch off and try again.
 
 ## Internal servers
 

@@ -9,7 +9,7 @@ description: Every call through every Open MCP Portal gateway in Admin › Calls
 
 <Screenshot slot="admin-calls" />
 
-The outcomes and the call page are the same as in a team's view; see [Activity and usage](/docs/teams/activity-and-usage). Refused calls carry the reason as their error class, for example `no_access`, `role`, `gateway_disabled`, `key_scope`, `service_account`, `provider_disabled`, `team_archived` or a rate-limit key.
+The outcomes and the call page are the same as in a team's view; see [Activity and usage](/docs/teams/activity-and-usage). The call page's **Identity token** detail, and an optional column in the list, say whether the portal sent the identity token to the server for that call; the admin call list also accepts `?identitySent=true` or `false` through the API. It helps with a public server that refuses the token only when a tool runs. Refused calls carry the reason as their error class, for example `no_access`, `role`, `gateway_disabled`, `key_scope`, `service_account`, `provider_disabled`, `team_archived` or a rate-limit key.
 
 ### Recorded contents
 
