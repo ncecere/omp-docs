@@ -1,0 +1,69 @@
+---
+title: v0.3.0
+description: "Open MCP Portal v0.3.0 (2026-10-20): agent-platform trust. The portal can trust an agent platform such as Pi Durable Platform to name the person an agent acts for, and runs the agent's calls as that person's, within strict limits. Migration 00020."
+---
+
+**Released 2026-10-20.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.3.0) · image `ghcr.io/ncecere/open-mcp-portal:v0.3.0` · migration `00020` (expand-only).
+
+The first release of the v0.3 line. The portal can now trust an external **agent platform** (the first is [Pi Durable Platform](https://github.com/ncecere/pi-durable-platform)) to say *which person* an agent is acting for, and then treats the agent's calls as that person's, within strict limits. It adds one migration and a new trust boundary, so read [Upgrading](#upgrading) and [Known limitations](#known-limitations) first. **Nothing changes until a platform admin adds a trusted platform and marks a relay service account.** The administrator's guide is [Agent platforms](/docs/administer/agent-platforms).
+
+## What changed
+
+- **Trusted agent platforms** (#55). [Admin › Trusted agent platforms](/docs/administer/agent-platforms#set-it-up) lets a platform admin trust an external platform as an issuer of short-lived signed identity tokens: its issuer, the address of its signing keys (https only) and the audience the portal expects. Keys are fetched through the same address guard as MCP servers, cached, and refetched at most twice a minute for an unknown key. Only ES256 is accepted.
+- **Relay service accounts** (#56). A platform admin marks one team service account as the relay for a platform. A call on that account that carries a valid token naming a person is **that person's call**: their gateway access *intersected with* the relay's (the lower role decides), their own delegated credentials, and their identity in the call log with the agent and the platform named. A token on any other credential is ignored and counted; a bad token on a relay's request refuses the request; a token is single-use; a person who is suspended or removed loses access through agents on the next call. A call with no person stays the service account's own. See [Service accounts](/docs/teams/service-accounts#relay-accounts).
+- **Agents never get a consent link** (#57). A relayed person call that needs a connection the person hasn't made returns a tool error that says where to connect (never a link). Each server or capability can **require a present person**: calls an agent relays when nobody is watching (scheduled work) are refused, and so are relay calls that name nobody. See [Register a server](/docs/teams/register-a-server#require-a-present-person) and [Capabilities](/docs/teams/capabilities#require-a-present-person).
+- **Allow a server from My connections** (#60). Because an agent can't open a consent link, a person can allow a server to use their connected account from Account › My connections (and take that back there), with the same bindings to the server's address and scopes as the consent page. See [Connecting accounts](/docs/use/connecting-accounts#allow-servers-from-my-connections).
+- **The server behind the gateway learns it was an agent** (#58). The identity token the portal sends on carries an `act` claim naming the agent (RFC 8693 style) on relayed person calls, and never otherwise. See [Identity token](/docs/server-authors/identity-token#calls-from-agents).
+- **An independent security review of this work** (no Critical or High findings) was applied: the token's `tool` claim is bound to the tool called; "require a present person" also covers relay calls that name nobody; the keys address must be https; the migration avoids a long table lock; the review digest covers the present-person requirement; agent names are stripped of control and formatting characters. See [Security](/docs/operate/security#agent-platforms).
+- **Contract fixtures:** tokens and key sets produced by Pi Durable Platform v0.4.0's real signing code are checked into the product repository and verified by a test with a fixed clock.
+- **The old sign-in cookie name is no longer read** (announced in [v0.2.2](/docs/releases/v0-2-2)). On https only `__Host-omp_oidc_state` is accepted.
+
+## Upgrading
+
+1. Pin the new image (verify its signature first, see [The image](#the-image)). The init container applies migration `00020`, which adds tables and nullable columns only; the previous image keeps working against the new schema. **Do not use `goose down` to roll back**: it would drop the trusted platforms, relay marks and the agent columns of the call history. Pin the previous image instead.
+2. Nothing else changes for existing installs. The new surfaces are off until an admin configures them.
+3. To use it with Pi Durable Platform, follow [Agent platforms](/docs/administer/agent-platforms). Pi Durable Platform's `identityAudience` must be set to the portal's `APP_URL`.
+4. The portal no longer accepts the old (non-`__Host-`) sign-in state cookie name on https, as announced in v0.2.2. A person who started signing in just before the upgrade starts again.
+
+[Upgrading from v0.2.2](/docs/operate/migrations-and-upgrades#upgrading-from-v022) has the same points with the details.
+
+## Verification
+
+- Go tests with the race detector against PostgreSQL, web tests, the route and authorization-matrix tests, migration up-and-down tests, `govulncheck`, `npm audit` and the Kubernetes smoke test in CI.
+- **A contract check against the real platform's signer:** 19 tokens and 5 key sets produced by Pi Durable Platform v0.4.0's own signing and key-serving code were fed to the portal's verifier. Every accept and reject matched the platform's design note.
+- **An independent security review** (read-only, with proof-of-concept tests): 0 Critical, 0 High, 2 Medium (both fixed or documented), 4 Low, 9 Info. See the threat model's [section 6.8](https://github.com/ncecere/open-mcp-portal/blob/v0.3.0/docs/threat-model.md#68-the-agent-platform-relay-decisions-65-to-67).
+- **A browser check** of Admin › Trusted agent platforms (the empty state and the add dialog, where a plain-`http` keys address is refused with an explanation), with the app started on the existing development database, so migration `00020` ran on a database with data. The relay control on service accounts, the present-person switches and the Allow dialog on My connections are covered by web and integration tests but were **not** looked at in a browser.
+- **Not done:** a run against a live Pi Durable Platform (its gateway and runtime end to end, with real DNS, TLS and its identity provider's real issuer spelling). The manual procedure is in [the guide](/docs/administer/agent-platforms#check-it-end-to-end). If Pi Durable Platform puts a different name in the token's `tool` claim than the name the client called, every tool call is refused as `tool_mismatch`, and the guide's check step shows it.
+
+## Known limitations
+
+Carried over from v0.2.2 unless marked new:
+
+- **The platform is trusted to name people only from its own records (new).** A compromised platform signing key can speak as any person with a portal account, within the relay's reach, using their delegated tokens. Pi Durable Platform's own rules limit this; the threat model describes what an operator should require of it.
+- **The token is bound to the platform-wide audience, not to the relay credential or the gateway (new, accepted).** A team admin of the platform who can set a server's `identityAudience` to the portal's audience could capture a token meant for another server. It is single-use and short-lived, and the platform-side mitigation is that only platform admins set that audience.
+- **A person removed at the identity provider stays reachable through agents until suspended in the portal (new, same as other credentials).** SCIM is on the roadmap.
+- **A server with Send identity off** receives the person's provider token on relayed calls and no `act` claim (new, documented).
+- **VS Code and Cursor have not been run** against a gateway; neither has a real Google or Microsoft provider, a real Slack webhook or a real mail server.
+- Remote servers only (no stdio); development software that has not run in production.
+
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.3.0` is a multi-arch image (linux/amd64 and linux/arm64), signed with cosign keyless signing by the repository's `image.yml` workflow. Its digest is:
+
+```text
+sha256:f6a3598c47e738fd307c7296f0357670872c247ac487069a52686ebb13c515e4
+```
+
+Check the signature with **cosign v3.0 or newer**, then pin the image by that digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:f6a3598c47e738fd307c7296f0357670872c247ac487069a52686ebb13c515e4 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.3.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/open-mcp-portal/issues](https://github.com/ncecere/open-mcp-portal/issues) (there is a form for each kind) or ask in [Discussions](https://github.com/ncecere/open-mcp-portal/discussions). Report security problems privately, as [`SECURITY.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.3.0/SECURITY.md) describes.
