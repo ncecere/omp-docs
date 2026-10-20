@@ -22,11 +22,11 @@ There are eight events. Recipients are worked out when the event is delivered, f
 | `server.unhealthy` | A server's last 3 health checks (scheduled or manual) all failed. Once per incident, then a reminder every 24 hours while it still fails | The team's owners, admins and editors | The team's; platform ones if they ask for team events |
 | `server.recovered` | The first successful check after an incident that raised `server.unhealthy` | The team's owners, admins and editors | The team's; platform ones if they ask for team events |
 | `capability.changed` | A refresh leaves a published server with changed or new capabilities that are held back from the catalog until approved | The team's owners, admins and editors | The team's; platform ones if they ask for team events |
-| `publish.requested` | A server enters review: first request, or sent back because its URL, upstream sign-in or requirement changed | Platform admins | Platform |
+| `publish.requested` | A server enters review: first request, or sent back because its URL, upstream sign-in, TLS CA or requirement changed | Platform admins | Platform |
 | `publish.decided` | A platform admin approves or rejects a server | The team's owners and admins | The team's; platform ones if they ask for team events |
 | `connection.needs_reconsent` | A person's connection to a service needs a new consent (not a server's setup sign-in) | That person | Never |
 | `upstream_signin.lapsed` | The setup sign-in of a Sign-in with OAuth server needs a new consent | The team's owners, admins and editors | The team's; platform ones if they ask for team events |
-| `key.expiring` | A key or token that lasted more than 7 days is within 7 days of expiring | A personal key: the person. A service account key or publisher token: the team's owners and admins. A platform token: platform admins | Service account keys and publisher tokens: the team's, and platform ones if they ask for team events. Platform tokens: platform |
+| `key.expiring` | A key or token that lasted more than 7 days is within 7 days of expiring; or a server's [mTLS client certificate](/docs/teams/register-a-server#tls-to-the-server) expires within 14 days and hasn't expired yet | A personal key: the person. A service account key or publisher token: the team's owners and admins. A platform token: platform admins. A server certificate: the team's owners, admins and editors | Service account keys, publisher tokens and server certificates: the team's, and platform ones if they ask for team events. Platform tokens: platform |
 
 Personal events (`connection.needs_reconsent`, and a personal key's `key.expiring` for the person) never go to webhooks. There is no event for creating a token; creation is in the [audit log](/docs/administer/audit-log). Delivery failures aren't an event either: they show in Admin › Notifications, on the destination, and on the [overview](/docs/administer/overview).
 
@@ -111,7 +111,7 @@ The body (an example; the values are made up):
 | `publish.requested` | `server`, `reason`, `note` (up to 300 characters), `requestedBy {kind, name}` |
 | `publish.decided` | `server`, `decision`, `note` (up to 300 characters), `decidedBy {name}` |
 | `upstream_signin.lapsed` | `server`, `since`, `readAsName` (when known) |
-| `key.expiring` | `keyKind` (`service_account`, `publisher_token` or `platform_token`), `name`, `expiresAt`, `daysLeft`, `serviceAccount` (for a service account's key). Never a key's prefix |
+| `key.expiring` | `keyKind` (`service_account`, `publisher_token`, `platform_token` or `server_certificate`), `name` (for a server certificate, the server's name), `expiresAt`, `daysLeft`, `serviceAccount` (for a service account's key), `server` (for a server certificate). Never a key's prefix, a certificate or a private key |
 
 **Verify every request** before you trust it: compute the signature over the **raw** body bytes (not a re-serialised copy), compare in constant time, and reject a timestamp older than 5 minutes. Delivery is **at least once**: a crash between sending and recording repeats a delivery, so also de-duplicate on `X-OMP-Event-Id`.
 

@@ -27,6 +27,7 @@ An **active** team is one that isn't archived. Archived teams' servers are unava
 | **Capability changes held back** | A published, enabled server with changed or new capabilities that aren't approved, so they're held back from the catalog. One item per server, with the count | Warning | The server |
 | **Personal keys expiring** | One item: people's API keys expiring within 14 days | Information; warning within 3 days | Nothing: keys belong to individuals and staff can't open them |
 | **Service account keys expiring** | One item per team (at most 20 teams): its keys expiring within 14 days | As above | The team's service accounts |
+| **Server certificates expiring** | One item per published, enabled server of an active team whose [mTLS client certificate](/docs/teams/register-a-server#tls-to-the-server) has expired or expires within 14 days | Information; warning within 3 days; critical once expired | The server |
 | **Automation tokens expiring** | One item for platform tokens, and one per team for publisher tokens, within 14 days | As above | The token list |
 | **Connections needing reconsent** | One item: people's connections that need a new consent. A server's setup sign-in is listed as "lapsed sign-in", not counted twice | Information | Auth providers |
 | **Gateways switched off** | One item: disabled platform gateways, and disabled team gateways of active teams | Information | Gateways |

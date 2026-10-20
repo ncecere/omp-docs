@@ -15,13 +15,14 @@ A person's page shows:
 - **Teams**: their memberships. Team owners and admins manage members; a platform admin assigns owners on the team's page.
 - **Connected apps**: the MCP clients they signed in with OAuth, per gateway. Platform admins can disconnect them; auditors read.
 - **Connections**: their connected accounts on other services (metadata only, never tokens). Platform admins can disconnect them; auditors read.
+- **Keys for servers**: which servers they have entered [their own key](/docs/use/keys-for-servers) for, never the keys. Platform admins can remove a key (it is audited); auditors read.
 - **Activity**: changes they made, from the audit log.
 
 <Screenshot slot="admin-user-detail" />
 
 ### Suspend and reactivate
 
-**Suspend…** signs the person out of the web app immediately and refuses every later request at authentication: their connected apps, API keys and access to teams and gateways stop working. Nothing is deleted: their connected apps, keys, provider connections and memberships are kept, so **Reactivate** restores them (an app may ask them to sign in again). You can't suspend yourself.
+**Suspend…** signs the person out of the web app immediately and refuses every later request at authentication: their connected apps, API keys and access to teams and gateways stop working. Nothing is deleted: their connected apps, keys, provider connections, keys for servers and memberships are kept, so **Reactivate** restores them (an app may ask them to sign in again). You can't suspend yourself.
 
 ## Teams
 
