@@ -25,9 +25,29 @@ The database schema is managed by migrations built into the binary. They are **f
 
 Pin the previous image. Migrations are never rolled back automatically; because they are expand-only, the previous release normally runs on the newer schema. To undo a migration itself, restore the backup made before the upgrade.
 
+## Upgrading from v0.2.1
+
+v0.2.2 adds migrations `00018` and `00019`. Both are **expand-only** (they add columns and tables and change nothing that v0.2.1 reads), so the steps above apply and a rolling upgrade is safe. The release's own summary is in the [v0.2.2 notes](/docs/releases/v0-2-2#upgrading).
+
+- **Migrations.** `00018` adds what the OAuth hardening needs (when each app was last signed in, the registration switch, and when and from where each registered client was created). `00019` adds a nullable column to call records that says whether the identity token was sent. The `migrate` init container, or `migrate` run once before `serve`, applies them.
+- **Rolling back.** Pin the previous image: v0.2.1 ignores the new columns and keeps working against the new schema. Nothing is undone in the database (see [Rolling back](#rolling-back)).
+
+Three behaviour changes to know before you upgrade:
+
+1. **OAuth apps sign in again about every 180 days.** `OAUTH_REFRESH_ABSOLUTE_TTL` (default `180d`) counts from the person's last sign-in of the app. Apps connected when `00018` runs get one whole window from that moment, however old their grant is, so the upgrade signs nobody out. Set `OAUTH_REFRESH_ABSOLUTE_TTL=0` to keep the old unlimited life. API keys and service-account keys aren't affected: use them for agents that run without a person. See [Configuration](/docs/operate/configuration#oauth-clients) and [Connected apps](/docs/use/connected-apps).
+2. **People who sign a trusted client in from their own computer see a one-time notice.** The first time a person signs a trusted client such as Claude Code in to a gateway through a `localhost` redirect, the sign-in page shows a short notice with **Continue** or **Cancel**. People who already connected the client aren't asked, and trusted clients with `https` redirects are unaffected. See [Trusted clients](/docs/administer/trusted-clients#the-first-sign-in-from-this-computer).
+3. **New servers on public hosts with no authentication send no identity token by default.** A server registered with no authentication on a public host (or a name that can't be resolved) now starts with **Send identity token** off; internal hosts and the header and OAuth modes start on. Servers you already registered are unchanged. If a new public server expects the token, turn the switch on. See [Send identity token](/docs/teams/register-a-server#send-identity-token).
+
+Also:
+
+- Registrations that never received tokens are deleted after 24 hours, and one source address can hold `OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS` (default 20) of them. Apps that were ever authorized are unaffected.
+- An anonymous request to `/oauth/authorize` is sent to sign in before the app is looked at, so a person with a bad client learns it after signing in.
+- On https the sign-in state cookie is now `__Host-omp_oidc_state`. The old name is still accepted for this release, so nobody who is mid sign-in during the upgrade is sent back; it will be removed in v0.3.
+- Behind a proxy, set `TRUSTED_PROXIES` if you haven't: with it empty, the portal logs a warning and `doctor` prints an info line ([Configuration](/docs/operate/configuration#behind-a-proxy-trusted_proxies)).
+
 ## Upgrading from v0.2.0
 
-v0.2.1 has no migrations, and nothing you must change. The steps above apply; the release's own summary is in the [v0.2.1 notes](/docs/releases/v0-2-1#upgrading). Three points to know:
+Coming from v0.2.0, follow this section and then [Upgrading from v0.2.1](#upgrading-from-v021). v0.2.1 has no migrations, and nothing you must change. The steps above apply; the release's own summary is in the [v0.2.1 notes](/docs/releases/v0-2-1#upgrading). Three points to know:
 
 - **Open client registration is capped.** `OAUTH_MAX_REGISTERED_CLIENTS` (default `1000`, `0` for no cap) bounds the OAuth clients registered through `POST /oauth/register` that were used in the last 30 days. If more than that registered themselves in the last 30 days, new registrations get `503 temporarily_unavailable` until some go unused or you raise the setting. Most installs are nowhere near it. Clients that use a metadata document, such as Claude Code, aren't counted. See [Configuration](/docs/operate/configuration#oauth-clients).
 - **Test connection sends the editor's identity token.** Editors who press it now cause the server to receive their identity token (name, email, team slugs), as real calls from them already do. Turn **Send identity token** off for a server that shouldn't receive it ([Send identity token](/docs/teams/register-a-server#send-identity-token)).
@@ -49,7 +69,7 @@ The portal now refuses to start with an `ENCRYPTION_KEY` equal to the `API_KEY_P
 
 ### Migrate, then roll every replica
 
-Back up, pin the digest of the current release, v0.2.1, which includes v0.2.0's migrations and adds none (see [Install with Docker Compose](/docs/operate/compose#the-image) or [Install on Kubernetes](/docs/operate/kubernetes#the-image)), and run `migrate` once (the `migrate` init container, or `MIGRATE_ON_START` on a single instance). Then start **every** replica on v0.2.1 (at least v0.2.0).
+Back up, pin the digest of the current release, v0.2.2, which includes v0.2.0's migrations and adds `00018` and `00019` (see [Install with Docker Compose](/docs/operate/compose#the-image) or [Install on Kubernetes](/docs/operate/kubernetes#the-image)), and run `migrate` once (the `migrate` init container, or `MIGRATE_ON_START` on a single instance). Then start **every** replica on v0.2.2 (at least v0.2.0). Read [Upgrading from v0.2.1](#upgrading-from-v021) too.
 
 </Step>
 <Step>
