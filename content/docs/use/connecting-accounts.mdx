@@ -97,6 +97,8 @@ Account › **My connections** lists your connected accounts: the service (or MC
 
 Platform admins can see the metadata of anyone's connections (never the tokens) and disconnect them; auditors can see them.
 
+Below your connections, **Keys for servers** lists the servers that want your own API key or token instead of an OAuth sign-in. See [Keys for servers](/docs/use/keys-for-servers).
+
 ## MCP servers you sign in to
 
 For a server in OAuth mode, the link reads, for example, "github__get_me needs you to sign in to GitHub MCP (repo …)", and the confirm page names the server, its sign-in host (such as github.com) and each scope. Two more cases ask you again:
@@ -108,4 +110,4 @@ Anything else the server refuses comes back as `-32010` with the reason.
 
 ## Service accounts and agents
 
-Service accounts can't use tools that act as a person: their calls answer `-32010` with `data.reason` `service_account`. Those tools still appear in lists, marked "Service accounts can't use this" in team views. The exception is an agent that an [agent platform](/docs/administer/agent-platforms) relays *for you*: the call is yours, uses your connections, and never gets a consent link (a tool error tells you where to connect or which server to allow).
+Service accounts can't use tools that act as a person, or a server that wants [each person's own key](/docs/use/keys-for-servers): their calls answer `-32010` with `data.reason` `service_account`. Those tools still appear in lists, marked "Service accounts can't use this" in team views. The exception is an agent that an [agent platform](/docs/administer/agent-platforms) relays *for you*: the call is yours, uses your connections, and never gets a consent link (a tool error tells you where to connect or which server to allow).

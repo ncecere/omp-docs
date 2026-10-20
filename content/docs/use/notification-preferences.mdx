@@ -31,10 +31,10 @@ Both are **on** by default. A switch applies to notifications from then on: turn
 | A server's setup sign-in lapsed (`upstream_signin.lapsed`) | Owners, admins and editors of the team |
 | A server was approved or rejected (`publish.decided`) | Owners and admins of the team |
 | A server is waiting for review (`publish.requested`) | Platform admins |
-| A key or token is about to expire (`key.expiring`) | You, for your own personal API keys. Owners and admins of the team, for its service account keys and publisher tokens. Platform admins, for platform tokens |
+| A key or token is about to expire (`key.expiring`) | You, for your own personal API keys. Owners and admins of the team, for its service account keys and publisher tokens. Owners, admins and editors of the team, for a server's mTLS client certificate. Platform admins, for platform tokens |
 | One of your connections needs you to connect again (`connection.needs_reconsent`) | You, about your own connections |
 
-A key or token notice is sent once, when a key that lasted more than 7 days is within 7 days of expiring.
+A key or token notice is sent once, when a key that lasted more than 7 days is within 7 days of expiring. A server certificate notice is sent once per certificate, 14 days ahead; a renewed certificate warns again when its turn comes.
 
 Preferences are only about **you**. Team and platform **webhooks**, which send events to a chat channel or another tool, are set up by the team's owners and admins or by platform admins, and aren't affected by your switches. Events about your own connections never go to webhooks.
 
