@@ -1,0 +1,71 @@
+---
+title: v0.2.2
+description: "Open MCP Portal v0.2.2 (2026-10-20): a hardening release. Send identity token starts off for public servers with no sign-in, the OAuth sign-in flow looks at an app only after sign-in, trusted loopback clients ask once, refresh tokens have a 180-day lifetime, and open client registration has controls. Migrations 00018 and 00019."
+---
+
+**Released 2026-10-20.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.2.2) · image `ghcr.io/ncecere/open-mcp-portal:v0.2.2` · migrations `00018` and `00019` (both expand-only).
+
+A hardening release after [v0.2.1](/docs/releases/v0-2-1). It closes most of the open ideas in the [threat model](https://github.com/ncecere/open-mcp-portal/blob/v0.2.2/docs/threat-model.md#9-hardening-ideas-not-findings), fixes the trap that public MCP servers fell into (a server that refuses the portal's identity token), and adds two migrations. **Read [Upgrading](#upgrading): OAuth apps will need to sign in again about every 180 days, and one new default applies to servers you register from now on.**
+
+## What changed
+
+- **Send identity token starts off for a public server with no sign-in** ([decision 64](https://github.com/ncecere/open-mcp-portal/blob/v0.2.2/docs/decisions.md)). DeepWiki's public MCP server answers every tool call with an error when the portal sends its identity token as `Authorization: Bearer`, although registration, Test connection and refresh work. A server registered with no authentication on a public host (or a name that can't be resolved) now starts with the switch off; internal hosts and the header and OAuth modes start on. The add form shows the default for the address you type and says why. Existing servers are unchanged. Calls now record whether the identity token was sent (`identity_sent`), visible on the call and as a column in the list. See [Send identity token](/docs/teams/register-a-server#send-identity-token).
+- **The sign-in flow looks at an app only after you sign in** (H-3). An anonymous request to `/oauth/authorize` can no longer make the portal fetch a URL or learn why a request would fail; fetches of metadata documents are rate-limited per address. See [OAuth endpoints](/docs/api/oauth-endpoints#authorize).
+- **A trusted client asks once when it signs in from this computer** (H-1, decision 62). The first time a person signs a trusted client such as Claude Code in to a gateway with a loopback redirect, a short notice with **Continue** or **Cancel** appears. It is asked once per person, client and gateway, and not for people who already connected the client. See [Trusted clients](/docs/administer/trusted-clients#the-first-sign-in-from-this-computer).
+- **Refresh tokens have an absolute lifetime** (H-8, decision 63): `OAUTH_REFRESH_ABSOLUTE_TTL`, default 180 days from the person's last sign-in of the app (`0` for no limit). A refresh token presented again within the 30-second grace now gets the same new tokens instead of a second set. [Connected apps](/docs/use/connected-apps#how-long-a-connection-lasts) shows when each sign-in expires.
+- **Controls for open client registration** (H-4). [Admin › Trusted clients](/docs/administer/trusted-clients#open-client-registration) has a switch to turn registration off; a registration that never received tokens is deleted after 24 hours; `OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS` (default 20) limits the unused registrations one address can hold. See [Configuration](/docs/operate/configuration#oauth-clients).
+- **The sign-in state cookie is `__Host-omp_oidc_state` on https**, and a missing `TRUSTED_PROXIES` behind a proxy is reported in the log and by `doctor` (H-7). See [Behind a proxy](/docs/operate/configuration#behind-a-proxy-trusted_proxies).
+- **Dockerfile base images are pinned by digest** (H-9), with their tags kept; Dependabot keeps the digests current.
+- **A new end-to-end test** proves that a provider token a server echoes back is redacted from recorded payloads, audit, call records and logs.
+- **Triage and support policy** in the repository's [`CONTRIBUTING.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.2.2/CONTRIBUTING.md#how-issues-are-handled): what the labels mean, what to expect from one maintainer, supported versions, release cadence, and how decisions are made. `scripts/bump-version.py` now makes the version bump of a release mechanical.
+
+## Upgrading
+
+1. Pin the new image (verify its signature first, see [The image](#the-image)). The init container applies migrations `00018` and `00019`; both only add columns and tables, so the previous image keeps working against the new schema if you need to roll back.
+2. **OAuth apps sign in again about every 180 days.** Apps connected when `00018` runs get one whole window from that moment, so nobody is signed out by the upgrade. API keys and service-account keys are not affected: use them for agents that run without a person. Set `OAUTH_REFRESH_ABSOLUTE_TTL=0` to keep the old unlimited life.
+3. **People signing a trusted client in from their own computer see a one-time notice.** Trusted clients with `https` redirects are unaffected.
+4. **New servers on public hosts with no authentication send no identity token by default.** If one of yours expects the token, turn **Send identity token** on for it.
+5. Registrations nobody ever used disappear after 24 hours; apps that were ever authorized are unaffected.
+6. The old sign-in cookie name is still accepted for this release (a person who is mid sign-in during the upgrade is not sent back); it will be removed in v0.3.
+
+[Upgrading from v0.2.1](/docs/operate/migrations-and-upgrades#upgrading-from-v021) has the same points with the details.
+
+## Verification
+
+- Go tests with the race detector against PostgreSQL, the web tests, the route and authorization-matrix tests, `make k8s-validate` and `actionlint`; `govulncheck` and `npm audit` report nothing.
+- New tests cover each change (see the changelog), including a full authorization-code and PKCE flow for Claude Code's metadata-document shape with a loopback redirect, migration up-and-down tests for both migrations, and the redaction end-to-end test.
+- The Kubernetes smoke test (`make k8s-smoke`) runs in CI on this release.
+- A browser check of two new screens against a local stack: the registration switch (Admin › Trusted clients) and the add-server form, where typing a public address turns **Send identity token** off and says why. That check found one wrong sentence (the "None" option still said calls carry the identity token), fixed before release.
+- Not done: a browser look at the consent notice for a trusted loopback client (covered by an integration test of the whole flow), and a run of the new sign-in flow with the real Claude Code client.
+
+## Known limitations
+
+Carried over from v0.2.1 unless marked new:
+
+- **VS Code and Cursor have not been run** against a gateway ([client compatibility](/docs/use/client-compatibility)); neither has a real Google or Microsoft delegated-credentials provider, a real Slack webhook or a real mail server.
+- **A server that refuses the identity token only when a tool runs** still passes Test connection. The call record now shows whether the token was sent, and new public servers no longer send it by default (new).
+- **After the first confirmation, a local process can still use a trusted client's ID silently** (H-1 residual, new: stated in the threat model).
+- **Open threat-model ideas** that remain: per-provider allow-lists and scope narrowing (H-5), audit export (H-10), split database roles (H-11), idle sessions (H-12). See [Hardening status](/docs/operate/security#hardening-status).
+- Remote servers only (no stdio); development software that has not run in production.
+
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.2.2` is a multi-arch image (linux/amd64 and linux/arm64), signed with cosign keyless signing by the repository's `image.yml` workflow. Its digest is:
+
+```text
+sha256:2e42d17d41f6b3f05baef903b1bef6da609107c34ce074c75237c054c71bdd8d
+```
+
+Check the signature with **cosign v3.0 or newer**, then pin the image by that digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:2e42d17d41f6b3f05baef903b1bef6da609107c34ce074c75237c054c71bdd8d \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.2.2 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/open-mcp-portal/issues](https://github.com/ncecere/open-mcp-portal/issues) (there is a form for each kind) or ask in [Discussions](https://github.com/ncecere/open-mcp-portal/discussions). Report security problems privately, as [`SECURITY.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.2.2/SECURITY.md) describes.

@@ -144,7 +144,7 @@ It builds the portal and the fake MCP server images from the working tree, creat
 - **Production sizing, storage and PostgreSQL.** One throwaway PostgreSQL without backup, TLS or failover; a three-node cluster in one Docker VM; no zone spreading (kind's nodes carry no zone label); no node drain, upgrade between releases or restore.
 - **Client-visible `/readyz`.** A pod that has had SIGTERM answers `/readyz` with `503` on purpose, and for a second or so kube-proxy can still route a request to it, so a loop of `/readyz` requests during a rollout sees a few `503`s. Real traffic (`/healthz`, `/mcp`) does not.
 
-**In CI.** The repository's workflow, [`k8s-smoke.yml`](https://github.com/ncecere/open-mcp-portal/blob/v0.2.2/.github/workflows/k8s-smoke.yml), runs the script on demand, weekly and on pushes to `main` that change `deploy/**`, the `Dockerfile`, the script or the workflow, with both CNIs. It has not run on GitHub yet; the script itself was run on macOS (Docker Desktop, arm64).
+**In CI.** The repository's workflow, [`k8s-smoke.yml`](https://github.com/ncecere/open-mcp-portal/blob/v0.2.2/.github/workflows/k8s-smoke.yml), runs the script on demand, weekly and on pushes to `main` that change `deploy/**`, the `Dockerfile`, the script or the workflow, with both CNIs. The [v0.2.2 notes](/docs/releases/v0-2-2#verification) say it runs in CI on that release; the script itself was also run on macOS (Docker Desktop, arm64).
 
 ## Not included
 
