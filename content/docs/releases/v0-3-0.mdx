@@ -20,7 +20,7 @@ The first release of the v0.3 line. The portal can now trust an external **agent
 
 ## Upgrading
 
-1. Pin the new image (verify its signature first, see [The image](#the-image)). The init container applies migration `00020`, which adds tables and nullable columns only; the previous image keeps working against the new schema. **Do not use `goose down` to roll back**: it would drop the trusted platforms, relay marks and the agent columns of the call history. Pin the previous image instead.
+1. Pin the new image (verify its signature first, see [The image](#the-image)). The init container applies migration `00020`, which adds tables and columns only; the previous image keeps working against the new schema. **Do not use `goose down` to roll back**: it would drop the trusted platforms, relay marks and the agent columns of the call history. Pin the previous image instead.
 2. Nothing else changes for existing installs. The new surfaces are off until an admin configures them.
 3. To use it with Pi Durable Platform, follow [Agent platforms](/docs/administer/agent-platforms). Pi Durable Platform's `identityAudience` must be set to the portal's `APP_URL`.
 4. The portal no longer accepts the old (non-`__Host-`) sign-in state cookie name on https, as announced in v0.2.2. A person who started signing in just before the upgrade starts again.

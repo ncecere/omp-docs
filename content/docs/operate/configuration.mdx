@@ -136,7 +136,7 @@ The portal serves plain http and expects TLS to end at a proxy, so `APP_URL` is 
 
 - **A warning tells you.** With `TRUSTED_PROXIES` empty and a non-loopback `APP_URL`, a request that carries `X-Forwarded-For` or `Forwarded` makes the portal log `requests carry X-Forwarded-For (or Forwarded) but TRUSTED_PROXIES is empty…` at WARN level: once for the first such request, then at most once a minute. Nothing about the request changes. Setting `TRUSTED_PROXIES` to the proxy's network, such as `10.0.0.0/8`, stops it. The warning is not given when `TRUSTED_PROXIES` is set, even for a request from outside it.
 - **`open-mcp-portal doctor`** prints an info line (`configuration / trusted proxies`) when `APP_URL` is https and `TRUSTED_PROXIES` is empty. It can't see traffic, so ignore it when nothing sits in front of the portal. See [Health and doctor](/docs/operate/health-and-doctor#doctor).
-- **Sign-in cookie.** On https the sign-in state cookie is `__Host-omp_oidc_state` (host-only, `Secure`, `Path=/`), like the session cookie `__Host-omp_session`; over the development http origin the names have no prefix. For one release (v0.2.2) the old name `omp_oidc_state` is still accepted, so a person who started signing in just before an upgrade is not sent back to the start; it will be removed in v0.3.
+- **Sign-in cookie.** On https the sign-in state cookie is `__Host-omp_oidc_state` (host-only, `Secure`, `Path=/`), like the session cookie `__Host-omp_session`; over the development http origin the names have no prefix. v0.2.2 still accepted the old name `omp_oidc_state` for one release. **Since v0.3.0 it is no longer read** on https, so a person who started signing in just before the upgrade to v0.3.0 starts again.
 
 ## Safety checks
 

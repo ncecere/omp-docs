@@ -23,11 +23,21 @@ The database schema is managed by migrations built into the binary. They are **f
 
 ## Rolling back
 
-Pin the previous image. Migrations are never rolled back automatically; because they are expand-only, the previous release normally runs on the newer schema. To undo a migration itself, restore the backup made before the upgrade.
+Pin the previous image. Migrations are never rolled back automatically; because they are expand-only, the previous release normally runs on the newer schema. To undo a migration itself, restore the backup made before the upgrade. **Don't use `goose down`** to go back past `00020` (v0.3.0): it would drop the trusted agent platforms, the relay marks and the agent columns of the call history. Pin the previous image instead.
+
+## Upgrading from v0.2.2
+
+v0.3.0 adds migration `00020`, which is **expand-only**: it adds tables and columns and changes nothing that v0.2.2 reads, so the steps above apply and a rolling upgrade is safe. The release's own summary is in the [v0.3.0 notes](/docs/releases/v0-3-0#upgrading).
+
+- **Migration `00020`.** It adds the tables for trusted agent platforms and for the token IDs the portal has accepted, a relay mark on service accounts, the present-person settings of servers and capabilities, and the agent columns of the call history. The `migrate` init container, or `migrate` run once before `serve`, applies it. It takes no long lock on the call history, so a large `mcp_calls` table doesn't block calls while it runs.
+- **No rolling back with `goose down`.** Undoing `00020` would drop the trusted platforms, the relay marks and the agent columns of the call history. Pin the previous image instead: v0.2.2 ignores the new tables and columns and keeps working against the new schema (see [Rolling back](#rolling-back)).
+- **Nothing changes until it is configured.** The new surfaces are off until a platform admin adds a trusted platform and marks a relay service account. No setting or environment variable is new. To use it with Pi Durable Platform, follow [Agent platforms](/docs/administer/agent-platforms); the platform's `identityAudience` must be the portal's `APP_URL`.
+- **The old sign-in cookie name is no longer read.** On https only `__Host-omp_oidc_state` is accepted, as v0.2.2 announced. A person who started signing in just before the upgrade starts again.
+- **Run `doctor`** as usual after the upgrade.
 
 ## Upgrading from v0.2.1
 
-v0.2.2 adds migrations `00018` and `00019`. Both are **expand-only** (they add columns and tables and change nothing that v0.2.1 reads), so the steps above apply and a rolling upgrade is safe. The release's own summary is in the [v0.2.2 notes](/docs/releases/v0-2-2#upgrading).
+Coming from v0.2.1, follow this section and then [Upgrading from v0.2.2](#upgrading-from-v022). v0.2.2 adds migrations `00018` and `00019`. Both are **expand-only** (they add columns and tables and change nothing that v0.2.1 reads), so the steps above apply and a rolling upgrade is safe. The release's own summary is in the [v0.2.2 notes](/docs/releases/v0-2-2#upgrading).
 
 - **Migrations.** `00018` adds what the OAuth hardening needs (when each app was last signed in, the registration switch, and when and from where each registered client was created). `00019` adds a nullable column to call records that says whether the identity token was sent. The `migrate` init container, or `migrate` run once before `serve`, applies them.
 - **Rolling back.** Pin the previous image: v0.2.1 ignores the new columns and keeps working against the new schema. Nothing is undone in the database (see [Rolling back](#rolling-back)).
@@ -42,7 +52,7 @@ Also:
 
 - Registrations that never received tokens are deleted after 24 hours, and one source address can hold `OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS` (default 20) of them. Apps that were ever authorized are unaffected.
 - An anonymous request to `/oauth/authorize` is sent to sign in before the app is looked at, so a person with a bad client learns it after signing in.
-- On https the sign-in state cookie is now `__Host-omp_oidc_state`. The old name is still accepted for this release, so nobody who is mid sign-in during the upgrade is sent back; it will be removed in v0.3.
+- On https the sign-in state cookie is now `__Host-omp_oidc_state`. The old name was still accepted in v0.2.2, so nobody who was mid sign-in during that upgrade was sent back; v0.3.0 no longer reads it.
 - Behind a proxy, set `TRUSTED_PROXIES` if you haven't: with it empty, the portal logs a warning and `doctor` prints an info line ([Configuration](/docs/operate/configuration#behind-a-proxy-trusted_proxies)).
 
 ## Upgrading from v0.2.0
@@ -69,7 +79,7 @@ The portal now refuses to start with an `ENCRYPTION_KEY` equal to the `API_KEY_P
 
 ### Migrate, then roll every replica
 
-Back up, pin the digest of the current release, v0.2.2, which includes v0.2.0's migrations and adds `00018` and `00019` (see [Install with Docker Compose](/docs/operate/compose#the-image) or [Install on Kubernetes](/docs/operate/kubernetes#the-image)), and run `migrate` once (the `migrate` init container, or `MIGRATE_ON_START` on a single instance). Then start **every** replica on v0.2.2 (at least v0.2.0). Read [Upgrading from v0.2.1](#upgrading-from-v021) too.
+Back up, pin the digest of the current release, v0.3.0, which includes v0.2.0's migrations and adds `00018`, `00019` and `00020` (see [Install with Docker Compose](/docs/operate/compose#the-image) or [Install on Kubernetes](/docs/operate/kubernetes#the-image)), and run `migrate` once (the `migrate` init container, or `MIGRATE_ON_START` on a single instance). Then start **every** replica on v0.3.0 (at least v0.2.0). Read [Upgrading from v0.2.1](#upgrading-from-v021) and [Upgrading from v0.2.2](#upgrading-from-v022) too.
 
 </Step>
 <Step>

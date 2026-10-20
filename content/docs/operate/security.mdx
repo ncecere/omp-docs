@@ -11,6 +11,7 @@ Open MCP Portal stands between AI clients and your teams' MCP servers. Its job i
 - **MCP clients** sign in with the portal's own OAuth 2.1 authorization server: PKCE S256 only, exact redirect URI matching, a token bound to one gateway (`resource`), consent per person, client and gateway, refresh tokens rotated on every use with reuse detection and, since v0.2.2, an absolute lifetime (`OAUTH_REFRESH_ABSOLUTE_TTL`, 180 days from the person's last sign-in of the app). Client ID Metadata Documents are fetched through the address guard (at most 16 KiB, no redirects), and only after the person has signed in. A trusted client asks once, with a short notice, the first time it signs in from a person's computer. Self-registered clients are marked unverified and can never be trusted to skip consent; the portal keeps at most `OAUTH_MAX_REGISTERED_CLIENTS` of them at once (1,000 by default), at most `OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS` unused ones per address, deletes unused ones after 24 hours, and an admin can turn open registration off (see [Hardening status](#hardening-status)).
 - **Keys** (personal and service account) always expire (at most 365 days) and can be limited to some gateways.
 - **Automation tokens** (`ompadm_`, `omppub_`) let CI call part of the management API. They are separate from MCP credentials in both directions: they never work on `/mcp`, and `omp_`, `omp_sa_` and OAuth tokens never work on `/v1`. They expire (at most 365 days), show once, and are created and revoked only in a browser session, never with a token. A platform token stops working if its creator is no longer a platform admin. What they may do is fixed by the OpenAPI description, and they can't approve, delete, change roles or read recorded call contents. Every action is audited as the token. See [Automation tokens](/docs/administer/automation-tokens).
+- **Agent platforms** (v0.3.0). A trusted platform such as Pi Durable Platform can name the person an agent acts for, in a signed token presented with a relay service account's key. See [Agent platforms](#agent-platforms).
 - **A redirect after sign-in** goes only to a path on the portal itself: control characters, `//` and backslashes in the `next` value are refused.
 
 ## Every request is authorized again
@@ -22,6 +23,7 @@ Tool annotations and model output are never used for authorization. Definitions 
 ## What servers receive
 
 - The caller's own credential is **never** forwarded. Each call carries an ES256 identity token for that server only (`aud` = the server's URL), valid for 5 minutes, with keys rotating every 30 days and published at `/.well-known/jwks.json`. It starts off for a server registered with no authentication on a public host and on for internal hosts and the header and OAuth modes, and a team can change it for any server. It also goes with an editor's manual **Test connection**, for that editor and with the gateway `omp:test`, so that a server that refuses it shows up at Test; refresh and scheduled checks send none.
+- On a call an agent platform relayed for a person, the token is the person's and carries an `act` claim naming the agent, and only on such calls ([Calls from agents](/docs/server-authors/identity-token#calls-from-agents)). A server whose **Send identity token** is off gets no `act`, but still gets the person's provider token when the capability needs one.
 - A person's provider token goes only to a server whose requirement for that capability names that provider **and that the person allowed**, at the address (scheme, host and port) it had when they allowed it; never on lists, discovery, tests or health checks. Moving a server to another host, or making it require another provider, ends everyone's permission. The token still holds every scope the person granted that provider, so a server they allowed receives all of them.
 - A server's stored header value never follows a change of URL to another origin: the edit is refused unless it supplies a new value or removes the header.
 - A person's token for an OAuth-protected server goes only to that server's URL, which must equal its metadata's `resource`, and to its own token and revocation endpoints.
@@ -49,6 +51,33 @@ A `-32042` consent link contains only an opaque ID: no personal data, and it sig
 
 A platform admin's approval of a server or capability names what the reviewer saw: the review dialog sends a digest of the server's definitions (or a capability's fingerprint), and an approval of something that changed in between is refused with `409 changed_since_review`. A team's own servers need no approval for the team's own gateways: review protects other teams.
 
+## Agent platforms
+
+Since v0.3.0 the portal can trust an external agent platform (the first is Pi Durable Platform) to say which person an agent acts for. The setup is in [Agent platforms](/docs/administer/agent-platforms); this is the part that matters for security.
+
+**The trust boundary.** The portal trusts the platform for exactly one statement: *this call is for person P* (and whether P is present), made from the platform's own records. It doesn't trust the platform for the person's roles, teams or email, for which gateways they may use, or for whether they connected an account: those come from the portal's database on every call. The trust is limited three ways. A token only counts **with a relay service account's key** (the platform alone, or the key alone, is not enough). The call **can reach no more than the relay account could** (the person's access intersected with the relay's, the lower role deciding). And an agent **never gets a consent link**.
+
+**The verifier.** Only ES256 tokens, with the key taken from the platform's key set and never from the token; the issuer and audience must match what an admin added; a token lasts at most 10 minutes and is accepted once across all replicas; the person is found by their sign-in at your identity provider, never by email; and on a tool call the token's `tool` claim must equal the tool called. Keys are fetched through the address guard, https only, with no redirects. A token with a credential that isn't a relay is ignored and counted; a bad token on a relay's request refuses the request.
+
+**What a compromised key or platform can do:**
+
+| Compromised | Can | Can't | Containment |
+|---|---|---|---|
+| The relay's key only | Make the relay account's own calls (no person), within the team's gateways and the account's role | Act as a person: it can't mint tokens, and a token is accepted once | Revoke the key, clear the relay mark |
+| The platform's signing key | Name **any** person who has a portal account, for any call the relay itself could make, with **their own delegated credentials** for servers they allowed, and claim they are present | Reach a gateway the relay can't; use `/v1` or the admin API; mark relays or change trust; get a consent link | Turn the platform off (refused from the next request), delete it, or have it withdraw the key (refused once a replica's cache expires, at most 5 minutes). The call log names the agent, the person and the platform for every call |
+| A malicious platform admin who adds a platform | The same, while it is trusted | The same | Adding a platform and marking a relay are two separate platform-admin actions, both audited, and the relay's team must also issue the key |
+
+**Accepted residuals** (threat model section 6.8):
+
+- **M-1: the token is bound to the platform-wide audience and to its tool, not to a relay or a gateway.** A token that another server of the platform received can be used with any relay key of that platform, once, for a call of the same tool name. It needs a team admin at the platform who may set `identityAudience` to the portal's address, a victim's agent that calls their server, and a relay key; run the platform so that only platform admins set `identityAudience`, and a team's server never gets a token whose audience is a trusted portal audience. A per-gateway audience and a claim naming the intended relay are not built ([#62](https://github.com/ncecere/open-mcp-portal/issues/62)).
+- **The platform's word that a person is present** can't be checked: a compromised platform can claim it, and a token with inconsistent claims isn't refused.
+- **A person removed at the identity provider** stays reachable through agents until suspended or removed in the portal.
+- **A refused token leaves no call record**, only the `omp_agent_token_total` counter and a warning in the log.
+- **A server with Send identity token off** can't tell an agent's call from the person's.
+- **An agent can still make a person's connected accounts act** within their gateways, which is what delegation is; **Require a present person** keeps unattended calls away from the tools that matter.
+
+The independent review of this work found no Critical or High findings; its findings were fixed or are the residuals above ([release notes](/docs/releases/v0-3-0)). It was not run against a live Pi Durable Platform.
+
 ## Records
 
 The audit log and call records are append-only (database triggers refuse changes; only the retention job deletes, past their periods). Every change is audited in the same transaction. Recording of call contents is off by default, redacted, truncated, encrypted, readable only by the recording team's owners and admins and by platform staff, and every view is audited.
@@ -62,9 +91,9 @@ The audit log and call records are append-only (database triggers refuse changes
 
 ## Hardening status
 
-The repository's [threat model](https://github.com/ncecere/open-mcp-portal/blob/v0.2.2/docs/threat-model.md#9-hardening-ideas-not-findings) keeps a list of hardening ideas, numbered H-1 onward, which are suggestions rather than known vulnerabilities, and a table of where each stands (reviewed 2026-10-18, for v0.2.1, and updated for v0.2.2). v0.2.2 closed most of them:
+The repository's [threat model](https://github.com/ncecere/open-mcp-portal/blob/v0.3.0/docs/threat-model.md#9-hardening-ideas-not-findings) keeps a list of hardening ideas, numbered H-1 onward, which are suggestions rather than known vulnerabilities, and a table of where each stands (reviewed 2026-10-18, for v0.2.1, and updated since). v0.2.2 closed most of them, and v0.3.0 finished one more detail (H-7's old cookie name). The agent platform relay has its own residuals, listed [above](#agent-platforms), in the threat model's section 6.8:
 
-| Idea | Status in v0.2.2 | What remains |
+| Idea | Status in v0.3.0 | What remains |
 |---|---|---|
 | **H-1**, trusted clients and loopback redirects | **Partly done** (decision 62) | A trusted client's first sign-in to a gateway with a loopback redirect asks once ([Trusted clients](/docs/administer/trusted-clients#the-first-sign-in-from-this-computer)). After that first confirmation a local process can still use the trusted client's ID silently, and a process that drives the person's browser can press Continue. What limits it: the person must be signed in in their browser, the code is PKCE-bound and the token is bound to one gateway |
 | **H-2**, `sendIdentity` default | **Mostly addressed** (decision 64) | The default is off for a server with no authentication on a public host, on for internal hosts and other modes; an explicit value is kept and existing servers are unchanged ([Send identity token](/docs/teams/register-a-server#send-identity-token)). A manual Test sends the token and diagnoses a `401` or `403`. A server that accepts the request and refuses only when a tool runs (DeepWiki's public endpoint) still passes Test; each call's record shows whether the token was sent. Servers registered before v0.2.2 keep their value |
@@ -72,14 +101,14 @@ The repository's [threat model](https://github.com/ncecere/open-mcp-portal/blob/
 | **H-4**, open client registration | **Done except two accepted gaps** (the cap in v0.2.1, the controls in v0.2.2) | `OAUTH_MAX_REGISTERED_CLIENTS`, an admin switch that turns registration off, a 24-hour life for registrations that never received tokens, `OAUTH_MAX_UNUSED_CLIENTS_PER_ADDRESS` (20) and a `doctor` line ([Configuration](/docs/operate/configuration#oauth-clients)). The per-address cap counts only unused registrations (and is one shared address behind an ingress without `TRUSTED_PROXIES`), many addresses can still fill the global cap, and there is no browser-only check, which would break native apps |
 | **H-5**, per-provider allow-list and per-call scopes | **Open** | A feature for v0.3 (credentials), not a patch. The header-read timeout part is done |
 | **H-6**, upstream error text relayed | **Reviewed, kept** | It is capped at 300 characters and redacted, and it proved useful: DeepWiki's own message told the person what was wrong |
-| **H-7**, proxy and cookie checks | **Done, with residuals** | `ENCRYPTION_KEY` and `API_KEY_PEPPER` must differ; the sign-in state cookie is `__Host-` prefixed on https; a once-a-minute warning and a `doctor` line when `TRUSTED_PROXIES` is empty behind a proxy ([Behind a proxy](/docs/operate/configuration#behind-a-proxy-trusted_proxies)). The old cookie name is accepted for this release and goes in v0.3; there is no warning for a `TRUSTED_PROXIES` that is set but wrong |
+| **H-7**, proxy and cookie checks | **Done, with residuals** | `ENCRYPTION_KEY` and `API_KEY_PEPPER` must differ; the sign-in state cookie is `__Host-` prefixed on https; a once-a-minute warning and a `doctor` line when `TRUSTED_PROXIES` is empty behind a proxy ([Behind a proxy](/docs/operate/configuration#behind-a-proxy-trusted_proxies)). The old cookie name was accepted in v0.2.2 and is no longer read since v0.3.0; there is no warning for a `TRUSTED_PROXIES` that is set but wrong |
 | **H-8**, refresh token lifetime | **Done** (decision 63) | `OAUTH_REFRESH_ABSOLUTE_TTL` (180 days, `0` for none) from the last sign-in; a repeat inside the 30-second grace gets the same pair. A leaver's grants last up to the lifetime unless someone disconnects them or suspends the person |
 | **H-9**, image and scan hardening | **Done, with a residual** | `govulncheck` and `npm audit` block CI; Trivy fails the release on fixable high and critical findings; the Dockerfile's base images are pinned by digest. Digests are current only as far as Dependabot's weekly pull request is merged |
 | **H-10**, off-host audit export | **Open** | Needs a destination. The audit log is append-only and exportable as CSV |
 | **H-11**, split database roles | **Open** | Needs separate migration and runtime connection strings, then separate roles in a deployment |
 | **H-12**, idle timeout and session list | **Open** | A product change with a default to choose |
 
-v0.2.2 also adds an end-to-end test that a provider token a server echoes back is redacted from recorded payloads, audit, call records and logs. The repository's table is the full record; this page summarises it.
+v0.2.2 added an end-to-end test that a provider token a server echoes back is redacted from recorded payloads, audit, call records and logs. The repository's table is the full record; this page summarises it.
 
 ## What the portal doesn't do
 
