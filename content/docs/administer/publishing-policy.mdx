@@ -22,3 +22,7 @@ Changing the default or an override **never changes any server's state**:
 The policy in force when something happens is the one that applies: a URL change on a published server, for example, sends it back to review only if its team is under **Approval required** at that moment.
 
 Both settings are revisioned: if someone else saved first, you're asked to reload. Changes are audited as `settings.publishing_update` and `team.publishing_override`.
+
+## Server reviews
+
+The same page has a **Server reviews** card, saved separately: how many days pass before a published server is reviewed again, by its sensitivity label, and whether an overdue server goes back to the review queue. See [Server governance](/docs/administer/governance#re-review-intervals).

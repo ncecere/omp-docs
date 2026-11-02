@@ -1,13 +1,13 @@
 ---
 title: Limits
-description: Rate limits on Open MCP Portal's gateways per person, per key or app, per service account and per gateway, with defaults, ceilings and team overrides.
+description: Rate limits in Open MCP Portal per person, per key or app, per service account, per gateway and per upstream server, with defaults, ceilings and team overrides.
 ---
 
-**Admin › Limits** sets how many requests per minute callers may send to gateways. Limits are counted in PostgreSQL in fixed one-minute windows, so every replica shares the same counters.
+**Admin › Limits** sets how many requests per minute callers may send to gateways, and how many the portal forwards to each upstream server. Limits are counted in PostgreSQL in fixed one-minute windows, so every replica shares the same counters.
 
 <Screenshot slot="admin-limits" />
 
-## The four limits
+## The five limits
 
 | Limit | Counts | Built-in default | Team override |
 |---|---|---|---|
@@ -15,27 +15,41 @@ description: Rate limits on Open MCP Portal's gateways per person, per key or ap
 | **Per API key or connected app** | Requests with one personal API key or one OAuth connection | 300 | No |
 | **Per service account** | Requests by one service account, all its keys together | 1,200 | Yes |
 | **Per gateway** | Requests to one gateway from all callers together | Unlimited | Yes, and each gateway can set its own |
+| **Per upstream server** | Forwarded tool, prompt and resource attempts to one server from all gateways and callers, including automatic retries | Unlimited | Yes, and each server can set its own |
 
-Values are 1 to 1,000,000 per minute, or unlimited. The two overridable limits also have a **ceiling** (or none): team overrides and a gateway's own limit may be above or below the default, but not above the ceiling.
+Values are 1 to 1,000,000 per minute, or unlimited. The three overridable limits also have a **ceiling** (or none): team overrides and a gateway's or server's own limit may be above or below the default, but not above the ceiling.
 
 What applies:
 
 - a service account: the team's override, else the default;
-- a gateway: the gateway's own limit, else (for a team gateway) the team's override, else the default.
+- a gateway: the gateway's own limit, else (for a team gateway) the team's override, else the default;
+- an upstream server: the server's own limit, else its team's override, else the default.
 
-Both are capped at the current ceiling. Lowering a ceiling keeps the stored values and caps them when they're applied; the page counts the teams and gateways it caps. Team overrides are set on the team's admin page (**Limits & retention**); a gateway's own limit on its **Settings** tab. Changes apply on every replica within 30 seconds.
+All are capped at the current ceiling. Lowering a ceiling keeps the stored values and caps them when they're applied; the page counts the teams, gateways and servers it caps. Team overrides are set on the team's admin page (**Limits & retention**); a gateway's own limit on its **Settings** tab; a server's own limit on its **Settings** tab, by the team's owners and admins only (not editors, and not automation tokens). Changes apply on every replica within 30 seconds.
 
 ## What counts
 
 Every authenticated request to `/mcp/{slug}` that reaches a gateway counts: `initialize`, `ping`, notifications, lists and calls, including refused ones. Requests answered `401` or `404` don't count, so put the ingress's own limits in front of unauthenticated traffic.
 
+**Per upstream server** counts differently: only tool calls, `prompts/get` and `resources/read` that the portal forwards to the server, from every gateway, caller and replica together. Each automatic retry counts again. Health checks, discovery and connection setup don't count.
+
 ## Over a limit
 
 The request isn't forwarded. The caller gets HTTP `429` with `Retry-After` (seconds to the end of the window, at least 1) and a JSON-RPC error `-32029`, such as "Rate limit exceeded (person); try again in 12 s", with `data.reason` `rate_limited`, the limit's key, `limitPerMinute` and `retryAfterSeconds`. When several limits are exceeded, the most specific is named (key or app, person, service account, gateway). The call is recorded with outcome **Rate limited**.
 
-Counted responses carry `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` for the caller's own tightest limit (person, key or app, or service account); gateway-wide counts are never shown to callers.
+A server's limit is checked after the caller's own limits and before anything is sent, so a refused call never uses up an approval. The caller gets the same `429` and `Retry-After`, recorded with the error class `server_per_minute`. A server's own concurrency cap refuses the same way, with the class `server_busy`.
+
+Counted responses carry `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` for the caller's own tightest limit (person, key or app, or service account); gateway-wide and server-wide counts are never shown to callers.
 
 A minute boundary can let up to twice a limit through in a short burst. Counters may be lost on a database crash or failover (the table is unlogged), which only resets the current minute.
+
+## Protecting upstream servers
+
+Besides the per-minute limit, a server's team owners and admins can set a **concurrency** cap on its Settings tab: 1 to 10,000 calls in progress at once, per replica, with no queue. You see it read-only. The portal also retries some failed read calls by itself, within the call's original timeout, and on each replica stops calling a server for 30 seconds after 5 failures in a row (a circuit breaker). Refusals show as the error classes `server_busy` and `circuit_open` in [Calls](/docs/administer/usage-and-calls) and in the `omp_server_circuit_state` metric. See [Protection and failover](/docs/teams/protection-and-failover).
+
+<Callout type="warn" title="Drain older replicas first">
+Replicas older than v0.7.0 don't enforce server limits, concurrency caps, retries or the circuit breaker. Finish the rollout before you rely on them.
+</Callout>
 
 ## Other limits
 

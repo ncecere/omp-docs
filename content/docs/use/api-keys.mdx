@@ -1,9 +1,9 @@
 ---
 title: API keys
-description: "Personal API keys for scripts and MCP clients that can't sign in with a browser: creating, limiting to gateways, using and revoking them in Open MCP Portal."
+description: "Personal API keys for scripts and MCP clients that can't sign in with a browser: creating, limiting to gateways and tools, using and revoking them in Open MCP Portal."
 ---
 
-A personal API key (`omp_…`) lets a script, `curl` or an MCP client that can't open a browser call your gateways. It **acts as you**: it reaches the gateways you can use, with your access, checked on every request. For interactive clients, prefer [OAuth sign-in](/docs/get-started/connect-your-client); for automation that mustn't depend on you, use a team [service account](/docs/teams/service-accounts). These keys, like service account keys, only work on gateways (`/mcp`): they can't call the management API. CI that registers or publishes a team's servers uses a team admin's [publisher token](/docs/teams/publisher-tokens) instead.
+A personal API key (`omp_…`) lets a script, `curl` or an MCP client that can't open a browser call your gateways. It **acts as you**: it reaches the gateways you can use, with your access, checked on every request. Its tool scope can only restrict your access, never add to it. For interactive clients, prefer [OAuth sign-in](/docs/get-started/connect-your-client); for automation that mustn't depend on you, use a team [service account](/docs/teams/service-accounts). These keys, like service account keys, only work on gateways (`/mcp`): they can't call the management API. CI that registers or publishes a team's servers uses a team admin's [publisher token](/docs/teams/publisher-tokens) instead.
 
 Your keys are under Account › **API keys** (the menu under your name).
 
@@ -14,6 +14,7 @@ Choose **Create API key** and fill in:
 - **Name**: where you'll use it, for example "Claude Code on my laptop". When a request doesn't carry the MCP client's own name, call records and MCP servers see the key's name as the client.
 - **Expires after (days)**: keys always expire, from 1 to 365 days (90 by default). Create a new one when it does.
 - **Limit to gateways (optional)**: the key then works only on those gateways, and only while you can use them. Leave it empty to use the key on every gateway you can use. A limit never gives you more access. At most 50 gateways.
+- **Tool scope**: which tools the key may call. **Everything** (the default) adds no restriction; **Read only** allows only tools classified as read; **Custom** lets you tick **Read**, **Write** and **Destructive** and add **Exact tool names** with **Add tool name**. Unclassified tools are reachable only through **Everything** or an exact name. Prompts and resources are never restricted. See [Tool scopes](/docs/use/tool-scopes).
 
 <Screenshot slot="api-key-create" />
 
@@ -36,7 +37,7 @@ API keys work only on `/mcp/{slug}`, not on the management API.
 
 ## The list
 
-Each key shows its status (**Active**, **Expired** or **Revoked**), when it was last used, when it expires, and where it works: **All my gateways** or the gateways it's limited to. A gateway that was deleted is marked; a key whose gateways are all gone **works nowhere**, and the page warns about it. Revoked and expired keys stay listed for 30 days.
+Each key shows its status (**Active**, **Expired** or **Revoked**), its **Tool scope** (**Everything**, **No tools**, or its classes and exact names with a note on unclassified tools), when it was last used, when it expires, and where it works: **All my gateways** or the gateways it's limited to. A gateway that was deleted is marked; a key whose gateways are all gone **works nowhere**, and the page warns about it. Revoked and expired keys stay listed for 30 days.
 
 ## Revoke a key
 
@@ -45,5 +46,7 @@ Each key shows its status (**Active**, **Expired** or **Revoked**), when it was 
 ## When a key stops working
 
 A key is refused (`401`) once it's revoked or expired, or when you're suspended. It doesn't see a gateway (`404`) when you lose access to it: you leave the team, a grant is removed, or the gateway is turned off. A key limited to other gateways also gets `404`.
+
+A tool outside the key's tool scope isn't listed, and calling it answers `Unknown tool` (`-32602`), not `401` or `404`. Exact names match the name the gateway exposes, so if a gateway renames a tool, a scope that names the old name stops matching it.
 
 Keys are stored only as keyed digests; nobody, including platform admins, can see a key after it's created.

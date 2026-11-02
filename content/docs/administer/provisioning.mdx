@@ -1,0 +1,134 @@
+---
+title: Provisioning
+description: "Let your identity provider create, update, deactivate and delete people and groups in Open MCP Portal through SCIM 2.0: setup, tokens, linking people, group mappings and the lifecycle."
+---
+
+**Admin › Provisioning** (`/admin/provisioning`, in the **People** group) lets an identity provider such as Entra ID, Okta or authentik manage who has access to Open MCP Portal, through SCIM 2.0. The provider creates, updates, deactivates and deletes people and groups at the portal's SCIM endpoint. Sign-in doesn't change: people still sign in with single sign-on (OIDC), and SCIM never authenticates anyone.
+
+Platform admins set it up and change it; platform auditors read the page. Automation tokens can't reach any of it. Provisioning arrived in v0.12.0.
+
+<Callout type="warn" title="Finish the rollout first">
+Older replicas don't serve `/scim/v2` or check enrollment at sign-in. Turn provisioning on only once every replica runs v0.12.0 or later. A status change written by an older replica counts as a manual decision. See [Migrations and upgrades](/docs/operate/migrations-and-upgrades).
+</Callout>
+
+## Set it up
+
+<Screenshot slot="admin-provisioning" />
+
+<Steps>
+<Step>
+
+### Check single sign-on
+
+Provisioning is bound to the OIDC issuer the portal signs people in with, and can't be set up without one (`409 oidc_required`). If the operator later points sign-in at another issuer, the **Directory** card warns "Single sign-on uses another issuer now", and the directory can't be enabled until they match again (`409 issuer_changed`).
+
+</Step>
+<Step>
+
+### Set up the directory
+
+On the **Directory** card, choose the **Enrollment of new people** and **Set up provisioning**:
+
+- **Optional**: "Someone new without a provisioned account can still sign in, unmanaged. A later directory push doesn't take them over."
+- **Required**: "Someone new can sign in only with an active provisioned account. People who already signed in keep signing in."
+
+Then switch **Enabled** on and **Save**. "While off, the directory can't push changes and sign-in isn't gated." The card shows the issuer the directory is bound to and the **SCIM base URL**, `<APP_URL>/scim/v2`, with a copy button.
+
+</Step>
+<Step>
+
+### Create a provisioning token
+
+On the **Provisioning tokens** card, **Create token**: a **Name** (which identity provider uses it) and **Expires after (days)**, 1 to 365. The token starts with `ompscim_` and is shown once. Give the identity provider the SCIM base URL and the token, which it sends as `Authorization: Bearer …`.
+
+</Step>
+<Step>
+
+### Send the sign-in subject as externalId
+
+Configure the identity provider to send, as each user's `externalId`, the OIDC subject (`sub`) it issues for that person. This is the only link between a provisioned account and a person who signs in. In Entra ID, for example, map `objectId` to `externalId` when the portal's OIDC subject is the object ID; in authentik, set the OIDC provider's subject mode and the SCIM `externalId` mapping to the same value.
+
+</Step>
+<Step>
+
+### Map groups, if you want team memberships
+
+See [Group mappings](#group-mappings).
+
+</Step>
+</Steps>
+
+### Provisioning tokens
+
+- At most **5** active tokens. A token belongs to the directory, not to the admin who made it, so it keeps working if they leave.
+- A token works only at `/scim/v2`: it is refused on the management API (`/v1`) and on every gateway, and a browser session, API key or automation token can't call `/scim/v2`.
+- The card lists each token's **Name**, **Created**, **Expires**, **Last used** and **Status**. **Revoke…** refuses the identity provider's next push; create a new token and update the provider if provisioning should continue.
+- Each token is rate limited at `REQUESTS_PER_MINUTE`, like other credentials on the API.
+
+## Linking people
+
+A provisioned account is not an identity. It is linked to a portal person only when its `externalId` equals that person's verified OIDC subject for the configured issuer. Email addresses and `userName` never link accounts.
+
+- **New people** enroll at their first sign-in, when exactly one active provisioned account carries their subject. An inactive account, more than one candidate, or (with **Required** enrollment) no account at all refuses the sign-in before anything is created.
+- **People who already signed in** are never taken over automatically. The **Provisioned accounts** card shows, for each account, the existing person with the same subject, and an admin chooses **Adopt**: "From now on the identity provider can deactivate and delete them, and its group mappings apply. Memberships someone added by hand stay as they are."
+- **Platform admins and team owners are never directory managed.** They can't be adopted, and a managed person can't be made either (`409 protected_principal`). The bootstrap admin never enrolls as managed. **Keep at least one platform admin who isn't managed, for break-glass access.**
+
+<Screenshot slot="admin-provisioning-people" />
+
+The **Provisioned accounts** card lists **Account**, **externalId**, **Directory** (active or deactivated) and **Portal person**: the linked person, the person who can be adopted, "Enrolls on first sign-in", or why someone can't be adopted. Only the first 500 accounts are listed; the identity provider has the full list.
+
+The **Directory-managed people** card lists **Person**, **Status** (their effective status), **Directory** (active, deactivated or deleted in the directory) and **Manual** (your own suspension, or not). **Unlink** returns a person to manual control: only their manual status applies afterwards, the memberships the directory created become manual ones, and the identity provider can no longer deactivate them.
+
+## What the directory's changes do
+
+| The identity provider | Effect in the portal |
+|---|---|
+| Sets `active: false` | The person is suspended at once. Their browser sessions end, requests already in progress can't create keys, and every key, OAuth token and connection is refused while they are inactive. Nothing is deleted |
+| Sets `active: true` | The directory's restriction lifts. Keys and connections that weren't revoked work again for new requests. Earlier browser sessions stay ended: the person signs in again. A manual suspension still applies |
+| Deletes the user | The person is suspended at once, then a clean-up job deletes their sessions, OAuth grants, personal connections, keys for servers, team memberships and user grants, and revokes their API keys. Audit and call history are kept, and team-owned credentials and servers they set up aren't touched. Tokens aren't revoked at the providers |
+| Creates the same person again | A new account doesn't revive the old one. Once the clean-up has finished, an admin re-enrolls the person with **Adopt** (before that: `409 cleanup_pending`, "Their deprovisioning clean-up hasn't finished yet") |
+
+**Manual and directory standing are separate.** Your suspension on [Admin › Users](/docs/administer/users-and-teams#suspend-and-reactivate) and the directory's deactivation each block the person on their own, and lifting one never lifts the other.
+
+**Turning provisioning off** refuses the identity provider's tokens and stops gating sign-in, but leaves each managed person's directory standing as it was: someone the directory deactivated stays suspended. Unlink people to return them to manual control.
+
+The clean-up runs on every replica in small passes. When something is locked (a provider connection in the middle of a token refresh, for example), the pass stops and is tried again; it finishes only when nothing is left.
+
+## Group mappings
+
+The **Group mappings** card maps a directory group to a team with a role. **Map a group**: the **Directory group**, the **Team** and the **Role**: admin, editor or member, never owner. It applies to the group's linked members at once and follows the directory's changes to the group.
+
+- A person's directory role in a team is the highest role among their mapped groups.
+- The directory manages only memberships it created. A membership someone added by hand is never changed or removed, even if the person is also in a mapped group. Changing a directory-created membership by hand takes it over: it becomes manual.
+- Removing someone from a group, deleting the group, or **Remove…** on the mapping removes only the memberships that group gave.
+- Archived teams receive no new directory memberships.
+
+**Gateway grants to SSO groups are separate.** A [platform gateway](/docs/administer/platform-gateways#access) granted to an SSO group still uses the groups claim from the person's latest single sign-on; SCIM groups don't change that. Deactivating or deleting a person blocks all of their access regardless.
+
+## The SCIM endpoint
+
+For the identity provider's configuration. The base URL is `/scim/v2`, with `application/scim+json` and a bearer provisioning token.
+
+- **Users**: list, get, `POST`, `PUT`, `PATCH`, `DELETE`. Attributes: `userName` (required, unique ignoring case), `externalId` (case-exact), `active`, `displayName`, `name.givenName`, `name.familyName`, `emails` (the primary one is kept); `groups` is read-only. Unknown and extension attributes are ignored.
+- **Groups**: the same operations. `displayName` (required, unique ignoring case; a duplicate is `409 uniqueness`), `externalId`, `members` (provisioned users of this directory only).
+- **PATCH** is atomic and applied in order, at most 100 operations and 1,000 members per operation. A PATCH without the top-level `schemas` member is accepted.
+- **Filters**: `eq` only, on `userName`, `externalId` and `id` for users, and `displayName`, `externalId` and `id` for groups. Pagination with `startIndex` and `count` (at most 200); no sorting.
+- Weak ETags; `If-Match` on `PUT`, `PATCH` and `DELETE` is honoured (`412` on a mismatch).
+- Discovery: `/ServiceProviderConfig`, `/ResourceTypes`, `/Schemas`. No bulk operations or password changes.
+
+## Audit and API
+
+The identity provider's writes are audited as system entries naming the token: `scim.user_create`, `.user_update`, `.user_deactivate`, `.user_reactivate`, `.user_delete`, `.group_create`, `.group_update` and `.group_delete`. Enrollment at sign-in (`scim.user_enroll`), membership changes from mappings (`scim.membership_sync`) and the clean-up (`scim.user_cleanup`) are system entries too. Admins' changes are audited as `scim.directory_create`, `.directory_update`, `.token_create`, `.token_revoke`, `.user_adopt`, `.user_unlink`, `.mapping_create` and `.mapping_delete`.
+
+The admin operations are under `/v1/admin/provisioning`, browser session only ([reference](/docs/api/reference/provisioning/adminGetProvisioning)). `/scim/v2` itself is not part of the OpenAPI document.
+
+## What isn't covered
+
+- **Real-time sign-out at the identity provider.** A deactivation takes effect when the directory pushes it.
+- **Revoking tokens at upstream providers** when a person is deleted.
+- **More than one directory**, and linking by any claim other than the OIDC subject.
+- **Tested providers.** It was tested against a real local authentik 2025.8, and against requests modelled on common clients; not against production Entra ID or Okta tenants.
+
+<Callout title="authentik: deactivate before you delete">
+In testing, deleting a user in authentik 2025.8 didn't send a SCIM `DELETE`. Deactivate the person in authentik first, so the portal suspends them at once. A deactivated person stays suspended, with their credentials kept: the clean-up follows only a `DELETE`.
+</Callout>

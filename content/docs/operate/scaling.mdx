@@ -12,12 +12,16 @@ Open MCP Portal is stateless: scale it horizontally. Any replica can serve any r
 | MCP server health checks | `HEALTH_CHECK_INTERVAL` (5 minutes) | One replica at a time (advisory lock); a server checked within the last 90% of the interval is skipped |
 | Identity signing-key rotation | Checked hourly | One replica at a time |
 | Notifications (fan-out, delivery of email and webhooks, the hourly scan for expiring keys) | `NOTIFICATION_INTERVAL` (15 seconds) | One replica at a time (advisory lock) |
-| Retention | `RETENTION_INTERVAL` (15 minutes) | One replica at a time |
+| Retention (also deletes expired MCP task rows) | `RETENTION_INTERVAL` (15 minutes) | One replica at a time |
+| Server governance (overdue reviews, sunsets, deprecation notices) | Every 5 minutes | One replica at a time (advisory lock `omp.governance`) |
 | Background refresh of connected accounts' tokens (optional) | `PROVIDER_REFRESH_INTERVAL` (`0`: off) | One replica at a time (advisory lock) |
 | Usage rollups | Every 5 minutes | One replica at a time |
-| Old rate-limit windows; expired sessions and consent links | Every minute; every 15 minutes | Every replica (idempotent deletes) |
+| Old rate-limit windows; expired and idle sessions and consent links | Every minute; every 15 minutes | Every replica (idempotent deletes) |
+| SCIM clean-up of people the directory deleted | In bounded passes, retried until nothing is left | Every replica |
 
-`omp_loop_leader{loop="retention"}`, `{loop="usage_rollup"}` and `{loop="notifications"}` say which replica led each loop's latest run.
+`omp_loop_leader{loop="retention"}`, `{loop="usage_rollup"}`, `{loop="notifications"}` and `{loop="governance"}` say which replica led each loop's latest run. Runs are short, so the gauge can be 1 on several replicas at once.
+
+Expired gateway grants stop working at their deadline on every replica; cleanup removes the rows later.
 
 ## Settings caches
 
@@ -25,7 +29,18 @@ Some settings are cached per replica for up to 30 seconds: internal networks, ra
 
 ## Rate limits
 
-Limits on `/mcp/{slug}`, the OAuth endpoints, connection starts, sign-in and the management API are counted in one PostgreSQL table in fixed one-minute windows, shared by every replica. One `/mcp` request is one statement. A single gateway's counter row is fine up to a few thousand requests per second. The table is unlogged: counters may be lost on a crash or failover, which only resets the current minute. Client addresses are stored only as SHA-256 digests. Put the ingress's own limits in front of unauthenticated traffic, which isn't counted.
+Limits on `/mcp/{slug}` (including each upstream server's quota), the OAuth endpoints, connection starts, sign-in and the management API are counted in one PostgreSQL table in fixed one-minute windows, shared by every replica. One `/mcp` request is one statement. A single gateway's counter row is fine up to a few thousand requests per second. The table is unlogged: counters may be lost on a crash or failover, which only resets the current minute. Client addresses are stored only as SHA-256 digests. Put the ingress's own limits in front of unauthenticated traffic, which isn't counted.
+
+## State kept per replica
+
+A few things are deliberately kept in each replica's memory, not shared:
+
+- **A server's concurrency cap** (`maxConcurrent`) counts calls in flight on one replica. Across the fleet a server can receive about the cap times the number of replicas.
+- **A server's circuit breaker** opens on one replica after five consecutive failures there, for 30 seconds. Replicas briefly disagree; `omp_server_circuit_state` is reported per replica.
+
+Shared in PostgreSQL: server quotas, and the open-task count of `TASKS_MAX_OPEN_PER_PRINCIPAL`. See [Protection and failover](/docs/teams/protection-and-failover).
+
+**Approval decisions** take a fail-closed table lock: when concurrent authority writes or database maintenance hold it, a call that needs approval is refused, not delayed. Keep autovacuum on.
 
 ## The database
 

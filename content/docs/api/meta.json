@@ -1,6 +1,15 @@
 {
   "title": "API reference",
-  "description": "The MCP endpoint, the OAuth endpoints and the management API",
+  "description": "The MCP endpoint, the OAuth endpoints, the command line and the management API",
   "root": true,
-  "pages": ["index", "mcp-endpoint", "oauth-endpoints", "---Management API---", "reference"]
+  "pages": [
+    "index",
+    "mcp-endpoint",
+    "oauth-endpoints",
+    "---Automation---",
+    "cli",
+    "github-action",
+    "---Management API---",
+    "reference"
+  ]
 }

@@ -1,0 +1,64 @@
+---
+title: v0.9.0
+description: "Open MCP Portal v0.9.0 (2026-10-29): task handles for long-running tools (the MCP Tasks extension), Kubernetes release gates, and a content-scanning design. Migration 00048."
+---
+
+**Released 2026-10-29.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.9.0) · image `ghcr.io/ncecere/open-mcp-portal:v0.9.0` · migration `00048` (expand-only).
+
+The first release of the v0.9 line, after [v0.8.0](/docs/releases/v0-8-0): long-running tools can answer with a task the client checks on later, and every release is now tested for upgrade, ingress, restore and load on Kubernetes. **Tasks appear only when both the client and the server ask for them.** Read [Upgrading](#upgrading) first.
+
+## What changed
+
+- **Task handles for long-running tools** (#35, decision 86). Gateways now advertise the `io.modelcontextprotocol/tasks` extension on the 2026-07-28 revision. When a client declares it on a `tools/call` and the server's primary URL advertises it too, the portal can answer with an opaque task handle; the client then uses `tasks/get`, `tasks/update` and `tasks/cancel`. The portal relays the server's own task; it runs no worker or queue. Only calls that need no approval, aren't streamed and don't continue an input request are tasked. See [MCP Tasks](/docs/server-authors/tasks).
+- **Every task operation is checked again.** A handle is a lookup key, not a credential. Each operation authenticates normally, finds the task only for the same caller and the same starting key or grant, and checks that the tool is still allowed with the same definition, class and curation. Anything else gets the same `-32602 Task not found`. Editing a server ends its tasks in progress. If an approval rule now matches, the operation is refused. Each operation is sent once: no retry, no failover and no resend after a `401`.
+- **Bounded and sealed.** A caller can have at most `TASKS_MAX_OPEN_PER_PRINCIPAL` open tasks (default 100, 1 to 1,000) across keys, gateways and replicas, and a task lives at most `TASKS_MAX_TTL` (default 24 hours, 1 minute to 24 hours). The server's task ID and the call's arguments are sealed with `ENCRYPTION_KEY` and included in key rotation, and the server's task ID and credentials are scrubbed from every answer. An invalid value for either setting stops startup. See [Configuration](/docs/operate/configuration#mcp-tasks).
+- **Kubernetes release gates** (#43). The smoke test gains four scenarios: an upgrade from the previous release (and back), ingress with TLS and OIDC sign-in, a `pg_dump` restore, and a load test with three replicas. Because ingress-nginx is retired upstream, the tested controller is now Envoy Gateway (Gateway API); the example `Ingress` stays for clusters that still run ingress-nginx. See [Install on Kubernetes](/docs/operate/kubernetes).
+- **A design for content scanning** (#52, decision 87). A written proposal for detecting prompt injection and data loss, starting in shadow mode with no hosted model. **Nothing is built.**
+
+## Upgrading
+
+1. **Back up** the database together with its keys, then pin the new image (verify its signature first, see [The image](#the-image)). The init container applies `00048`. **Do not use `goose down` for a rollback.**
+2. **Finish the rollout and drain every older serving and background-worker replica before you rely on tasks.** An older image never offers tasks, answers the task methods as unknown, doesn't rotate the new sealed column and doesn't prune expired tasks.
+3. A server offers tasks only after the portal reads it again (a refresh or a health check) and finds the extension. Set `TASKS_MAX_TTL` and `TASKS_MAX_OPEN_PER_PRINCIPAL` only if you want tighter bounds than the defaults.
+4. Going back to an older image leaves open task handles unusable and doesn't stop the work upstream.
+
+[Upgrading from v0.8.0](/docs/operate/migrations-and-upgrades#upgrading-from-v080) has the same points with the details.
+
+## Verification
+
+The release was tested in both database-role modes and on the new Kubernetes gates, and its published image signed and verified; the [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.9.0) and the [release notes](https://github.com/ncecere/open-mcp-portal/blob/v0.9.0/docs/releases/v0.9.0.md) record how.
+
+## Known limitations
+
+Carried over from [v0.8.0](/docs/releases/v0-8-0#known-limitations) unless marked new:
+
+- **Not every call can be a task (new).** Calls that need approval, streamed calls, input-request continuations and clients on older revisions or that don't declare the extension run as ordinary calls.
+- **At the cap, a declared call is refused (new),** even if the server could have answered it directly. A call that doesn't declare tasks is unaffected.
+- **Cancelling proves nothing upstream (new).** An acknowledged cancel, an expiry or a revocation doesn't prove the server stopped the work.
+- **Short credentials aren't scrubbed (new).** Credential values shorter than four characters are left as they are; use long, random credentials.
+- **No real Tasks client or server has been run (new).** The tests use the released schema and the project's own fake server.
+- **Failover, not load balancing;** calls that need approval don't fail over; replicas keep the cap and breaker in memory.
+- **Not run against real clients and providers.** A pilot with a real team is still open.
+- Remote servers only (no stdio); development software that has not run in production.
+
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.9.0` is signed with cosign keyless signing by the repository's `image.yml` workflow. Its digest is:
+
+```text
+sha256:8a620e21c84786b9d8f6c326c19003a118456f17c322898174f008122f46f115
+```
+
+Check the signature with **cosign v3.0 or newer**, then pin the image by that digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:8a620e21c84786b9d8f6c326c19003a118456f17c322898174f008122f46f115 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.9.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/open-mcp-portal/issues](https://github.com/ncecere/open-mcp-portal/issues) (there is a form for each kind) or ask in [Discussions](https://github.com/ncecere/open-mcp-portal/discussions). Report security problems privately, as [`SECURITY.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.9.0/SECURITY.md) describes.

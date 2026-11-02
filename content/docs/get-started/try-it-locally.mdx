@@ -12,7 +12,7 @@ The demo uses development sign-in (anyone can pick a persona) and the public exa
 ## Start it
 
 ```sh
-git clone --branch v0.3.2 https://github.com/ncecere/open-mcp-portal
+git clone --branch v0.13.1 https://github.com/ncecere/open-mcp-portal
 cd open-mcp-portal
 make demo        # docker compose -f compose.demo.yaml up --build
 ```
@@ -60,7 +60,7 @@ Open **Gateways** › **Create gateway**, give it a slug such as `demo`, and cho
 
 ### Create a key and call it
 
-Open your account menu › **API keys** › **Create API key**, and copy the key. Then:
+Open your account menu › **API keys** › **Create API key**, leave **Tool scope** at **Everything**, and copy the key. Then:
 
 ```sh
 curl -s http://localhost:8090/mcp/demo -H "Authorization: Bearer omp_..." \
@@ -69,6 +69,8 @@ curl -s http://localhost:8090/mcp/demo -H "Authorization: Bearer omp_..." \
 ```
 
 `whoami` answers with the identity token the fake server received: the header it arrived in, its claims and whether it verified against the portal's keys. That is what every MCP server gets with each call. See [The identity token](/docs/server-authors/identity-token).
+
+To see a tool scope at work, select `status__check_outage` in the gateway too, classify `check_outage` as **Read** on the server's **Capabilities** tab (**Classify tools…** or the tool's **Classify…**), create a second key with **Read only**, and list the tools with it: only `status__check_outage` is left, because unclassified tools such as `whoami` are outside a read-only scope. See [Tool scopes](/docs/use/tool-scopes).
 
 </Step>
 <Step>

@@ -1,0 +1,112 @@
+---
+title: GitHub Action
+description: "Register, test and refresh one MCP server in Open MCP Portal from a GitHub Actions workflow, with a team publisher token and a pinned, signature-checked omp command line."
+---
+
+Open MCP Portal's repository includes a composite GitHub Action, in `integrations/github-action/`, that keeps one server in a portal in step with your deployment: it creates or updates the server from a file, tests it, refreshes its capabilities and, if you ask, requests publication. It wraps the [`omp` command line](/docs/api/cli) and authenticates with an existing [team publisher token](/docs/teams/publisher-tokens). It was added in v0.11.0.
+
+<Callout type="warn" title="Not published as its own Action">
+The Action lives in the product repository and is **not published as a separate Action repository** or in the Marketplace. Use it from a **reviewed commit** of that repository: pin the full commit SHA, never a branch or a moving tag, and review the directory before you change the pin.
+</Callout>
+
+## Requirements
+
+- A Linux runner, amd64 or arm64, with Python 3.9 or newer and Bash.
+- Network access to GitHub releases and Sigstore, and HTTPS access to the portal.
+- An unexpired **team publisher token** (`omppub_`) with `servers:read` and `servers:write`, for the server's team, stored as a GitHub secret. Platform tokens aren't accepted.
+
+## What it does
+
+1. **Installs a pinned `omp`.** It downloads the v0.10.1 command line for the runner's architecture, never the latest. It checks the binary's SHA-256 against the release's `checksums.txt` and its Sigstore bundle with cosign v3.0.2 against the exact `image.yml@refs/tags/v0.10.1` identity. A failed check never falls back to an unsigned binary.
+2. **Imports the server** from your file (`omp import`): it creates the server if it's missing, or updates the fields that differ. An unchanged file changes nothing.
+3. **Tests it** (`omp servers test`); a failed test fails the job. Then, unless `refresh` is `false`, **refreshes** its capabilities.
+4. **Publication**: with `publish: request` it requests publication for a private or rejected server, guarded by the review digest it read. `none` (the default) leaves publication as it is; it never unpublishes.
+5. **Pending approval.** By default the job fails when capabilities changed, or when a publication or capability approval is pending. With `fail-on-changes: 'false'` it warns with a link to the server's review instead. A publication request is not an approval, and a token can never approve.
+
+It never deletes a server, mints tokens or keys, or writes governance, curation, gateways, grants, expiry or ceilings.
+
+## Inputs and outputs
+
+| Input | Required | Default | Meaning |
+|---|---|---|---|
+| `url` | yes | | The portal's https URL |
+| `token` | yes | | The team publisher token (use a GitHub secret) |
+| `team` | yes | | The team's slug |
+| `slug` | yes | | The server's slug |
+| `config-file` | yes | | A workspace-relative JSON `omp/v1` file with exactly one server, matching `team` and `slug`, and no `publish` key or platform sections |
+| `refresh` | no | `'true'` | Refresh capabilities after the test |
+| `publish` | no | `none` | `none` leaves publication alone; `request` requests it |
+| `fail-on-changes` | no | `'true'` | Fail on changed capabilities or pending approval; `'false'` warns with a review link |
+
+Booleans are the literal strings `true` and `false`.
+
+| Output | Meaning |
+|---|---|
+| `server-id` | The server's UUID |
+| `changed-capabilities` | How many capabilities this refresh changed (not added or gone); `0` when refresh is off |
+| `needs-approval` | `true` when changed capabilities or a pending publication or capability approval was seen |
+
+GitHub may not expose a composite Action's outputs after a failed step, so don't depend on them for recovery.
+
+## Example
+
+The server's file, `deploy/status.json`:
+
+```json
+{
+  "schema": "omp/v1",
+  "servers": [{
+    "team": "support-tools",
+    "slug": "status",
+    "name": "Status",
+    "url": "https://status.corp.example.com/mcp",
+    "authMode": "static_header",
+    "authHeaderName": "X-API-Key",
+    "authValueEnv": "OMP_SECRET_STATUS_KEY"
+  }]
+}
+```
+
+The workflow, with the Action's directory copied from a reviewed commit of the product repository into your repository at `integrations/github-action/`:
+
+```yaml
+name: Register Status with Open MCP Portal
+on:
+  push:
+    branches: [main]
+    paths: [deploy/status.json]
+permissions:
+  contents: read
+jobs:
+  register:
+    runs-on: ubuntu-24.04
+    environment: portal-deployment
+    steps:
+      - uses: actions/checkout@<reviewed-commit-sha>
+      - uses: ./integrations/github-action
+        id: portal
+        with:
+          url: https://mcp.example.com
+          token: ${{ secrets.OMP_PUBLISHER_TOKEN }}
+          team: support-tools
+          slug: status
+          config-file: deploy/status.json
+          publish: request
+        env:
+          OMP_SECRET_STATUS_KEY: ${{ secrets.STATUS_API_KEY }}
+```
+
+You can also reference the directory in the product repository by commit, `uses: ncecere/open-mcp-portal/integrations/github-action@<full-commit-sha>`, which GitHub supports for an Action in a subdirectory. Either way, the commit is what you reviewed.
+
+## Secrets
+
+- `authValueEnv` must name an `OMP_SECRET_*` variable, so a file can't forward the portal token or the GitHub token. Only the one variable the file names reaches `omp`, which runs with an empty home directory and no other configuration.
+- Keep secrets in GitHub secrets and the `token` input, never in the committed file, command lines, artifacts or outputs.
+- Don't run a job that holds these secrets on untrusted pull-request code or configuration.
+- A server whose URL moves to another origin needs its secret again: an old secret is never sent to a new origin. Other credential changes need a browser session.
+
+## Failures and limits
+
+- Earlier successful writes stay when a later step fails: there is no rollback across requests, no automatic retry, and no waiting for health or approval. Look at the server in the portal before you run the job again.
+- A `403` names the missing scope. `409`, `412` and `428` mean the server changed meanwhile: read it again and review.
+- The Action hasn't yet been run end to end on a GitHub-hosted runner; its tests run the real command line against a mock and against the real portal handler.

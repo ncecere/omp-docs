@@ -1,0 +1,96 @@
+---
+title: "Long-running tools (MCP Tasks)"
+description: "How Open MCP Portal relays the MCP Tasks extension to your server: what to advertise, when the portal asks for a task, the result shapes it accepts, and what it never does."
+---
+
+A tool that takes minutes can answer a call with a **task** instead of a result, and let the client poll for the outcome. Open MCP Portal relays the released MCP Tasks extension, `io.modelcontextprotocol/tasks` (2026-07-28 revision), between a client and your server. It doesn't run tasks itself: your server does the work and keeps the task; the portal gives the client its own handle for it, checks access on every poll and forwards each operation.
+
+This is a first stage: only ordinary, non-streamed tool calls from modern clients. It hasn't yet been tried with real clients and servers beyond the conformance fixtures.
+
+## Advertise it
+
+Your server must speak the **modern** era and advertise the extension in `server/discover`:
+
+```json
+{
+  "resultType": "complete",
+  "supportedVersions": ["2026-07-28"],
+  "capabilities": {
+    "tools": {},
+    "extensions": { "io.modelcontextprotocol/tasks": {} }
+  }
+}
+```
+
+The portal reads this when the team refreshes the server, tests it or a health check reads it, from the server's **primary URL** only. A legacy server, a server without the extension, and [additional endpoints](/docs/teams/protection-and-failover#additional-endpoints) never get tasks. A new URL clears what was learned until the next read.
+
+Clients see the extension in the gateway's own `server/discover` when the portal can relay tasks.
+
+## When the portal asks for a task
+
+A forwarded `tools/call` declares the extension to your server (an empty object under `io.modelcontextprotocol/clientCapabilities.extensions` in that request's `_meta`) only when all of these hold:
+
+- the client declared the extension on this request;
+- your server advertised it;
+- no [approval rule](/docs/teams/approval-rules) governs the call;
+- the client didn't ask to stream progress;
+- the call isn't the retry of a question your server asked (`input_required`).
+
+Every other call is the call it always was, with no declaration. **Return a task only to a request that declared the extension.** A task result to any other request is treated as a bad response from your server, and is never tracked.
+
+## What to return
+
+A task-creating answer is the flat `CreateTaskResult` of the extension, `resultType: "task"`:
+
+```json
+{
+  "resultType": "task",
+  "taskId": "job-8c41",
+  "status": "working",
+  "statusMessage": "Rebuilding the index",
+  "createdAt": "2026-11-01T09:00:00Z",
+  "lastUpdatedAt": "2026-11-01T09:00:00Z",
+  "ttlMs": 3600000,
+  "pollIntervalMs": 5000
+}
+```
+
+- `taskId` is required (at most 8 KiB); `status` is one of `working`, `input_required`, `completed`, `failed` or `cancelled`.
+- `createdAt` and `lastUpdatedAt` are RFC 3339 times, and `lastUpdatedAt` isn't earlier than `createdAt`.
+- `ttlMs` is required: whole milliseconds, or `null` for no limit of yours. `pollIntervalMs` is optional. `statusMessage` is at most 4 KiB.
+
+`tasks/get` answers with `resultType: "complete"` and the same `taskId`; a completed task carries the original tool result (`isError: true` is still `completed`), a failed one a JSON-RPC error. `tasks/update` and `tasks/cancel` answer with an acknowledgement only. Anything else is refused as invalid task state.
+
+## What reaches your server
+
+- **The creating call**: a normal `tools/call` with the declaration, the usual credentials and [identity token](/docs/server-authors/identity-token).
+- **`tasks/get`, `tasks/update` and `tasks/cancel`**: with **your** `taskId` (the portal maps its handle to it), sent to the primary URL the task was created at, with fresh credentials and a fresh identity token for the caller. `Mcp-Name` is your task ID.
+- **No retries.** Creation and every lifecycle operation are sent exactly once: no automatic retry (even for a Read tool), no failover to another endpoint, no resend after a `401` and no fall back to the legacy era. If an answer is lost, the client asks again.
+- **No `tasks/list`, `tasks/result` or task notifications.** The portal polls on the client's behalf only when the client polls.
+
+**Input during a task.** When `tasks/get` reports `input_required`, the portal relays your `inputRequests` to the client, rebuilt for what that client can answer (URL or form elicitation, with the same checks as the [elicitation relay](/docs/server-authors/mcp-protocol#elicitation-relay)). Limits: at most 8 requests at a time, 16 KiB of requests, 64 KiB of responses and 128 distinct input keys over the task's life. Keep keys unique for the whole task. The client's answers come back in `tasks/update`, each key at most once.
+
+## What the portal does with it
+
+- **Your task ID never reaches the client.** The client gets a random portal handle. Your task ID is removed from every status message, input request, result and error the portal relays; avoid very short IDs that could appear in ordinary text.
+- **Handles are bound to who started the task.** Only the same person or service account, with the same key or OAuth grant, through the same gateway, can poll it. Each poll checks their current access, the gateway, the tool's definition and curation, and any connection the call needs. Anything else gets `-32602` "Task not found", the same as an unknown handle.
+- **Editing the server ends its tasks.** Any change to the server's configuration (including a rotated credential) or to the tool's definition makes its in-flight handles fail closed. Your server isn't told; the work may continue.
+- **Lifetime and number.** A handle lives at most `TASKS_MAX_TTL` (24 hours by default) or your `ttlMs`, whichever is shorter, and each person or service account can have at most `TASKS_MAX_OPEN_PER_PRINCIPAL` (100 by default) open tasks. At the limit, a declared call to a server that supports tasks is refused before it is sent (`-32010`, `task_capacity`). The poll interval the client sees is between 1 and 60 seconds (5 by default).
+- **Expiry doesn't cancel.** A handle that expires or is revoked doesn't stop your work, and the portal doesn't claim it did. A cancellation acknowledgement records the request, not that the task stopped.
+
+## Records
+
+Each operation is a call record with the method `tasks/get`, `tasks/update` or `tasks/cancel`, the original tool and server, and an error class for operators such as `task_created`, `task_working`, `task_not_found` or `cancel_requested`. If the team records call contents, the creating call's arguments are recorded; the task's result and lifecycle payloads never are.
+
+## What the client sees
+
+| Situation | Answer |
+|---|---|
+| A lifecycle request without the extension declared | `-32021`, HTTP 400, with `data.requiredCapabilities` |
+| `Mcp-Name` differs from `params.taskId` | `-32020` |
+| An unknown, foreign, expired or no-longer-allowed handle | `-32602` "Task not found" |
+| Another operation is using the task right now | `-32010`, `task_busy` (a poll of a `working` task gets its stored status instead) |
+| The client can't answer the task's question | `-32010`, `task_input_unsupported` |
+| The open-task limit | `-32010`, `task_capacity` |
+
+See also [MCP protocol support](/docs/server-authors/mcp-protocol) and, for clients, [Use from your own agents](/docs/get-started/use-from-your-agents).

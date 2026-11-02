@@ -3,13 +3,13 @@ title: My gateways
 description: The gateways you can connect to in Open MCP Portal, why you have access, what each offers you, and its connect snippets.
 ---
 
-**My gateways** (in the sidebar's Workspace section) lists every gateway you can connect your AI clients to. Each offers you only the tools, prompts and resources you may use.
+**My gateways** (in the sidebar's Workspace section) lists every gateway you can connect your AI clients to. Each offers you only the tools, prompts and resources you may use. The page's **Request gateway access** button opens [Access requests](/docs/use/access-requests); **API keys** opens your [API keys](/docs/use/api-keys).
 
 <Screenshot slot="my-gateways" />
 
 ## The list
 
-Each gateway shows its name, description, how many capabilities it offers you right now and **why you have access**:
+Each gateway shows its name, description, where it's **From** (the owning team, marked **Team gateway**, or the platform, marked **Platform gateway**), how many capabilities it offers you right now and **why you have access**:
 
 | Badge | Means |
 |---|---|
@@ -18,9 +18,9 @@ Each gateway shows its name, description, how many capabilities it offers you ri
 | **Granted to you** | A platform gateway granted to you by name |
 | **Granted to your SSO group** | A platform gateway granted to one of your identity provider's groups (the badge names it) |
 
-Platform gateways also carry a **Platform gateway** badge. **Records what you send** means calls through it may be recorded with their arguments and results: the gateway records them, or the server of at least one capability it offers you does. See [Recording call contents](/docs/teams/payload-capture).
+**Records what you send** means calls through it may be recorded with their arguments and results: the gateway records them, or the server of at least one capability it offers you does. See [Recording call contents](/docs/teams/payload-capture).
 
-A gateway that is turned off, or whose team is archived, isn't listed. If you expected a gateway and don't see it, ask the team's owners or admins, or a platform admin for platform gateways.
+A gateway that is turned off, or whose team is archived, isn't listed. If you expected a gateway and don't see it, ask the team's owners or admins. For a platform gateway, check whether it accepts requests under [Access requests](/docs/use/access-requests), or ask a platform admin. Access from a grant can also expire on a date the admin or steward chose.
 
 Group grants use the groups your identity provider sent at your last sign-in; your **Profile** lists them. If your groups changed, sign out and in again.
 
@@ -29,7 +29,7 @@ Group grants use the groups your identity provider sent at your last sign-in; yo
 Open a gateway to see:
 
 - **Connect**: the endpoint URL and snippets for Claude Code, VS Code, Cursor and curl. Which clients have actually been run against a gateway is on [Client compatibility](/docs/use/client-compatibility). **Name in your client** changes the name the snippets give the gateway; **Use an API key instead** switches to the header variants. See [Connect your AI client](/docs/get-started/connect-your-client).
-- **What it offers you**: the capabilities you can use right now, with the names clients see: `{server-slug}__{name}` for tools and prompts, `omp://{server-slug}/{uri}` for resources (a template's `{variables}` are filled in by the client). Capabilities that need a higher team role than yours, or whose server is unavailable, aren't listed.
+- **What it offers you**: the capabilities you can use right now, with the names clients see: `{server-slug}__{name}` for tools and prompts, unless the gateway renamed a tool, and `omp://{server-slug}/{uri}` for resources (a template's `{variables}` are filled in by the client). Tools carry their class (**Class: read**, **Class: write**, **Class: destructive** or **Unclassified**, sometimes with a **Suggested:** class from the server's own hints), and **Edited for this gateway** when the gateway renamed it, rewrote its description or limits its arguments. Not listed: capabilities that need a higher team role than yours, whose server is unavailable or retired, whose server is labelled above the gateway's sensitivity ceiling, or whose gateway policy needs review. This list is your own access; a key or app with a [tool scope](/docs/use/tool-scopes) may see fewer tools.
 - **Accounts it needs**: the services some of its tools act on as you, such as GitHub or Google, or MCP servers you sign in to yourself, each **Connected** or **Not connected**, with a **Connect** button. See [Connecting accounts](/docs/use/connecting-accounts).
 - A notice when the gateway records what you send.
 
@@ -37,4 +37,8 @@ Open a gateway to see:
 
 ## Who decides what you see
 
-The gateway's owners choose its capabilities; you see the subset you may use. Every request checks again, so a change takes effect at once: if someone removes a capability, raises its minimum role, unpublishes its server or removes your access, your next call is refused even if your client listed the tool earlier. A refused call looks the same as a call to a tool that doesn't exist (`Unknown tool`).
+The gateway's owners choose its capabilities; you see the subset you may use. Every request checks again, so a change takes effect at once: if someone removes a capability, raises its minimum role, unpublishes its server or removes your access, or your grant expires, your next call is refused even if your client listed the tool earlier. A refused call looks the same as a call to a tool that doesn't exist (`Unknown tool`). A key or connected app may also be limited to a [tool scope](/docs/use/tool-scopes), which hides more tools from it.
+
+A listed tool can still need a person's approval for a particular call: the call answers with a link instead of a result. See [Approving sensitive tool calls](/docs/use/approvals).
+
+A server its team has **deprecated** keeps being served until its sunset date; its catalog page shows the date and any replacement. After that date no gateway serves it.

@@ -53,4 +53,9 @@ There is no `MCP-Gateway-Provider` header and no `provider` claim. The person's 
 
 ## Service accounts
 
-Service accounts can't call an OAuth-protected server's tools: there's no person to sign in. Their calls are refused with `-32010` before reaching you.
+A service account has no person to sign in, so its calls reach you only through a team [shared connection](/docs/teams/service-connections): a team owner or admin signs in to your authorization server once (the server's sign-in appears as **(server sign-in)**), assigns the connection to service accounts and allows it for your server. Every call from those service accounts then carries **that shared account's** token in `Authorization: Bearer`, and the identity token has `principal_type: service_account`.
+
+- A `401` makes the portal retry once with the same connection. A second `401` invalidates the shared token, and the team must reconnect it.
+- A `403` with `insufficient_scope` refuses the call (`-32010`): there is no automatic sign-in for a shared connection. The team reconnects it with more scopes.
+
+Without an assigned, allowed connection, a service account's call is refused with `-32010` before reaching you. If your server must act only for people, refuse `principal_type: service_account`.

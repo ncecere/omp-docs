@@ -1,0 +1,96 @@
+---
+title: Database roles
+description: "Run Open MCP Portal with separate PostgreSQL logins: a migration owner and a restricted runtime role, with DATABASE_MIGRATE_URL, DB_RUNTIME_ROLE and DB_REQUIRE_SPLIT_ROLES."
+---
+
+Since v0.4.0 Open MCP Portal can use two PostgreSQL logins instead of one: a **migration owner** that owns the schema and runs `migrate`, and a **runtime role** that the serving replicas use. The runtime role can read and write what the portal needs, but it can't change the schema, truncate tables, or update or delete recent audit entries and call records. It's optional: without these settings the portal runs as one login that owns everything, as before. Use separate logins in production.
+
+## The settings
+
+| Setting | Default | What it does |
+|---|---|---|
+| `DATABASE_MIGRATE_URL` (secret) | empty: falls back to `DATABASE_URL` | The owner's connection, used only by `migrate` and by `serve` with `MIGRATE_ON_START=true`. Never by `doctor` or `rotate-keys` |
+| `DB_RUNTIME_ROLE` | empty (single owner) | The runtime login, an existing role. Every `migrate` run reconciles its grants |
+| `DB_REQUIRE_SPLIT_ROLES` | `false` | `true` refuses unsafe privileges: `migrate` requires `DB_RUNTIME_ROLE`, `serve` refuses to run with an unsafe runtime login, and `doctor`'s `postgres roles` check fails instead of informing |
+
+`DATABASE_URL` is the runtime connection. The portal never creates a role or changes a password. Details and bounds are in [Configuration](/docs/operate/configuration#database-roles).
+
+## What `migrate` grants
+
+`migrate` opens the owner connection, applies pending migrations and reconciles grants under one advisory lock, then closes it. It doesn't need the runtime connection. The grants step runs on **every** `migrate` run, even with nothing to migrate, so new tables are covered and stale direct grants are removed:
+
+- ordinary tables: `SELECT`, `INSERT`, `UPDATE` and `DELETE`;
+- protected tables (`audit_log`, `mcp_calls`): `SELECT` and `INSERT` only;
+- the migration versions table: `SELECT`; sequences: `USAGE`; the schema: `USAGE`;
+- `EXECUTE` on the two purge functions.
+
+Never `TRUNCATE`, `TRIGGER`, `CREATE` or `ALL`. Retention deletes old audit entries and call records only through two owner-owned `SECURITY DEFINER` functions, `omp_purge_audit_log` and `omp_purge_mcp_calls`, which keep a fixed floor whatever the retention settings say: **30 days for the audit log, 1 day for call records**, counted in UTC. If the functions are missing, retention fails; there is no fallback to a direct `DELETE`. Since v0.5.0, protected approval state lives in an owner-controlled schema, `omp_private`, which the runtime role can use but not change.
+
+## Set it up on a new database
+
+As a trusted PostgreSQL administrator, with generated passwords:
+
+```sql
+CREATE ROLE omp_owner LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '<owner-password>';
+CREATE ROLE omp_app   LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '<runtime-password>';
+CREATE DATABASE omp OWNER omp_owner;
+```
+
+In that database, the `public` schema must belong to `pg_database_owner` (PostgreSQL 17's default) or `omp_owner`. For a database upgraded from older PostgreSQL defaults, run `REVOKE CREATE ON SCHEMA public FROM PUBLIC`. **Never grant `omp_app` membership in `omp_owner`**, not even with `NOINHERIT`: `SET ROLE` would cross the boundary.
+
+Then:
+
+1. Run `open-mcp-portal migrate` with `DATABASE_MIGRATE_URL` set to the owner URL and `DB_RUNTIME_ROLE=omp_app`.
+2. Run `serve` with only the runtime `DATABASE_URL`, `MIGRATE_ON_START=false` and `DB_REQUIRE_SPLIT_ROLES=true`. Don't give serving replicas the owner URL.
+3. Run `doctor`: `postgres roles` reports the runtime login's effective privileges ([Health and doctor](/docs/operate/health-and-doctor#doctor)).
+
+In Kubernetes, the owner URL goes in the `open-mcp-portal-migrate` Secret, which only the `migrate` init container reads, and the role settings in the overlay's configuration ([Install on Kubernetes](/docs/operate/kubernetes#split-database-roles)). With Docker Compose, see [Separate database logins](/docs/operate/compose#separate-database-logins).
+
+## CloudNativePG
+
+A new CloudNativePG cluster can create both logins without a superuser application credential:
+
+```yaml
+spec:
+  bootstrap:
+    initdb:
+      database: omp
+      owner: omp_owner
+      secret:
+        name: omp-owner-password
+  managed:
+    roles:
+      - name: omp_app
+        ensure: present
+        login: true
+        superuser: false
+        createdb: false
+        createrole: false
+        inherit: false
+        passwordSecret:
+          name: omp-app-password
+```
+
+Create `omp-owner-password` and `omp-app-password` as `kubernetes.io/basic-auth` Secrets with different generated passwords. With your secrets operator, assemble two URL Secrets against the cluster's read-write service with `sslmode=require`: `open-mcp-portal-migrate` (key `DATABASE_MIGRATE_URL`, as the owner) and `open-mcp-portal-runtime` (key `DATABASE_URL`, as the runtime role, beside the encryption key, pepper and OIDC secret). Add `DB_RUNTIME_ROLE=omp_app` and `DB_REQUIRE_SPLIT_ROLES=true` to the configuration. The serving pod must not mount the owner's Secret. An existing cluster's bootstrap settings don't create roles again: use managed roles or an administrator, not a new bootstrap.
+
+## Move an existing install
+
+An install that runs as one owner login moves like this:
+
+1. **Back up** the database and the encryption key and pepper. Find the current owners of the database, the `public` schema, the tables and the functions. Keep the existing owner login for migration: don't migrate as a different superuser. The purge functions and the two protected tables must share that owner; fix inconsistent historical ownership first.
+2. **Create a runtime login**, a non-superuser with no membership in the owner role and no administrative grants. Remove old `PUBLIC` create or write grants in this database where needed.
+3. **Migrate with the new binary**: the owner URL in the migration-only secret (in Kubernetes, `open-mcp-portal-migrate`) and `DB_RUNTIME_ROLE` in the configuration. This reconciles the grants.
+4. **Switch serving to the runtime login**: change only `DATABASE_URL`, keep `MIGRATE_ON_START=false`, and roll the serving replicas. Run `doctor`, and check that Admin › **Retention** shows successful passes. Then set `DB_REQUIRE_SPLIT_ROLES=true`.
+5. **Verify** that raw SQL as the runtime login can't `UPDATE` or `DELETE` rows of `audit_log` and `mcp_calls`, or `TRUNCATE` any table, while reads, inserts and normal retention still work.
+
+Unsafe privileges that come from `PUBLIC` or from an inherited role can't be removed by revoking a direct grant: an administrator has to fix them, and a split-role `migrate` refuses until they do.
+
+## Rolling back
+
+The schema stays compatible with the previous release run as the owner. But a binary older than v0.4.0 runs retention with direct deletes, which the restricted runtime login can't do. If you roll back to such a binary, give it the owner credentials again, or accept retention failures until you upgrade. Never remove the migrations to roll back.
+
+## What it protects, and what it doesn't
+
+It protects **recent** audit entries and call records against anyone who holds the runtime credential: they can't update them, delete them before the age floor, or truncate the tables, even by setting the purge flags themselves.
+
+It doesn't make the history tamper-proof. The runtime login can still change retention settings and usage rollups, delete rows of ordinary tables, and insert invented audit or call rows. The owner and superusers stay fully trusted and can change the functions and triggers or remove records. The guarantee is the age floor. For a stronger one, export the audit log to storage you can't rewrite.

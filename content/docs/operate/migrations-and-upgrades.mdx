@@ -1,6 +1,6 @@
 ---
 title: Migrations and upgrades
-description: How Open MCP Portal applies its forward-only database migrations, and how to upgrade and roll back safely.
+description: How Open MCP Portal applies its forward-only database migrations, how to upgrade and roll back safely, and the notes for each release from v0.1.0 to v0.13.1.
 ---
 
 ## Migrations
@@ -9,21 +9,169 @@ The database schema is managed by migrations built into the binary. They are **f
 
 - In Kubernetes, the `migrate` init container runs `open-mcp-portal migrate` in every new pod. A PostgreSQL advisory lock serialises concurrent runs, so only the first pod does any work.
 - Elsewhere, run `open-mcp-portal migrate` before starting `serve`, or set `MIGRATE_ON_START=true` on a **single** instance.
-- `serve` refuses to start while migrations are pending; the message names the current and required versions. `doctor` reports the migration state too.
+- `serve` refuses to start while migrations are pending; the message names the current and required versions. `doctor` reports the migration state too, and says so when the database is newer than the binary (an older replica during a rollout).
 
-`migrate` needs only `DATABASE_URL`.
+`migrate` connects with `DATABASE_MIGRATE_URL`, or with `DATABASE_URL` when that is empty, and needs no other setting and no runtime connection. With `DB_RUNTIME_ROLE` set, every run also reconciles the runtime login's grants, even when no migration is pending. See [Database roles](/docs/operate/database-roles).
+
+### Migrations per release
+
+v0.13.1's schema is at version **56**; v0.3.2's was at 26.
+
+| Release | Migrations | Before you rely on the new features |
+|---|---|---|
+| [v0.13.1](#upgrading-from-v0130) | none | Plain image swap |
+| [v0.13.0](#upgrading-from-v0120) | none | Plain image swap |
+| [v0.12.0](#upgrading-from-v0110) | `00051`–`00056` | Finish the rollout before enabling provisioning (SCIM) |
+| [v0.11.0](#upgrading-from-v0101) | none | Drain older replicas for the final-write checks everywhere |
+| [v0.10.1](#upgrading-from-v0100) | none | Drain older replicas for the new lock order everywhere |
+| [v0.10.0](#upgrading-from-v090) | `00049`, `00050` | Drain older replicas before relying on sensitivity ceilings, sunsets, transfers or the governance loop |
+| [v0.9.0](#upgrading-from-v080) | `00048` | Drain older replicas before relying on MCP Tasks |
+| [v0.8.0](#upgrading-from-v070) | `00047` | Drain older replicas before adding additional endpoints |
+| [v0.7.0](#upgrading-from-v060) | `00046` | Drain older replicas before relying on server quotas, concurrency caps, retries or the circuit breaker |
+| [v0.6.0](#upgrading-from-v051) | `00043`–`00045` | Drain older serving and background replicas before enabling access requests or creating expiring grants |
+| [v0.5.1](#upgrading-from-v050) | none | Plain image swap |
+| [v0.5.0](#upgrading-from-v040) | `00035`–`00042` | Drain every older serving image before enabling approval rules; run the new binary's `rotate-keys` |
+| [v0.4.0](#upgrading-from-v033) | `00029`–`00034` | **Breaking.** Retires agent platforms (`00034` is forward-only). Kubernetes needs the new `open-mcp-portal-migrate` Secret. Drain before relying on tool scopes, curation or shared connections |
+| [v0.3.3](#upgrading-from-v032) | `00027`, `00028` | Roll every replica before relying on idle session expiry |
 
 ## Upgrading
 
-1. **Read the release notes** of every release between yours and the target. See [Releases](/docs/releases).
-2. **Back up** the database. See [Backups](/docs/operate/backups).
-3. **Pin the new image**, by digest.
+1. **Read the release notes** of every release between yours and the target, and the matching sections below. See [Releases](/docs/releases).
+2. **Back up** the database, together with `ENCRYPTION_KEY` and `API_KEY_PEPPER`. See [Backups](/docs/operate/backups).
+3. **Pin the new image**, by digest, after checking its signature.
 4. **Migrate, then roll.** In Kubernetes, the new pods' `migrate` init container applies the schema before any new pod serves, while the old pods keep serving (`maxUnavailable: 0`). Elsewhere, run `migrate` with the new image first, then restart `serve`.
-5. Run `doctor`.
+5. **Finish the rollout before you turn on what the release adds.** A schema that the previous release can run on is not a previous release that enforces the new policy: an older replica ignores approval rules, grant expiry, tool scopes, curation, quotas, endpoints, governance and session generations. Wait until no older serving or background replica is left (drain them), then enable the feature. Each section below names what to wait for.
+6. **Run the new binary's `rotate-keys`** if you rotate `ENCRYPTION_KEY` after the upgrade: an older binary doesn't know the encrypted columns later releases added.
+7. Run `doctor`.
+
+### Upgrading across several releases
+
+`migrate` applies every pending migration in order in one run, so you can move from any release to v0.13.1 in one step. But the upgrade test (`k8s-upgrade`, the [smoke test](/docs/operate/kubernetes#smoke-test)'s `upgrade` scenario) only rehearses the previous release to the next one. **A direct jump from v0.3.2 to v0.13.1 has not been rehearsed.** Either upgrade release by release (v0.3.3, v0.4.0, v0.5.0 and so on, finishing each rollout, as the notes below describe), or rehearse the jump on a copy of your database first: restore a backup into a scratch database, run the v0.13.1 `migrate` against it, start one replica on it and run `doctor`.
+
+Whichever you choose, read every section from your release up: v0.4.0 is breaking, and several releases need a drained rollout before a feature is turned on.
 
 ## Rolling back
 
-Pin the previous image. Migrations are never rolled back automatically; because they are expand-only, the previous release normally runs on the newer schema. To undo a migration itself, restore the backup made before the upgrade. **Don't use `goose down`** to go back past `00026`, `00025` or `00024` (v0.3.2), `00023` (v0.3.1) or `00020` (v0.3.0): it would drop people's own keys for servers, the portal's OAuth clients and the TLS settings with their sealed keys, the provider access lists, the stored credential parts, the call records' trace ids, the trusted agent platforms, the relay marks and the agent columns of the call history. Pin the previous image instead. One thing a rollback to v0.3.0 does change: it ignores the credential parts table, so a server whose credential was saved as a list reads as having no credential until you save it as one header again (see [Upgrading from v0.3.0](#upgrading-from-v030)). A rollback to v0.3.1 does the same for the new modes: it ignores the new tables, so a server in each person's own key mode reads as one with no credential, a server in the portal's own OAuth client mode reads as one without authentication, and the TLS settings aren't used (see [Upgrading from v0.3.1](#upgrading-from-v031)).
+Pin the previous image. Migrations are never rolled back automatically; because they are expand-only, the previous release normally runs on the newer schema. To undo a migration itself, restore the backup made before the upgrade. **Don't use `goose down`.**
+
+- **`00034` (v0.4.0) is forward-only.** Its Down doesn't restore trust in agent platforms or the relay accounts' keys, and you must not roll back to code that accepts external identity. Restoring a backup from before v0.4.0 also restores what it retired.
+- **An older image doesn't roll back enforcement.** It ignores approval rules (v0.5.0), grant expiry (v0.6.0), tool scopes and curation (v0.4.0), server quotas and the breaker (v0.7.0), additional endpoints (v0.8.0), tasks (v0.9.0), governance (v0.10.0) and session generations (v0.12.0). Before pinning an older image, pause the affected calls or remove the reliance: turn rules off, revoke expiring grants or scoped credentials, remove extra endpoints. Don't let temporary access silently become permanent.
+- **Split database roles:** a binary older than v0.4.0 can't run retention under a restricted runtime login. Give it the owner credentials back, or accept retention failures until you upgrade again ([Database roles](/docs/operate/database-roles#rolling-back)).
+- Earlier migrations: going back past `00026`, `00025` or `00024` (v0.3.2), `00023` (v0.3.1) or `00020` (v0.3.0) would drop people's own keys for servers, the portal's OAuth clients and the TLS settings with their sealed keys, the provider access lists, the stored credential parts, the call records' trace ids and historical columns of the call history. A rollback to v0.3.0 ignores the credential parts table, so a server whose credential was saved as a list reads as having no credential until you save it as one header again (see [Upgrading from v0.3.0](#upgrading-from-v030)). A rollback to v0.3.1 ignores the v0.3.2 tables, so a server in each person's own key mode reads as one with no credential, a server in the portal's own OAuth client mode reads as one without authentication, and the TLS settings aren't used (see [Upgrading from v0.3.1](#upgrading-from-v031)).
+
+## Upgrading from v0.13.0
+
+v0.13.1 has **no migrations and no configuration changes**: the schema stays at `00056`, and the upgrade is a plain image swap. It rebuilds the image on a refreshed Go builder image; the portal's code is unchanged. See the [v0.13.1 notes](/docs/releases/v0-13-1).
+
+## Upgrading from v0.12.0
+
+v0.13.0 has no migrations and no configuration changes. Older v0.12.0 replicas keep working during the rollout; until a request reaches a new replica, catalog search doesn't match capability names and descriptions. See the [v0.13.0 notes](/docs/releases/v0-13-0).
+
+## Upgrading from v0.11.0
+
+v0.12.0 adds migrations `00051` to `00056` (request epochs, browser-session generations and SCIM provisioning), all expand-only. See the [v0.12.0 notes](/docs/releases/v0-12-0).
+
+- **Finish the rollout before enabling provisioning.** Older replicas don't serve `/scim/v2`, don't apply the enrollment gate, and ignore session generations and request epochs. Set up [Provisioning](/docs/administer/provisioning) only once no v0.11.0 replica is left.
+- **A status write by an older replica counts as a manual decision**, so it can't lift a directory restriction. An older replica's admin update on someone the directory deactivated also records a manual suspension, which an admin then lifts by hand.
+- **Suspension now fences in-flight requests**, and a reactivated person's old browser sessions stay ended: they sign in again.
+- With authentik as the directory, deactivate people before deleting them: in testing, deleting a user sent no SCIM `DELETE`.
+- No new environment variable. Provisioning is set in the web app.
+
+## Upgrading from v0.10.1
+
+v0.11.0 has no migrations. API key creation and personal connection callbacks now recheck the person and session after waiting, so a logout, suspension or expiry during a connect ends it. Drain older replicas to get that everywhere. See the [v0.11.0 notes](/docs/releases/v0-11-0).
+
+## Upgrading from v0.10.0
+
+v0.10.1 has no migrations. It fixes a deadlock between accepting a team invite at sign-in and revoking that invite. Older replicas keep the old lock order: drain them to rely on the fix. See the [v0.10.1 notes](/docs/releases/v0-10-1).
+
+## Upgrading from v0.9.0
+
+v0.10.0 adds migrations `00049` and `00050` (server governance), expand-only. See the [v0.10.0 notes](/docs/releases/v0-10-0).
+
+- **Drain every older serving and background replica before relying on governance**: gateway sensitivity ceilings, sunsets, transfers and the governance loop. An older binary doesn't enforce them.
+- **Existing servers start ownerless and unconfirmed.** Nothing is backfilled as a human decision. Review the new attention items (`server_ownerless`, `server_unlabelled`) and name owners and confirm labels ([Server governance](/docs/teams/server-governance)).
+- **One `409 changed_since_review`.** The review digest is now `omp-review-v6`: a review open at the upgrade needs one reload.
+- Re-review intervals start at the defaults (confidential 180 days, restricted 90, others never) and send nothing back to review on their own ([Governance](/docs/administer/governance)).
+
+## Upgrading from v0.8.0
+
+v0.9.0 adds migration `00048` (the MCP Tasks relay), expand-only. See the [v0.9.0 notes](/docs/releases/v0-9-0).
+
+- **Drain older replicas before relying on tasks.** An older image answers the task methods as unknown and doesn't prune task rows.
+- **Tasks appear once a server is read again** (a refresh or health check) and advertises the extension, and a client declares it.
+- **New settings** `TASKS_MAX_TTL` (24 hours) and `TASKS_MAX_OPEN_PER_PRINCIPAL` (100). Set them only to narrow the defaults ([Configuration](/docs/operate/configuration#mcp-tasks)).
+- **Rolling back** leaves live task handles unusable and doesn't stop upstream work.
+
+## Upgrading from v0.7.0
+
+v0.8.0 adds migration `00047` (additional endpoints for failover), expand-only. See the [v0.8.0 notes](/docs/releases/v0-8-0).
+
+- **Drain older replicas before adding extra endpoints.** An older image uses the primary only, doesn't understand endpoint review or health, and doesn't rotate the new encrypted column.
+- No server gets an extra endpoint by default ([Protection and failover](/docs/teams/protection-and-failover)).
+
+## Upgrading from v0.6.0
+
+v0.7.0 adds migration `00046` (upstream protection), expand-only. See the [v0.7.0 notes](/docs/releases/v0-7-0).
+
+- **Drain older replicas before relying on server quotas, concurrency caps, read retries or the circuit breaker.**
+- Quotas and caps start unset (unlimited), but **the circuit breaker applies at once** to every forwarded call, per replica: five consecutive failures open it for 30 seconds.
+- Admin › **Limits** gains **Per upstream server**, unlimited by default ([Limits](/docs/administer/limits)).
+
+## Upgrading from v0.5.1
+
+v0.6.0 adds migrations `00043` to `00045` (grant expiry and gateway access requests), expand-only. See the [v0.6.0 notes](/docs/releases/v0-6-0).
+
+- **Finish the rollout and drain every older serving and background-worker replica before enabling access requests or creating expiring grants.** v0.5.1 doesn't enforce grant expiry or deliver the new notices.
+- Both features are off by default and existing grants stay permanent. Review discoverability and stewards deliberately ([Access requests](/docs/administer/access-requests)).
+- **Rolling back**: revoke expiring grants or pause the affected calls first; an older image would treat them as permanent.
+- No new setting.
+
+## Upgrading from v0.5.0
+
+v0.5.1 has no migrations: provider token refresh now works under a constrained runtime connection pool. It is a plain image swap. Coming from v0.4.x, follow [Upgrading from v0.4.0](#upgrading-from-v040) too. See the [v0.5.1 notes](/docs/releases/v0-5-1).
+
+## Upgrading from v0.4.0
+
+v0.5.0 adds migrations `00035` to `00042` (sensitive-call approvals), expand-only. See the [v0.5.0 notes](/docs/releases/v0-5-0).
+
+- **Drain every older serving image before enabling approval rules.** v0.4.0 runs on the new schema but doesn't enforce approvals. An image rollback while rules are active is not a safe enforcement rollback: keep governed calls blocked until a supporting image is back.
+- **Run the new binary's `rotate-keys`.** v0.5.0 adds encrypted columns (approval previews and the approval binding key) that older binaries don't know. Rotation rewraps the binding key, never replaces it.
+- **Keep the owner and runtime logins apart.** Protected approval state lives in the owner-controlled `omp_private` schema; `migrate` reconciles the runtime grants. Don't give serving replicas the owner URL to get past a start-up check.
+- **Keep autovacuum on.** Approval transitions take a fail-closed lock; when it's busy (also during maintenance) a governed call is refused, not delayed.
+- Review approver eligibility before enabling a rule ([Approval rules](/docs/administer/approval-rules)).
+
+## Upgrading from v0.3.3
+
+<Callout type="warn" title="v0.4.0 is a breaking release">
+It retires trusted agent platforms and relay service accounts. Callers that used a relay account stop working, and in Kubernetes the new manifests need a new Secret. Back up first.
+</Callout>
+
+v0.4.0 adds migrations `00029` to `00034`: tool scopes, gateway curation, shared service connections, owner-only purge functions (two migrations) and the retirement of agent platforms. See the [v0.4.0 notes](/docs/releases/v0-4-0).
+
+1. **Kubernetes: create the `open-mcp-portal-migrate` Secret** with the key `DATABASE_MIGRATE_URL` before rolling out the v0.4.0 manifests. The `migrate` init container reads only that Secret now. For a single database login, copy the same URL that `open-mcp-portal-runtime` holds as `DATABASE_URL`:
+
+   ```sh
+   kubectl -n open-mcp-portal create secret generic open-mcp-portal-migrate \
+     --from-literal=DATABASE_MIGRATE_URL='postgres://omp:<password>@db.example.org:5432/omp?sslmode=require'
+   ```
+
+   Without it the init container has no database URL and the new pods don't start. See [Secrets](/docs/operate/kubernetes#secrets).
+2. **Replace relay callers first.** `00034` disables every trusted platform and every relay service account and revokes their keys; marks and history stay. Calls with those keys stop working, even without an identity header. Give automation a **new ordinary service account and key** with reviewed grants and scopes, or have people use their own OAuth sign-in or key. Never clear a relay mark to reuse its authority. Retired accounts show **Retired**, read-only, and writes answer `service_account_retired`.
+3. **`00034` is forward-only**: its Down restores nothing. Don't roll back to a release that accepts external identity.
+4. **Inbound `MCP-Gateway-Identity` is refused with `403`** at `/mcp/{slug}`. For a portal registered as a server on another portal, switch **Send identity token** off on the upstream portal's registration of it. Outbound identity tokens are unchanged, but new ones carry no `act` claim.
+5. **Remove the retired API from your clients**: the `/v1/admin/agent-platforms` operations and `PUT …/capabilities/{capabilityId}/present-person` are gone, and removed fields are refused.
+6. **Finish the rollout before relying on tool scopes, curation or shared service connections.** Existing credentials start unrestricted and curation starts empty. Classify tools before switching credentials to read-only scopes; an exact scope name means the **curated exposed name**.
+7. **Separate database logins are opt-in**: `DATABASE_MIGRATE_URL`, `DB_RUNTIME_ROLE` and `DB_REQUIRE_SPLIT_ROLES` are new. Follow [Database roles](/docs/operate/database-roles#move-an-existing-install).
+8. The metric `omp_agent_token_total` is removed ([Metrics](/docs/operate/metrics)).
+
+## Upgrading from v0.3.2
+
+v0.3.3 adds migrations `00027` (tool classification) and `00028` (session activity), expand-only. See the [v0.3.3 notes](/docs/releases/v0-3-3).
+
+- **One `409 changed_since_review`.** The review digest is now `omp-review-v4` and covers tool classes: a review open at the upgrade needs one reload.
+- **Idle expiry is opt-in**: `SESSION_IDLE_TIMEOUT` is new and `0` (off) by default ([Configuration](/docs/operate/configuration#sign-in)). Existing sessions get an activity time at the migration, without a change to their absolute expiry. Roll every replica before relying on it: older replicas neither enforce it nor record activity.
+- Classifying tools restricts nothing by itself.
 
 ## Upgrading from v0.3.1
 
@@ -58,7 +206,7 @@ Coming from v0.2.2, follow this section and then [Upgrading from v0.3.0](#upgrad
 
 - **Migration `00020`.** It adds the tables for trusted agent platforms and for the token IDs the portal has accepted, a relay mark on service accounts, the present-person settings of servers and capabilities, and the agent columns of the call history. The `migrate` init container, or `migrate` run once before `serve`, applies it. It takes no long lock on the call history, so a large `mcp_calls` table doesn't block calls while it runs.
 - **No rolling back with `goose down`.** Undoing `00020` would drop the trusted platforms, the relay marks and the agent columns of the call history. Pin the previous image instead: v0.2.2 ignores the new tables and columns and keeps working against the new schema (see [Rolling back](#rolling-back)).
-- **Nothing changes until it is configured.** The new surfaces are off until a platform admin adds a trusted platform and marks a relay service account. No setting or environment variable is new. To use it with Pi Durable Platform, follow [Agent platforms](/docs/administer/agent-platforms); the platform's `identityAudience` must be the portal's `APP_URL`.
+- **Nothing changes until it is configured.** The new surfaces are off until a platform admin adds a trusted platform and marks a relay service account. No setting or environment variable is new. (Historical: agent platforms were retired in v0.4.0, see [Upgrading from v0.3.3](#upgrading-from-v033) and [Agent platforms](/docs/administer/agent-platforms).)
 - **The old sign-in cookie name is no longer read.** On https only `__Host-omp_oidc_state` is accepted, as v0.2.2 announced. A person who started signing in just before the upgrade starts again.
 - **Run `doctor`** as usual after the upgrade.
 
@@ -106,7 +254,7 @@ The portal now refuses to start with an `ENCRYPTION_KEY` equal to the `API_KEY_P
 
 ### Migrate, then roll every replica
 
-Back up, pin the digest of the current release, v0.3.2, which includes v0.2.0's migrations and adds `00018` to `00026` (see [Install with Docker Compose](/docs/operate/compose#the-image) or [Install on Kubernetes](/docs/operate/kubernetes#the-image)), and run `migrate` once (the `migrate` init container, or `MIGRATE_ON_START` on a single instance). Then start **every** replica on v0.3.2 (at least v0.2.0). Read [Upgrading from v0.2.1](#upgrading-from-v021), [Upgrading from v0.2.2](#upgrading-from-v022), [Upgrading from v0.3.0](#upgrading-from-v030) and [Upgrading from v0.3.1](#upgrading-from-v031) too.
+Back up, pin the digest of the release you upgrade to (see [Install with Docker Compose](/docs/operate/compose#the-image) or [Install on Kubernetes](/docs/operate/kubernetes#the-image)), and run `migrate` once (the `migrate` init container, or `MIGRATE_ON_START` on a single instance). Then start **every** replica on it (at least v0.2.0). The current release, v0.13.1, includes v0.2.0's migrations and adds `00018` to `00056`, but a jump that long hasn't been rehearsed: see [Upgrading across several releases](#upgrading-across-several-releases), and read every later section, from [Upgrading from v0.2.0](#upgrading-from-v020) up to [Upgrading from v0.13.0](#upgrading-from-v0130).
 
 </Step>
 <Step>

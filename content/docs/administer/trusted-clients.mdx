@@ -33,6 +33,10 @@ A trusted client such as Claude Code receives its sign-in result on the person's
 
 The notice narrows the window in which a process on someone's computer could use a trusted client's ID, rather than closing it: after the first confirmation a local process can still start a sign-in with the trusted client's ID and a loopback redirect without being asked, and a process that drives the person's real browser can press **Continue**. The person must still be signed in in their browser, the code is bound to the client's PKCE verifier, and the token works on one gateway only. See [Hardening status](/docs/operate/security#hardening-status).
 
+## Requested tool scope
+
+A client can ask for a tool-class ceiling when it connects (`omp:read`, `omp:write`, `omp:destructive`), and the consent page shows the **Requested tool scope**; the person can narrow it, never widen it. A trusted or previously approved client that asks for more than it was given must be confirmed again, so skipping the consent screen never widens a client's scope silently. See [Tool scopes](/docs/use/tool-scopes).
+
 ## Open client registration
 
 Apps that register themselves can't be trusted, but the endpoint they register at is open to anyone who can reach the portal. The page has a switch, **Allow open client registration** (on by default), saved with the trusted list. Only a person signed in to the web app can change it; automation tokens can't.

@@ -1,0 +1,62 @@
+---
+title: v0.6.0
+description: "Open MCP Portal v0.6.0 (2026-10-29): people can request access to a platform gateway, named stewards decide, and gateway grants can expire. Migrations 00043 to 00045."
+---
+
+**Released 2026-10-29.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.6.0) · image `ghcr.io/ncecere/open-mcp-portal:v0.6.0` · migrations `00043` to `00045` (all expand-only).
+
+The first release of the v0.6 line, after [v0.5.1](/docs/releases/v0-5-1): a way to ask for a gateway instead of asking an admin by email, and grants that end on their own. **Nothing changes until a platform admin makes a gateway requestable;** existing grants stay permanent. Read [Upgrading](#upgrading) first.
+
+## What changed
+
+- **Access requests** (#32, decision 83). A platform admin can make a platform gateway **requestable** on its **Requests** tab (off by default). Every signed-in person then sees its name and description, not its tools or servers, on **Access requests** › **Request access**, and can ask for access for themselves or for a team they own or administer, with a reason. Team gateways don't take requests, and `/mcp/{slug}` still hides gateways you can't use. See [Access requests](/docs/use/access-requests) and [Access requests for platform gateways](/docs/administer/access-requests).
+- **Stewards.** Besides platform admins, up to 50 named people per gateway can decide its requests. A steward decides that gateway's requests and nothing else: no admin rights, no direct grants, no gateway edits. Nobody decides their own request, platform admins included.
+- **Decisions create normal grants.** Approving creates an ordinary user or team grant in the same step as the decision and its audit entry. A team grant covers the team's current and future members and its service accounts. An existing grant is never widened or extended by a request. Denying or withdrawing creates nothing.
+- **Grants that expire.** Whoever approves a request, or adds a grant directly, can let it expire after 1 to 365 days; without a choice it stays permanent. An expired grant stops working at once, without waiting for a cleanup job. Expiry stops later calls; it can't stop a call already running.
+- **Private by design.** Reasons and decision notes are seen only by the requester and the current reviewers. Notices (`access.requested`, `access.decided`) go to the inbox and email, never to webhooks, and carry only the request ID and status. Audit entries record the decision and expiry, never the reason. A person can have 10 requests pending, and must wait 24 hours after a denial before asking for the same access again. Every step needs a browser session; automation tokens can't take part.
+
+## Upgrading
+
+1. **Back up** the database together with its keys, then pin the new image (verify its signature first, see [The image](#the-image)). The init container applies `00043` to `00045`. **Do not use `goose down` for a rollback.**
+2. **Finish the rollout and drain every older serving and background-worker replica before you make a gateway requestable or create an expiring grant.** v0.5.1 runs against the new schema but doesn't enforce expiry or send the new notices.
+3. Decide deliberately which gateways become requestable and who their stewards are: a requestable gateway's name and description become visible to everyone signed in, and a steward can widen that gateway's access.
+4. Going back to an older image doesn't keep expiry working: revoke or pause expiring grants before you do, and turn requests off. Don't turn temporary grants into permanent ones by accident.
+5. From v0.4.x or earlier, follow [Upgrading in v0.5.0](/docs/releases/v0-5-0#upgrading) as well. There are no new settings.
+
+[Upgrading from v0.5.1](/docs/operate/migrations-and-upgrades#upgrading-from-v051) has the same points with the details.
+
+## Verification
+
+The release was tested in both database-role modes and its published image signed and verified; the [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.6.0) and the [release notes](https://github.com/ncecere/open-mcp-portal/blob/v0.6.0/docs/releases/v0.6.0.md) record how.
+
+## Known limitations
+
+Carried over from [v0.5.1](/docs/releases/v0-5-1) unless marked new:
+
+- **Request records keep reasons and notes (new)** until the requester, the gateway or the team is deleted; suspending or archiving doesn't erase them. They don't follow the 90-day rule for approval receipts.
+- **Expiry doesn't stop a call in flight (new).** It prevents later calls only.
+- **"Used" means the approval was spent,** not that the upstream call succeeded; pending approvals can lapse after unrelated changes; governed calls fail closed while the approval lock is busy.
+- **Not run against real clients and providers.** VS Code, Cursor, a real Google or Microsoft provider, a Slack webhook, a mail server and a pilot with a real team are still open.
+- Remote servers only (no stdio); development software that has not run in production.
+
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.6.0` is signed with cosign keyless signing by the repository's `image.yml` workflow. Its digest is:
+
+```text
+sha256:515311b77b6f042367bf7154bcac46f4e7f8a26a5443ca9aff4516fa28a350f7
+```
+
+Check the signature with **cosign v3.0 or newer**, then pin the image by that digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:515311b77b6f042367bf7154bcac46f4e7f8a26a5443ca9aff4516fa28a350f7 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.6.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/open-mcp-portal/issues](https://github.com/ncecere/open-mcp-portal/issues) (there is a form for each kind) or ask in [Discussions](https://github.com/ncecere/open-mcp-portal/discussions). Report security problems privately, as [`SECURITY.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.6.0/SECURITY.md) describes.

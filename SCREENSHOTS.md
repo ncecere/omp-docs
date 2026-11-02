@@ -1,6 +1,6 @@
 # Screenshot capture list
 
-Every image in these docs has a named slot in `lib/screenshot-slots.json` (its alt text and the file names it may have) and is placed with `<Screenshot slot="…" />`. Until an image is imported, the page shows a marked placeholder. This file is the capture list for the screenshot session. **Slots 1 to 43 are captured** (2026-10-17, Open MCP Portal at commit `d039647`, from the Example Corp capture stack in `../omp-assets/capture/`); the files and what each shows are in `../omp-assets/screenshots/MANIFEST.md`. A retake follows `../omp-assets/capture/README.md`. **Slots 44 to 54 were added for v0.2.0 and captured on 2026-10-18** (Open MCP Portal v0.2.0, commit `d4d66de`, same stack extended for v0.2: `../omp-assets/capture/README.md` §5; what each shows, the display-only edits and the SQL are in `../omp-assets/screenshots/MANIFEST.md`). See "For v0.2.0" below.
+Every image in these docs has a named slot in `lib/screenshot-slots.json` (its alt text and the file names it may have) and is placed with `<Screenshot slot="…" />`. Until an image is imported, the page shows a marked placeholder. This file is the capture list for the screenshot session. **All 79 slots are captured on Open MCP Portal v0.13.1** (2026-11-01, commit `0fe0fa9`, the tag), from the Example Corp capture stack in `../omp-assets/capture/` (`dc.sh build`, `up`, `seed`, `shoot`, `v02`, `v13`; `../omp-assets/capture/README.md` §6). The files, what each shows, the display-only edits and the state set by SQL are in `../omp-assets/screenshots/MANIFEST.md`. Slots 1 to 43 were first captured on v0.1.0 (2026-10-17) and 44 to 54 on v0.2.0 (2026-10-18); 55 to 79 were added for v0.13.1.
 
 ## Rules
 
@@ -20,8 +20,8 @@ Every image in these docs has a named slot in `lib/screenshot-slots.json` (its a
   - Auth providers **Google** (Google preset, slug `google`) and **GitHub** (GitHub preset, slug `github`); they may point at `cmd/fakeoauth`, but never show a real client ID or secret.
 - **No real third parties.** Use the fakes in the repository (`make fake-mcp`, `make fake-oauth`, `make example-mail-fake`), not GitHub or Google accounts. As captured: `cmd/fakeoauth` stands in for Google and for SourceHub's authorization server, `examples/mail-mcp -fake-gmail` is Mail, and Status, Wiki search, On-call and Code search (SourceHub's hosted server, OAuth-protected like `cmd/fakemcp -protect`) are small capture servers with the same capabilities as `cmd/fakemcp` for Status and believable data (`../omp-assets/capture/stack/`).
 - **Size**: PNG, **1440×900** (device scale factor 1), light theme unless the state says otherwise.
-- **Version**: slots 1 to 43 were captured from Open MCP Portal's build at commit `d039647` (v0.1.0, before its tag); slots 44 to 54 are for **v0.2.0**, to be captured from the v0.2.0 image (`ghcr.io/ncecere/open-mcp-portal:v0.2.0`). Pin the clock in the seed so timestamps don't churn.
-- **Secrets**: any key or token shown must be a fake value (`omp_0000…`, `omp_sa_0000…`, `ompadm_0000…`, `omppub_0000…`, `ompwhs_0000…`) before capture.
+- **Version**: every slot is captured from the release the docs describe, built from its tag by the capture stack (now **v0.13.1**, commit `0fe0fa9`). Pin the clock in the seed so timestamps don't churn.
+- **Secrets**: any key or token shown must be a fake value (`omp_0000…`, `omp_sa_0000…`, `ompadm_0000…`, `omppub_0000…`, `ompwhs_0000…`, `ompscim_0000…`) before capture.
 - **File name**: the slot name, `<slot>.png`, in the screenshots directory (`../omp-assets/screenshots` by default), then:
 
   ```sh
@@ -90,8 +90,32 @@ Every image in these docs has a named slot in `lib/screenshot-slots.json` (its a
 | 52 | `notification-preferences.png` | 1440×900 | `/settings/notifications` | Sam Ortiz | `/docs/use/notification-preferences` | Email set up, the defaults (all on). |
 | 53 | `connect-allow-server.png` | 1440×900 | `/connect/google?request=…` | Sam Ortiz | `/docs/use/connecting-accounts` | Sam's Google connection already covers `gmail.readonly`; call a tool from a server he hasn't allowed and open the link: the page that asks only "Allow <server> (Support Tools)". As captured the server is **Shared mailbox** (a second Gmail server): Mail itself was allowed by the first Google connection, which v0.2 records in the same flow. |
 | 54 | `server-protocol.png` | 1440×900 | `/teams/support-tools/servers/<status>` | Priya Shah | `/docs/teams/capabilities` | Run `cmd/fakemcp -protocol modern` (or `both`), refresh, and show the protocol line on the server's Overview. |
+| 55 | `approvals-queue.png` | 1440×900 | `/approvals` | Priya Shah | `/docs/use/approvals` | Support Tools' rule "Ticket creation needs a lead" (write tools on Status; Priya and Alex approve); Sam's `status__create_ticket` waiting in the Actionable tab. |
+| 56 | `approval-receipt.png` | 1440×900 | `/approvals/<id>` | Priya Shah | `/docs/use/approvals` | The pending request's Call receipt card. |
+| 57 | `approval-review.png` | 1440×900 | `/approvals/<id>` | Priya Shah | `/docs/use/approvals` | Same page scrolled to the Redacted argument preview and the Actions card. |
+| 58 | `approvals-requester.png` | 1440×900 | `/approvals` (Requested tab) | Sam Ortiz | `/docs/use/approvals` | Sam's requests: approved and spent, denied, pending (as captured also one cancelled). |
+| 59 | `team-approval-rules.png` | 1440×900 | `/teams/support-tools/approval-rules` | Priya Shah | `/docs/teams/approval-rules` | The rule "Ticket creation needs a lead". |
+| 60 | `admin-approval-rules.png` | 1440×900 | `/admin/approval-rules` | Morgan Lee | `/docs/administer/approval-rules` | The platform rule "Destructive tools on Company tools" (SSO group `platform-admins`). |
+| 61 | `access-requests-discover.png` | 1440×900 | `/access-requests` | Quinn Foster | `/docs/use/access-requests` | Engineering tools accepts requests (steward Riley Chen); the Request access tab. |
+| 62 | `access-requests-mine.png` | 1440×900 | `/access-requests` (My requests tab) | Quinn Foster | `/docs/use/access-requests` | Quinn's pending request for Engineering tools. |
+| 63 | `access-request-review.png` | 1440×900 | `/access-requests/<id>` | Riley Chen | `/docs/use/access-requests` | Quinn's request as the steward sees it: reason, grant lifetime, the actions. |
+| 64 | `gateway-access-requests.png` | 1440×900 | `/admin/gateways/<engineering-tools>?tab=requests` | Morgan Lee | `/docs/administer/access-requests` | Requests on, steward Riley Chen; Jordan Kim approved for 30 days, Quinn pending. |
+| 65 | `sessions.png` | 1440×900 | `/settings/sessions` | Sam Ortiz | `/docs/use/sessions` | Three sessions: the capture browser, Safari on an iPhone, Edge on a Mac. |
+| 66 | `catalog-search.png` | 1440×900 | `/catalog` | Sam Ortiz | `/docs/get-started/quick-tour` | The catalog filtered by "ticket". |
+| 67 | `catalog-deprecated.png` | 1440×900 | `/catalog/<shared-mailbox>` | Sam Ortiz | `/docs/teams/server-governance` | Shared mailbox deprecated, replaced by Mail, sunset in 21 days. |
+| 68 | `capability-classes.png` | 1440×900 | `/teams/support-tools/servers/<status>?tab=capabilities` | Priya Shah | `/docs/teams/capabilities` | Tool classes: read for `check_outage` and `search_tickets`, write for `create_ticket` (suggested destructive). |
+| 69 | `server-governance.png` | 1440×900 | `/teams/support-tools/servers/<status>` | Priya Shah | `/docs/teams/server-governance` | The Governance card: owner, on call, sensitivity, next review, lifecycle. |
+| 70 | `server-deprecated.png` | 1440×900 | `/teams/support-tools/servers/<shared-mailbox>` | Priya Shah | `/docs/teams/server-governance` | The deprecation banner. |
+| 71 | `server-protection.png` | 1440×900 | `/teams/support-tools/servers/<status>?tab=settings` | Priya Shah | `/docs/teams/protection-and-failover` | Upstream protection: 600 a minute, 20 concurrent. |
+| 72 | `server-endpoints.png` | 1440×900 | `/teams/it-operations/servers/<on-call>?tab=settings` | Riley Chen | `/docs/teams/protection-and-failover` | Additional endpoints: `https://oncall-dr.corp.example.com/mcp`. |
+| 73 | `server-transfer-incoming.png` | 1440×900 | `/teams/it-operations/servers` | Riley Chen | `/docs/teams/server-governance` | Server transfers: Wiki search offered by Data Platform. |
+| 74 | `service-connections.png` | 1440×900 | `/teams/support-tools/service-accounts?tab=connections` | Priya Shah | `/docs/teams/service-connections` | The shared Google connection "Service desk mailbox". |
+| 75 | `admin-auth-provider-access.png` | 1440×900 | `/admin/auth-providers/<google>?tab=access` | Morgan Lee | `/docs/administer/auth-providers` | Google restricted to Support Tools. |
+| 76 | `admin-governance.png` | 1440×900 | `/admin/publishing` | Morgan Lee | `/docs/administer/governance` | Server reviews: internal 365, confidential 180, restricted 90 days. |
+| 77 | `admin-provisioning.png` | 1440×900 | `/admin/provisioning` | Morgan Lee | `/docs/administer/provisioning` | Directory bound to `https://login.example.com`, enabled, optional enrollment, SCIM base URL. |
+| 78 | `admin-provisioning-people.png` | 1440×900 | `/admin/provisioning` | Morgan Lee | `/docs/administer/provisioning` | Provisioned accounts: Sam, Quinn and Drew adopted; Alex, Riley and Jamie Lane not. |
+| 79 | `oauth-consent-scope.png` | 1440×900 | `/oauth/consent?…` | Sam Ortiz | `/docs/get-started/connect-your-client` | The consent page of slot `oauth-consent`, scrolled to the end: Requested tool scope, Tool scope choice, Deny and Allow. |
 
-## For v0.2.0
+## For v0.13.1
 
-- **New slots 44 to 54** (above) are captured and imported. As captured, Sam Ortiz is an admin of Support Tools in slots 51 to 53 (a review decision goes to a team's owners and admins), and Status speaks 2026-07-28 for slot 54.
-- **Slots 1 to 43 show v0.1.0's screens** and were not retaken. Since then the header has a bell with an unread count, the admin sidebar starts with **Overview** (the admin area also gains **Notifications** and **Automation tokens** pages), and Team settings gains two tabs, so a retake from the v0.2.0 image will show those. Three of them also changed in content: `connect-confirm` (the consent page names the server and its team for platform providers), `my-connections` (a connection lists the servers it allowed) and `server-overview` (the negotiated protocol). `/admin` now opens Overview, not Users.
+Every slot was retaken on v0.13.1, so the images show the current interface: the workspace sidebar's Approvals and Access requests, Team › Approval rules, the admin sidebar's Provisioning and Approval rules, tool scopes on keys and consent, tool classes, the Governance card and the Sensitivity ceiling. Slots 55 to 79 cover the features added since v0.3.2. When a page changes, check the slot's alt text against its image.

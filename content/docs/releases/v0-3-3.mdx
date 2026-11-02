@@ -1,0 +1,60 @@
+---
+title: v0.3.3
+description: "Open MCP Portal v0.3.3 (2026-10-28): owner-set tool classes, a list of your browser sessions with sign out everywhere, and optional idle expiry. Migrations 00027 and 00028."
+---
+
+**Released 2026-10-28.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.3.3) · image `ghcr.io/ncecere/open-mcp-portal:v0.3.3` · migrations `00027` and `00028` (both expand-only).
+
+The last release of the v0.3 line, after [v0.3.2](/docs/releases/v0-3-2): the tool classes that later policy builds on, and browser-session hardening. **Nothing changes for existing installs until you use it**: existing tools stay unclassified, existing credentials keep their access and idle expiry is off. Read [Upgrading](#upgrading) first.
+
+## What changed
+
+- **Tool classes set by the server's team** (#28). Team owners and admins mark each tool **read**, **write** or **destructive**, one at a time or in a bulk edit. What a server's own annotations say is shown only as a suggestion and never applied by itself. A class survives a changed definition (with a warning when the suggestion differs) and is cleared when the tool disappears. Lowering a class sends a published server back to review under `approval_required`. Gateways show the owner's class as the read-only and destructive hints in `tools/list` without rewriting the stored definition, and the identity token and call records can carry the class. Classes are the input for the scopes, approvals and read retries of later releases. See [Capabilities](/docs/teams/capabilities).
+- **Your browser sessions** (#37). Account › **Sessions** lists where you are signed in to the portal, marks this browser, and lets you sign out one session or every session (optionally keeping this one). Platform admins can list and end a person's sessions from Admin › Users; auditors and automation tokens can't. Signing out a session cancels its pending connect flows; connected apps, API keys and provider connections are separate and stay. See [Sessions](/docs/use/sessions).
+- **Optional idle expiry.** `SESSION_IDLE_TIMEOUT` signs out a browser session that hasn't been used for that long. The default `0` keeps it off; otherwise it accepts 5 minutes up to `SESSION_TTL`. Activity is recorded at most once a minute. See [Configuration](/docs/operate/configuration#sign-in).
+- **Smaller:** Go 1.26.10 and a patched web test dependency (Undici 8.12.3), found by the release's dependency checks; fixes to the Kubernetes smoke test's port-forward handling.
+
+## Upgrading
+
+1. Pin the new image (verify its signature first, see [The image](#the-image)). The init container applies `00027` and `00028`; both only add, so the previous image keeps working against the new schema. **Do not use `goose down` for a rollback**; pin the previous image.
+2. A review request that is open during the upgrade needs one reload: the review digest is now `omp-review-v4` and covers tool classes.
+3. Existing sessions get an activity time at migration; their absolute expiry doesn't change. **Roll every replica before you turn on idle expiry**: an older replica neither enforces it nor records activity.
+4. Classifying tools restricts nothing by itself. Read-only credentials, curation and approvals came in [v0.4.0](/docs/releases/v0-4-0) and [v0.5.0](/docs/releases/v0-5-0).
+
+[Upgrading from v0.3.2](/docs/operate/migrations-and-upgrades#upgrading-from-v032) has the same points with the details.
+
+## Verification
+
+The release was tested and its published image signed and verified; the [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.3.3) and the [release notes](https://github.com/ncecere/open-mcp-portal/blob/v0.3.3/docs/releases/v0.3.3.md) record how.
+
+## Known limitations
+
+Carried over from [v0.3.2](/docs/releases/v0-3-2#known-limitations) unless marked new:
+
+- **A class is the team's assertion (new).** The portal doesn't verify what a tool really does.
+- **Large session lists haven't been load-tested (new),** and idle expiry hasn't had a long wall-clock soak.
+- **Client certificates aren't used for the OAuth metadata and token endpoints.** A server in per-person OAuth mode behind a private CA can't be set up yet.
+- **Not run against real clients and providers.** VS Code, Cursor, a real Google or Microsoft provider, a Slack webhook, a mail server, a collector and a pilot with a real team are still open.
+- Remote servers only (no stdio); development software that has not run in production.
+
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.3.3` is signed with cosign keyless signing by the repository's `image.yml` workflow. Its digest is:
+
+```text
+sha256:021672961ead3bc78de0e2383373e780ce1035b34b25d676e433199dcf8c5ed8
+```
+
+Check the signature with **cosign v3.0 or newer**, then pin the image by that digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:021672961ead3bc78de0e2383373e780ce1035b34b25d676e433199dcf8c5ed8 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.3.3 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/open-mcp-portal/issues](https://github.com/ncecere/open-mcp-portal/issues) (there is a form for each kind) or ask in [Discussions](https://github.com/ncecere/open-mcp-portal/discussions). Report security problems privately, as [`SECURITY.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.3.3/SECURITY.md) describes.

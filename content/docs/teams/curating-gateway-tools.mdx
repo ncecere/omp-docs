@@ -1,0 +1,56 @@
+---
+title: "Curating gateway tools"
+description: "Rename a tool, rewrite its description and fix or limit its arguments for one gateway in Open MCP Portal, without changing the server or the catalog."
+---
+
+A gateway can present a tool differently from how its server lists it: under another name, with a description written for the people and models who use that gateway, and with some arguments fixed or limited to a list of values. This is **curation**. It belongs to one gateway's selection: the server's definition, the catalog and every other gateway are unchanged.
+
+Use it to give a tool a clearer name, to hide an argument a gateway's callers should never choose (always the `support` project, say), or to limit one to safe values.
+
+## Who can curate
+
+- Team gateways: the team's **owners and admins**.
+- Platform gateways: platform admins.
+
+They see **Curate &lt;tool&gt;** next to each selected tool on the gateway's **Capabilities** tab, and in the **Choose capabilities** picker ("Save selection changes before editing a tool policy"). People who can read the gateway's calls but not edit it, such as platform auditors, see **View definitions for &lt;tool&gt;** instead: a read-only view of the **Model-facing definition** and the **Original server definition**.
+
+Curation is a browser-session action: an automation token that sends a policy gets `403 session_required`. Only tools can be curated, not prompts or resources.
+
+## The dialog
+
+**Curate &lt;tool&gt;**:
+
+| Field | Meaning |
+|---|---|
+| **Exposed name** | The complete name clients see, up to 128 letters, digits, `_`, `.` and `-`. Leave it empty to use the default `server__name`. It must be unique within the gateway, among every selected tool, available or not (`409 name_taken`) |
+| **Override description for this gateway** | Tick it to replace the description in **Model-facing description** (up to 2,000 characters). Untick it to inherit the server's |
+| **Policy for &lt;argument&gt;** | For each top-level argument: **Unrestricted**, **Fix** (one value, under **Fixed value for &lt;argument&gt;**) or **Allow** (a list of values, under **Allowed values for &lt;argument&gt;**, given as a JSON array) |
+
+**Model definition preview** shows what clients will see; **Original server definition** shows what the server listed. **Save policy** saves it; **Clear policy and restore defaults** removes the whole policy. A tool with a policy shows **Edited for this gateway** in the gateway's lists and under My gateways.
+
+The dialog keeps the tool's fingerprint and the gateway's revision from when you opened it. If either changed, it says so: close it and look again.
+
+## What clients see and send
+
+- **Names.** The tool is listed and called by its exposed name. A tool without a curated name stays `server__name`. A [tool scope](/docs/use/tool-scopes) with exact tool names matches the **exposed** name, so renaming a tool can stop a named scope from matching it.
+- **Descriptions.** The overridden description replaces the server's in `tools/list`.
+- **Fixed arguments** disappear from the input schema (and from `required`). The portal adds the fixed value to every call. A call that sends the same value is accepted; one that sends another value is refused with `-32602` "argument &lt;name&gt; is fixed by this gateway".
+- **Allowed values** narrow the argument's schema to an `enum` of those values. A call with another value is refused with `-32602` "argument &lt;name&gt; is not allowed by this gateway".
+
+Refused calls never reach the server, ask for no consent and are recorded as bad requests. The server always receives the **original** tool name and the merged arguments, with fixed values filled in. See [what server authors see](/docs/server-authors#what-the-portal-does-with-your-answers).
+
+## Limits
+
+Arguments can be constrained only when the tool's input schema is an object with explicit top-level properties, and only with schema features the portal can narrow safely. Composition (`anyOf`, `oneOf`, `allOf`), references, conditionals and similar keywords make the dialog say "This schema cannot safely be narrowed. You can still rename or re-describe this tool." Renaming and rewriting the description always work.
+
+A policy may constrain at most 50 arguments, with at most 100 allowed values each, and be at most 64 KiB. Allowed values must be valid for the original schema and leave at least one value. Numbers must be exactly representable (no `0.10000000000000001`). Nested arguments, ranges and patterns can't be authored. Larger or more complex policies are refused, never partly applied.
+
+## When the server changes
+
+A policy is tied to the definition it was written for. When the server's definition of the tool changes, the tool becomes unavailable in this gateway, shown as **Tool policy needs review**, even after the change is approved for the catalog. An owner or admin opens **Curate &lt;tool&gt;**, reads the new original definition and chooses **Review and resave policy** (or clears the policy). Callers in the middle of a call when the policy changes get "The tool or its gateway policy changed; retry the original request".
+
+<Callout type="warn" title="Curation is a guardrail, not authorization">
+Rewritten descriptions are untrusted text a model reads, and can hide what a tool really does: curate honestly. Constraints cover the named arguments only; the server may have other ways to reach the same data. Keep the server's own checks, and use [tool scopes](/docs/use/tool-scopes) and [approval rules](/docs/teams/approval-rules) to limit what may be called.
+</Callout>
+
+Curation changes are in the gateway team's [audit log](/docs/teams/team-settings#audit-log), with names and counts, never the descriptions or values. The `omp` command line can export and compare a platform gateway's policies but not write them: see [The omp CLI](/docs/api/cli).

@@ -26,7 +26,7 @@ open-mcp-portal doctor --mode migrate  # check the configuration migrate needs
 kubectl -n open-mcp-portal exec deploy/open-mcp-portal -c portal -- /open-mcp-portal doctor
 ```
 
-`doctor` uses the same configuration as the other commands and checks, each with a status (ok, info or failed), a duration and a fix where it has one:
+`doctor` uses the same configuration as the other commands and checks, each with a status (ok, info or failed), a duration and a fix where it has one. Its database checks always connect with `DATABASE_URL`, the runtime login, never with `DATABASE_MIGRATE_URL`; `--mode migrate` only validates the configuration `migrate` needs (`DATABASE_MIGRATE_URL` or its fallback):
 
 | Check | What it looks at |
 |---|---|
@@ -36,7 +36,8 @@ kubectl -n open-mcp-portal exec deploy/open-mcp-portal -c portal -- /open-mcp-po
 | OAuth client registration | Information: whether open client registration is on, and the live registrations against `OAUTH_MAX_REGISTERED_CLIENTS` |
 | `safety production` | The production safety checks: no example keys, no `DEV_AUTH`, https `APP_URL` (info on a loopback `APP_URL`) |
 | `postgres connect` | PostgreSQL answers, and its version |
-| `postgres migrations` | The schema's version against the binary's, and pending migrations |
+| `postgres migrations` | The schema's version against the binary's, and pending migrations (failed). A database newer than the binary is information: an older binary during a rollout |
+| `postgres roles` | Whether the runtime login is safely separated from the schema owner ([Database roles](/docs/operate/database-roles)). OK when it is; information when not ("Use distinct owner/runtime logins"); **failed** when it is not and `DB_REQUIRE_SPLIT_ROLES=true`. Checked once the schema is current |
 | `keys encryption` | Stored secrets per encryption key, values that can't be decrypted, and whether `ENCRYPTION_KEY_PREVIOUS` can be removed |
 | `keys pepper` | Keys and automation tokens still on the previous pepper, and whether `API_KEY_PEPPER_PREVIOUS` can be removed |
 | `notifications email` | Off (information) without `SMTP_HOST`. Configured: connects, greets, upgrades to TLS, authenticates and quits within 5 seconds, without sending a message, and shows the host, port and mode (and "authenticated"), never the username or password. Fails with the error class when it can't |

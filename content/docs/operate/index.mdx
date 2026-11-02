@@ -8,12 +8,12 @@ Open MCP Portal is one stateless binary, `open-mcp-portal`, in one container ima
 - **PostgreSQL 17**: the only state. Every replica shares it, including rate-limit counters.
 - **An OpenID Connect identity provider** for sign-in.
 - **TLS in front of it**: `APP_URL` must be https (an ingress or reverse proxy terminates TLS).
-- **Two secrets** you generate: `ENCRYPTION_KEY` and `API_KEY_PEPPER`.
+- **Two secrets** you generate: `ENCRYPTION_KEY` and `API_KEY_PEPPER`. Optionally, a separate migration-owner database URL, `DATABASE_MIGRATE_URL` ([Database roles](/docs/operate/database-roles)).
 
-There is no worker, cache, queue or object storage. The binary serves the web app, the management API, the MCP endpoints, the OAuth endpoints and the background loops (health checks, signing-key rotation, retention, usage rollups).
+There is no worker, cache, queue or object storage. The binary serves the web app, the management API, the MCP endpoints, the OAuth endpoints, the SCIM endpoint and the background loops (health checks, signing-key rotation, notifications, retention, usage rollups, server governance, the optional provider token refresh and SCIM clean-up).
 
 <Callout type="warn" title="Pre-1.0">
-These docs describe Open MCP Portal v0.3.2 (2026-10-20). Its image is published as `ghcr.io/ncecere/open-mcp-portal:v0.3.2` and signed with cosign: [check the signature](/docs/operate/compose#the-image) and deploy by digest. Coming from v0.1.0? Read [Upgrading from v0.1.0](/docs/operate/migrations-and-upgrades#upgrading-from-v010) first.
+These docs describe Open MCP Portal v0.13.1 (2026-11-01). Its image is published as `ghcr.io/ncecere/open-mcp-portal:v0.13.1` and signed with cosign: [check the signature](/docs/operate/compose#the-image) and deploy by digest. Coming from v0.3.x? Read [Migrations and upgrades](/docs/operate/migrations-and-upgrades#upgrading-from-v032) first: v0.4.0 is a breaking release, and Kubernetes installs need a new [migration Secret](/docs/operate/kubernetes#secrets).
 </Callout>
 
 | Command | Does |
@@ -24,12 +24,15 @@ These docs describe Open MCP Portal v0.3.2 (2026-10-20). Its image is published 
 | `open-mcp-portal rotate-keys` | Re-encrypts stored secrets after an `ENCRYPTION_KEY` change ([Secrets and key rotation](/docs/operate/secrets-and-key-rotation)) |
 | `open-mcp-portal version` | Prints the version |
 
+The `omp` command line is a separate binary for CI and scripts, published with each release: see [The omp command line](/docs/api/cli).
+
 <Cards>
   <Card title="Install with Docker Compose" href="/docs/operate/compose">The image, the demo, and a single-instance install.</Card>
   <Card title="Install on Kubernetes" href="/docs/operate/kubernetes">The Kustomize base and example overlay.</Card>
   <Card title="Configuration" href="/docs/operate/configuration">Every setting, with its default.</Card>
   <Card title="Secrets and key rotation" href="/docs/operate/secrets-and-key-rotation">The encryption key, the pepper, and rotating both.</Card>
-  <Card title="Migrations and upgrades" href="/docs/operate/migrations-and-upgrades">Forward-only migrations and rolling upgrades.</Card>
+  <Card title="Migrations and upgrades" href="/docs/operate/migrations-and-upgrades">Forward-only migrations, rolling upgrades and the notes for each release.</Card>
+  <Card title="Database roles" href="/docs/operate/database-roles">Separate migration-owner and runtime logins for PostgreSQL.</Card>
   <Card title="Scaling" href="/docs/operate/scaling">Replicas, background loops and the database.</Card>
   <Card title="Health and doctor" href="/docs/operate/health-and-doctor">Probes, graceful shutdown and the doctor command.</Card>
   <Card title="Metrics" href="/docs/operate/metrics">Prometheus metrics, Grafana dashboards and alert rules.</Card>

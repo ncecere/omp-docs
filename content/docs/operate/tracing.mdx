@@ -3,7 +3,7 @@ title: Tracing, dashboards and alerts
 description: Turn on Open MCP Portal's OpenTelemetry tracing, what a span holds and never holds, how to sample, the trace id on call records, and the Grafana dashboards and Prometheus alert rules that ship with it.
 ---
 
-Open MCP Portal v0.3.1 can export **OpenTelemetry traces**, and ships **Grafana dashboards** and **Prometheus alert rules** for its [metrics](/docs/operate/metrics). Tracing shows where a slow call spent its time: in the portal, in the database, in a provider's token refresh or at the MCP server. It is **off** unless you configure an exporter. Off, the portal creates no spans, reads no trace headers and sends nothing, and a client's `traceparent`, `tracestate` and `baggage` pass through to the server exactly as they did before.
+Since v0.3.1 Open MCP Portal can export **OpenTelemetry traces**, and ships **Grafana dashboards** and **Prometheus alert rules** for its [metrics](/docs/operate/metrics). Tracing shows where a slow call spent its time: in the portal, in the database, in a provider's token refresh or at the MCP server. It is **off** unless you configure an exporter. Off, the portal creates no spans, reads no trace headers and sends nothing, and a client's `traceparent`, `tracestate` and `baggage` pass through to the server exactly as they did before.
 
 <Callout type="warn" title="Not run against a real collector">
 The exporter was tested against a fake OTLP receiver, and Grafana loaded the five dashboards from files. It has not been run against a real OpenTelemetry Collector, Tempo or other backend, and the dashboards' queries have not been checked against live data.
@@ -36,7 +36,8 @@ The OpenTelemetry SDK also reads the standard `OTEL_EXPORTER_OTLP_CERTIFICATE`, 
 
 One trace per sampled request:
 
-- **`/mcp/{slug}`** is a server span named for the MCP method (`MCP tools/call`), with child spans for authentication (`mcp.authenticate`), gateway resolution (`mcp.resolve_gateway`), the rate limit (`mcp.rate_limit`), what the caller may use (`mcp.authorize`), the provider credential (`mcp.provider_credential`; a provider token refresh happens inside it) and one client span around the call to the server (`mcp.upstream.forward`, one per attempt).
+- **`/mcp/{slug}`** is a server span named for the MCP method (`MCP tools/call`), with child spans for authentication (`mcp.authenticate`), gateway resolution (`mcp.resolve_gateway`), the rate limit (`mcp.rate_limit`), what the caller may use (`mcp.authorize`), the provider credential (`mcp.provider_credential`; a provider token refresh happens inside it) and one client span around the call to the server (`mcp.upstream.forward`, one per attempt: a read retry or a failover to an additional endpoint shows as several).
+- **MCP Tasks lifecycle requests** are server spans named for their method, such as `MCP tasks/get`.
 - **Every other request to the management API** is one server span named by its route pattern, such as `GET /v1/teams/{team}/gateways`.
 - **The registry's probes** (the scheduled health check, **Test** and **Refresh**) are `registry.probe` spans with the server's slug and the result. The scheduled health checks start their own traces.
 - Database queries are not spans.
@@ -73,13 +74,13 @@ Traces and metrics are linked only through this id. **Exemplars are not built.**
 
 ## Dashboards
 
-Five Grafana dashboards are committed in the repository under [`deploy/grafana/dashboards/`](https://github.com/ncecere/open-mcp-portal/tree/v0.3.1/deploy/grafana/dashboards). Import each JSON file in Grafana (Dashboards › New › Import), or provision the directory with a file provider. Each asks for a Prometheus data source through its `datasource` variable.
+Five Grafana dashboards are committed in the repository under [`deploy/grafana/dashboards/`](https://github.com/ncecere/open-mcp-portal/tree/v0.13.1/deploy/grafana/dashboards). Import each JSON file in Grafana (Dashboards › New › Import), or provision the directory with a file provider. Each asks for a Prometheus data source through its `datasource` variable.
 
 | Dashboard | Shows |
 |---|---|
 | **MCP traffic** | Tool calls, calls failing at servers, rate-limited requests, requests by outcome and method, call duration by gateway and server |
 | **MCP servers** | Servers by state (healthy, failing, not checked yet), failing health checks, forwarded calls and call duration by server |
-| **Providers and tokens** | Provider token refreshes by provider and result, refused and unavailable refreshes, agent platform and automation token results |
+| **Providers and tokens** | Provider token refreshes by provider and result, refused and unavailable refreshes, automation token results |
 | **Notifications** | Deliveries by channel and outcome, failed and retrying deliveries, events emitted and events that could not be |
 | **Platform** | HTTP requests, errors and latency by route, the PostgreSQL pool, background loop leaders, retention and usage rollup age, payload capture, process and versions |
 
@@ -87,7 +88,7 @@ A test in the repository checks every metric and label the dashboards and rules 
 
 ## Alert rules
 
-[`deploy/prometheus/omp-alerts.yaml`](https://github.com/ncecere/open-mcp-portal/blob/v0.3.1/deploy/prometheus/omp-alerts.yaml) has **14 alert rules**, with promtool unit tests (`omp-alerts.test.yaml`). Load the file with `rule_files:` in Prometheus. For the Prometheus Operator, the example overlay has the same rules as a `PrometheusRule` (`prometheusrule.yaml`) beside the `ServiceMonitor`. Neither is in the overlay's `resources:`, because they need the operator's CRDs: add them when the cluster has them.
+[`deploy/prometheus/omp-alerts.yaml`](https://github.com/ncecere/open-mcp-portal/blob/v0.13.1/deploy/prometheus/omp-alerts.yaml) has **14 alert rules**, with promtool unit tests (`omp-alerts.test.yaml`). Load the file with `rule_files:` in Prometheus. For the Prometheus Operator, the example overlay has the same rules as a `PrometheusRule` (`prometheusrule.yaml`) beside the `ServiceMonitor`. Neither is in the overlay's `resources:`, because they need the operator's CRDs: add them when the cluster has them.
 
 The two "down" alerts match `job="open-mcp-portal"`, the name the example `ServiceMonitor` gives. Change it if your scrape configuration names the job otherwise.
 
@@ -108,7 +109,7 @@ The two "down" alerts match `job="open-mcp-portal"`, the name the example `Servi
 | `OMPNoLoopLeader` | warning | No replica has led a background loop for 30 minutes |
 | `OMPNotificationDeliveryFailures` | warning | More than 3 notifications failed for good in an hour on one channel |
 
-Each alert links to its entry in the repository's [alert runbook](https://github.com/ncecere/open-mcp-portal/blob/v0.3.1/docs/phase6-operations.md#alert-runbook), which says what to check first. With tracing on, the runbook points you at a failing call's trace from its page.
+Each alert links to its entry in the repository's [alert runbook](https://github.com/ncecere/open-mcp-portal/blob/v0.13.1/docs/phase6-operations.md#alert-runbook), which says what to check first. With tracing on, the runbook points you at a failing call's trace from its page.
 
 **Check the rules** from a checkout of the repository with `make prom-check`: it runs `promtool check rules` and the unit tests, with a local `promtool` or the pinned `prom/prometheus` image through Docker. CI runs it too.
 

@@ -17,7 +17,7 @@ A refresh connects to the server and lists every kind it advertises, page by pag
 
 A kind the server advertises but answers with "method not found" counts as empty. For a server in OAuth mode, the refresh uses the connection of the person who authorized it ("Capabilities read as …"); if that connection lapsed, or that person is no longer an editor or above, the refresh asks someone to authorize again.
 
-The **Capabilities** tab lists what was read, by kind, with each item's description and the hints the server declares (read-only, destructive, idempotent, open world). The portal shows those hints but never trusts them for any decision.
+The **Capabilities** tab lists what was read, by kind, with each item's description and the hints the server declares (read-only, destructive, idempotent, open world). The portal shows those hints but never trusts them for any decision. What it does trust is the **class** your team gives each tool ([below](#classifying-tools)).
 
 <Callout type="warn" title="Untrusted text">
 Names, descriptions and schemas come from the server, and a model reads them as instructions. Read them before you publish a server or approve a change.
@@ -36,11 +36,28 @@ A refresh never approves anything. The server's pending-changes count covers cha
 
 Who approves: a platform admin under **Approval required**; the team's owners and admins under **Self-publish** (**Approve change** on the capability, after reading its definition). The approval names the fingerprint that was read: if the definition changed again before the button was pressed, it is refused (`changed_since_review`) and you read it again. Private servers need no approval for the team's own gateways: a team gateway serves the team's own servers' capabilities as they are now. See [Publishing and review](/docs/teams/publishing).
 
-## Require a present person
+## Classifying tools
 
-Each capability has a **Present person** setting, changed with **Present person…** on the **Capabilities** tab (editors and above): **Same as the server** (the default), **Needs a present person** or **Doesn't need a present person**. The capability's own value wins over the server's **Require a present person for calls from agents** switch ([Registering an MCP server](/docs/teams/register-a-server#require-a-present-person)). A capability that needs one is marked **Needs a present person** in the list.
+A tool's annotations are the server's own claims. A **class** is your team's: **Read** (only observes), **Write** (changes data) or **Destructive** (deletes data or causes irreversible effects). A tool nobody classified is **Unclassified**, which makes no assertion and is never treated as read. Classes decide:
 
-When a capability needs a present person, a call that arrives through an agent platform's relay account is refused unless the platform says the person it names is present. Use it for capabilities that send, post or spend. Setting it to **Needs a present person** needs no review; relaxing it (a capability that needed one no longer does, or one that followed the server's switch is set to **Doesn't need**) sends a published server back to review, and the form says so before you save. The change is in the audit log as `mcp_capability.presence_set`. See [Agent platforms](/docs/administer/agent-platforms#calls-that-need-the-person-there).
+- which tools a [tool scope](/docs/use/tool-scopes) such as **Read only** lets a key, app or service account call;
+- which tools an [approval rule](/docs/teams/approval-rules) for a class matches (unclassified tools match destructive rules);
+- which tools the portal may [retry or send to a failover endpoint](/docs/teams/protection-and-failover) after a brief failure (read tools only).
+
+<Screenshot slot="capability-classes" />
+
+The team's **owners and admins** classify tools on the **Capabilities** tab: **Classify tools…** on the Capabilities card for many tools at once (at most 500 changed tools per save), or **Classify…** on one tool. The dialog (**Classify tools** or **Classify &lt;tool&gt;**) has a class select per tool, with **Unclassified**, **Read**, **Write** and **Destructive**, and **Use suggestions**, which fills in each tool's suggestion. **Save classes** saves them. Editors, members and platform staff see the classes but can't change them, and automation tokens can't classify.
+
+Each tool shows its class as a badge, **Class: read**, **Class: write**, **Class: destructive** or **Unclassified**, and next to it:
+
+- **Suggested: &lt;class&gt;**: what the server's hints suggest. `readOnlyHint: true` suggests read; otherwise an explicit `destructiveHint: false` suggests write; anything else suggests destructive. A suggestion is never saved by itself: it is untrusted, so read what the tool does before you accept it.
+- **Class differs from suggestion**: the saved class and the current suggestion disagree. It's a prompt to look again, not proof that either is wrong.
+
+**Refresh keeps classes**, even when a tool's definition changes. A tool the server stops listing loses its class, and must be classified again if it comes back. If the server changed while the dialog was open, it says "The server changed. Close this dialog and review the refreshed tools before trying again."
+
+**Review.** **Lowering** a class (destructive to write or read, write to read, or giving an unclassified tool read or write) sends a published server back to review under **Approval required** (reason `classification_changed`), and the dialog warns "The server will leave the catalog". Raising a class, clearing it or choosing destructive never does.
+
+**Where classes show up.** Gateways list classified tools with `readOnlyHint` and `destructiveHint` set from the class (read: true and false; write: false and false; destructive: false and true); other annotations, and unclassified tools, keep the server's hints. The [identity token](/docs/server-authors/identity-token) of a call to a classified tool carries `tool_class`, and each call's page shows the **Tool class at call time**, so a later change doesn't rewrite history. Changes are audited as "Changed a tool's class".
 
 ## Health
 
@@ -50,7 +67,7 @@ Each server's health comes from checks:
 - **Test connection** on the Overview tab runs a check now. When the server's **Send identity token** is on, it sends the identity token of the editor who pressed it, and fails with a specific message if the server refuses it with `401` or `403` but accepts the request without it. Scheduled checks and refresh send no token. See [Send identity token](/docs/teams/register-a-server#send-identity-token) for what a Test can't catch, and for the switch's default (off for a new server with no authentication on a public host).
 - Every **Refresh capabilities** also stores a check.
 
-The **Health** tab lists the latest 100 checks: ok or failed, latency, what triggered it, the HTTP status and a short message with secrets redacted. A failing server shows since when, on the team's [attention card](/docs/teams/attention-and-notifications), and, after three failed checks in a row, in a notification to the team's owners, admins and editors.
+The **Health** tab's **Upstream health** card lists recent checks, the latest 100 per endpoint: ok or failed, latency, what triggered it, which **Endpoint** was checked (**Primary**, or **Additional endpoint N** for a [failover endpoint](/docs/teams/protection-and-failover#additional-endpoints)), the HTTP status and a short message with secrets redacted. The server's status comes from the primary's checks. A failing server shows since when, on the team's [attention card](/docs/teams/attention-and-notifications), and, after three failed checks in a row, in a notification to the team's owners, admins and editors.
 
 ### The protocol it speaks
 
@@ -74,6 +91,8 @@ The server's Overview tab shows the MCP protocol revision the portal last negoti
 | Address not allowed: private, loopback or a redirect | Blocked by the address guard, or the server redirected |
 | TLS problem (class `tls`) | The server's certificate isn't trusted, isn't valid for the host name or has expired, the server refused the portal's client certificate or wants one, or it doesn't speak TLS 1.2 or newer. See [TLS to the server](/docs/teams/register-a-server#tls-to-the-server) |
 | The portal couldn't get a token for this server | The server uses the portal's own OAuth client and its authorization server is unavailable or refused the client |
+| Server concurrency limit reached | The server's [concurrency cap](/docs/teams/protection-and-failover#upstream-protection) was full |
+| Server circuit open while it recovers | The server failed 5 times in a row, so the portal paused sending to it for 30 seconds ([circuit breaker](/docs/teams/protection-and-failover#circuit-breaker)) |
 
 For a server in OAuth mode, scheduled checks use nobody's token: an unauthenticated `initialize` that gets the expected `401` challenge for this server counts as healthy, shown as **Reachable — requires sign-in**. **Test connection** uses the setup person's connection.
 
@@ -82,3 +101,5 @@ For a server that wants each person's own key, scheduled checks send nobody's ke
 ## Disabling a server
 
 Turning a server off in **Settings** stops checks and calls, and removes it from the catalog; gateways show its capabilities as unavailable ("Server disabled") until it's turned on again.
+
+To retire a server that people should move away from, deprecate it on the **Governance** card instead: it keeps working, with a banner and notices that name its replacement, until its sunset date, after which no gateway serves it ("Server retired"). See [Server governance](/docs/teams/server-governance#deprecating-and-retiring-a-server).

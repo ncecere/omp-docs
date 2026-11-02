@@ -10,9 +10,7 @@ An **automation token** lets a script or CI job call part of Open MCP Portal's m
 
 Tokens are **separate from MCP credentials in both directions**. A token never works on `/mcp/{slug}`, and a personal API key (`omp_…`), a service account key (`omp_sa_…`) or an OAuth token never works on `/v1`. A token can't make or revoke tokens, grant a platform role, approve a server, or read recorded call contents.
 
-<Callout type="warn" title="Create no token until every replica runs v0.2.0">
-An older replica doesn't know the new token prefixes. If you are upgrading, roll every replica first: see [Upgrading from v0.1.0](/docs/operate/migrations-and-upgrades#upgrading-from-v010).
-</Callout>
+Tokens are what the [`omp` command line](/docs/api/cli) and the [GitHub Action](/docs/api/github-action) sign in with. A third kind of token, the **provisioning token** (`ompscim_…`), is unrelated: it works only at the SCIM endpoint, is managed on [Provisioning](/docs/administer/provisioning), and is refused on `/v1`.
 
 ## Create a platform token
 
@@ -64,8 +62,8 @@ Errors to know:
 **`platform:write`** acts as a platform admin, but only for provisioning that can be undone and doesn't change who is trusted:
 
 - create and update teams, and create and update gateways;
-- select a gateway's capabilities, and add or remove its grants;
-- change the platform's rate limits and a team's limits;
+- select a gateway's capabilities, and add or remove its grants (a new grant may carry a tool scope and an expiry);
+- change the platform's rate limits, including the per upstream server default and ceiling, and a team's limits;
 - revoke a person's connected app or connection.
 
 Everything else answers `403 token_not_allowed`. Which operations accept tokens is part of the API description (the `x-omp-token-scopes` extension in the [API reference](/docs/api)), and a test in the product checks that exactly those operations accept them.
@@ -74,8 +72,13 @@ Everything else answers `403 token_not_allowed`. Which operations accept tokens 
 
 - Create or revoke tokens (so a token can't make more tokens).
 - Change a person: grant or remove `platform_admin`, suspend anyone, assign a team's owner, manage members, invites, service accounts and their keys. A platform token creates a team without an owner, and a person assigns the owner.
-- **Decide** anything: approve or reject servers, approve capabilities, set a capability's requirement. The review gate stays human.
-- Change settings that widen trust or touch data: the publishing policy and its overrides, internal networks, trusted clients, redaction patterns, retention, and auth providers.
+- **Decide** anything: approve or reject servers, approve capabilities, set a capability's requirement or a tool's class. The review gate stays human.
+- Change settings that widen trust or touch data: the publishing policy and its overrides, the [server review](/docs/administer/governance) settings, internal networks, trusted clients, redaction patterns, retention, and auth providers.
+- Write server governance (owner, on-call contact, sensitivity, lifecycle, sunset date, replacement; `403 token_not_allowed` with `details.field` `governance`), set a gateway's sensitivity ceiling (`maxSensitivity`), or offer, accept or force a server transfer.
+- Write a selected tool's curation: a token can change a gateway's selection, but sending `curation` gets `403 session_required`.
+- Anything to do with [approval rules](/docs/administer/approval-rules) and approvals, or [access requests](/docs/administer/access-requests) and stewards.
+- Manage [provisioning](/docs/administer/provisioning), browser sessions, or teams' service connections.
+- Change a server's upstream protection (its own rate limit, concurrency and additional endpoints): only the team's owners and admins do, in a browser session.
 - Delete anything.
 - Read recorded call contents, anything under another person's account (`/v1/me/…`), a secret of any kind (header values, provider and token secrets, webhook secrets and URLs), or manage notifications.
 

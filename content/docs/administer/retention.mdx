@@ -21,8 +21,20 @@ description: How long Open MCP Portal keeps call records, recorded call contents
 
 ## The retention job
 
-One replica at a time runs the job every `RETENTION_INTERVAL` (15 minutes by default). It deletes each kind in batches of `RETENTION_BATCH_SIZE` rows (1,000 by default), at most 100 batches per kind per run: recorded contents, then call records, then audit entries, then usage rollups. Call records are never deleted before the usage rollup has counted them. It also clears expired consent links and old rate-limit windows. It's idempotent, and a kind that fails doesn't stop the others.
+One replica at a time runs the job every `RETENTION_INTERVAL` (15 minutes by default). It deletes each kind in batches of `RETENTION_BATCH_SIZE` rows (1,000 by default), at most 100 batches per kind per run: recorded contents, then call records, then audit entries, then usage rollups. Call records are never deleted before the usage rollup has counted them. It also clears expired consent links, old rate-limit windows and expired [MCP task](/docs/server-authors/tasks) handles. It's idempotent, and a kind that fails doesn't stop the others.
+
+Audit entries and call records are deleted through database functions that never delete audit entries younger than 30 days or call records younger than 1 day. When the operator runs the portal with [split database roles](/docs/operate/database-roles), these functions are the only way the serving login can delete them. If you roll back to a binary older than v0.4.0 while the restricted login is in place, its retention runs fail.
+
+The job's log may occasionally show `retention: clean-up failed — Approval is unavailable`: a clean-up step found the access tables locked by another change and gave up rather than wait. The next run recovers.
 
 **Last run** shows when the job last ran, what it deleted per kind ("Nothing deleted" when nothing was due) and any kind that failed. Each run that deleted something writes a `retention.purge` audit entry with counts only.
 
 There are no legal holds or dry runs. Changes are audited as `settings.retention_update` and `team.retention_update`.
+
+## Fixed periods
+
+Some records aren't covered by these settings:
+
+- **Approval requests**: the argument preview is cleared within 24 hours after a request ends; the rest of the request is kept for 90 days. See [Approval rules](/docs/administer/approval-rules#privacy-and-records).
+- **Access requests**, with their reasons and notes, are kept until the requester, the gateway or the team is deleted.
+- **Notifications**: see [Notifications](/docs/administer/notifications#retention).

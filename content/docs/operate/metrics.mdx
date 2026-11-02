@@ -12,30 +12,28 @@ Labels never carry user, key, service account, team or request IDs. Gateway, ser
 | `omp_build_info` | `version`, `commit` |
 | `omp_mcp_requests_total`, `omp_mcp_request_duration_seconds` | `method` (MCP methods, `notification`, else `other`), `outcome` |
 | `omp_mcp_call_duration_seconds` | `gateway`, `server` (buckets from 5 ms to 120 s, as in usage) |
-| `omp_mcp_rate_limited_total` | `limit` (`person_per_minute`, `credential_per_minute`, `service_account_per_minute`, `gateway_per_minute`) |
+| `omp_mcp_rate_limited_total` | `limit` (`person_per_minute`, `credential_per_minute`, `service_account_per_minute`, `gateway_per_minute`, and since v0.7.0 `server_per_minute` and `server_busy`) |
+| `omp_server_circuit_state` | `server`: this replica's circuit breaker for the server, `0` closed, `0.5` probing, `1` open. Replica-local; server labels are bounded and the overflow is omitted, not `other`. Added in v0.7.0 |
 | `omp_payload_captures_total`, `omp_payload_capture_errors_total`, `omp_payload_redactions_total` | `rule` (redactions) |
 | `omp_provider_token_refresh_total` | `provider`, `result` (`ok`, `refused`, `unavailable`) |
 | `omp_machine_token_requests_total` | `result` (`ok`, `refused`, `unavailable`): token requests to the authorization server of servers in the portal's own OAuth client mode, not cache hits. A rising `refused` usually means the client secret was rotated at the identity provider |
 | `omp_server_health_checks_total`, `omp_mcp_servers` | `result` / `state` (`healthy`, `failing`, `unknown`) |
 | `omp_http_requests_total`, `omp_http_request_duration_seconds` | `route` (the registered pattern), `method`, `code` (`2xx`, …) |
 | `omp_retention_deleted_total`, `omp_retention_last_success_timestamp_seconds` | `kind` |
-| `omp_usage_rollup_last_success_timestamp_seconds`, `omp_loop_leader` | `loop` |
+| `omp_usage_rollup_last_success_timestamp_seconds`, `omp_loop_leader` | `loop` (`retention`, `usage_rollup`, `notifications`, `governance`) |
 | `omp_notifications_emitted_total` | `event` |
 | `omp_notification_deliveries_total` | `channel`, `event`, `outcome` |
 | `omp_notification_emit_errors_total` | |
 | `omp_automation_token_auth_total` | `result` |
-| `omp_agent_token_total` | `result`: `ok`, `ignored_not_relay` or `rejected_<reason>` (see [Agent identity tokens](#agent-identity-tokens)) |
 | `omp_db_pool_*` | Connections acquired, idle, total and maximum; acquires, empty acquires and wait time |
 
 Plus the Go runtime and process collectors. `omp_mcp_requests_total` counts requests to `/mcp/{slug}` that reached a gateway.
 
-## Agent identity tokens
-
-`omp_agent_token_total{result}` counts the agent identity tokens the portal looked at (see [Agent platforms](/docs/administer/agent-platforms)). `ignored_not_relay` is a token sent with a credential that isn't a relay account's key: the call went on as that credential's own. `rejected_<reason>` is a token on a relay account's request that failed a check, so the request was refused: the reasons are `malformed`, `algorithm`, `key_id`, `type`, `untrusted_issuer`, `disabled_issuer`, `unknown_kid`, `jwks_unavailable`, `signature`, `audience`, `principal_type`, `claims`, `person_issuer`, `expired`, `not_yet_valid`, `lifetime`, `replay`, `other_platform` and `tool_mismatch`. A refused token leaves no call record, so this counter and a warning in the log are where such attempts show.
+**Removed in v0.4.0:** `omp_agent_token_total`, with the retirement of agent platforms. Delete it from your dashboards and alerts; the shipped Providers and tokens dashboard no longer has its panels.
 
 ## Dashboards and alert rules
 
-Since v0.3.1 the repository ships **five Grafana dashboards** (MCP traffic, MCP servers, providers and tokens, notifications, platform) and **14 Prometheus alert rules** with unit tests and a runbook entry each, built from the metrics above. A test checks every metric and label they use against the portal's metric registry. v0.3.1 adds no metric. [Tracing, dashboards and alerts](/docs/operate/tracing#dashboards) has the list, how to load them and `make prom-check`; the example overlay has a `PrometheusRule` beside the `ServiceMonitor`. They have not been checked against live data.
+The repository ships **five Grafana dashboards** (MCP traffic, MCP servers, providers and tokens, notifications, platform) and **14 Prometheus alert rules** with unit tests and a runbook entry each, built from the metrics above. A test checks every metric and label they use against the portal's metric registry. The rate-limit and loop-leader rules group by `limit` and `loop`, so they also cover server quotas and the governance loop; no shipped rule covers `omp_server_circuit_state`. [Tracing, dashboards and alerts](/docs/operate/tracing#dashboards) has the list, how to load them and `make prom-check`; the example overlay has a `PrometheusRule` beside the `ServiceMonitor`. They have not been checked against live data.
 
 ## Useful alerts
 
@@ -46,7 +44,9 @@ Conditions worth alerting on, whether or not a shipped rule covers them:
 - `omp_usage_rollup_last_success_timestamp_seconds` older than 15 minutes: dashboards are stale.
 - `omp_mcp_servers{state="failing"} > 0`: a team's server is down.
 - `omp_notification_emit_errors_total` increasing: a change couldn't record its notification (the change itself succeeded). No replica with `omp_loop_leader{loop="notifications"} == 1`: nothing is being delivered.
-- `omp_agent_token_total{result=~"rejected_.*"}` increasing: a platform's agents are being refused (a wrong issuer or audience, keys that can't be fetched, a tool name that doesn't match). `jwks_unavailable` means person calls from that platform fail.
+- `omp_server_circuit_state == 1` for a server: a replica has stopped forwarding to it for 30 seconds after five consecutive failures.
+- A rising `omp_mcp_rate_limited_total{limit="server_per_minute"}` or `{limit="server_busy"}`: a server's quota or concurrency cap refuses calls ([Protection and failover](/docs/teams/protection-and-failover)).
+- No replica with `omp_loop_leader{loop="governance"} == 1`: overdue reviews and sunset notices aren't being sent.
 - A high rate of `omp_mcp_rate_limited_total`, or of `omp_provider_token_refresh_total{result="unavailable"}`.
 
 Traces are covered in [Tracing, dashboards and alerts](/docs/operate/tracing). They link to metrics only through the trace id on a call's record: exemplars are not built.

@@ -1,0 +1,117 @@
+---
+title: "Server governance"
+description: "Name who is accountable for a server in Open MCP Portal, whom to page, how sensitive it is and when it is retired; confirm its sensitivity, keep up with periodic reviews and move a server to another team."
+---
+
+Every server in Open MCP Portal has a **Governance** card on its **Overview** tab: who is accountable for it, whom to page, how sensitive the data it returns is, when it is next reviewed and whether it is being retired. Two of these settings decide what gateways serve: the **sensitivity** label, against each gateway's ceiling, and the **lifecycle**, once a server is retired.
+
+<Screenshot slot="server-governance" />
+
+Every member of the team and platform staff can read the card. The team's **owners and admins** change it, in a browser session; editors can't (`403 governance_role`), and no automation token can (`403 token_not_allowed`). The owner and the on-call contact are the team's business: the catalog never shows them.
+
+## The card
+
+| Row | Shows |
+|---|---|
+| **Owner** | The person accountable for the server, or **Nobody** |
+| **On call** | Whom to page, as plain text, or **Not set** |
+| **Sensitivity** | The label, with **Not confirmed** while nobody on the team has confirmed it |
+| **Next review** | When a platform review is due again (published servers only), or **None scheduled** |
+| **Last reviewed** | The last approval: a platform admin's, a self-publish or a confirmed review |
+| **Lifecycle** | **Active**, **Deprecated** or **Sunset** |
+| **Stops being served** / **Retired** | The sunset date of a deprecated or retired server |
+| **Replacement** | The server people should use instead, with its team |
+
+**Edit governance** opens the dialog below. **Offer to another team** (or **Withdraw transfer** while an offer is open) is under [Transfers](#transfers).
+
+## Edit governance
+
+| Field | Meaning |
+|---|---|
+| **Owner** | An active editor, admin or owner of the team, or **Nobody** |
+| **On-call contact** | Optional, up to 200 characters: an email address, an `http(s)` or `tel:` link, or a channel such as `#oncall`. It's shown as text, never turned into a link, and the portal sends no pages to it |
+| **Sensitivity** | **Public**, **Internal**, **Confidential** or **Restricted** ([below](#sensitivity)) |
+| **Lifecycle** | **Active**, **Deprecated** or **Sunset** ([below](#deprecating-and-retiring-a-server)) |
+| **Stops being served at** | Optional, for a deprecated or sunset server. It must lie ahead; a sunset with no date takes effect now |
+| **Replacement** | Optional, for a deprecated or sunset server: a published server, or one of this team's, that isn't retired itself and doesn't point back |
+
+**Save governance** sends only what changed. If someone else changed the server since you opened the dialog, it says so; close it and open it again. Refusals name the field: `invalid_owner`, `invalid_oncall_contact`, `sunset_in_past`, `invalid_replacement`, or `lifecycle_active` (a sunset date or a replacement on an active server: deprecate it first).
+
+## Owner
+
+The person who registers a server becomes its owner. A server registered with an automation token has none. A server is **ownerless** when no owner is named, or the owner left the team, lost the editor role, was suspended or was deleted. A published ownerless server shows the alert "Nobody is accountable for this server" and an attention item, "&lt;server&gt; has nobody accountable for it", with **Choose an owner**. The named owner also gets the server's `server.review_due` and `server.sunset_soon` notifications.
+
+## Sensitivity
+
+| Label | Means |
+|---|---|
+| **Public** | Nothing in it is secret; anyone may see what it returns |
+| **Internal** | For people at the company. The default until its owners label it |
+| **Confidential** | Business-sensitive data. A gateway whose ceiling is lower never serves it |
+| **Restricted** | The most sensitive data. Only gateways with no ceiling serve it |
+
+Each gateway has a **Sensitivity ceiling** on its **Settings** tab, **Restricted (no ceiling)** by default. A server labelled above a gateway's ceiling isn't served there, not even a team gateway's own private server: the gateway lists its capabilities as unavailable, "Above this gateway's ceiling". See [Building gateways](/docs/teams/gateways#settings).
+
+**Raising** the label of a published server sends it back to review under **Approval required** (reason `sensitivity_raised`), and the dialog warns "It goes back to review" before you save. **Lowering** it never does. The catalog shows the label as a badge on the server's page.
+
+### Confirm sensitivity
+
+Every server starts as **Internal**, so Internal on its own doesn't say anyone checked. Until an owner or admin confirms the label, the card shows the alert **Sensitivity not confirmed** with **Confirm sensitivity**, which saves the label shown as the team's choice. In **Edit governance**, tick "&lt;label&gt; is the right label for this server" to confirm it without changing it ("Saving other changes doesn't confirm it"), or choose another label, which confirms that one.
+
+Confirming is bookkeeping: it changes nothing about what gateways serve or who may use the server, and it doesn't send the server to review. A published server nobody confirmed shows in the team's attention list as "&lt;server&gt; is published with a sensitivity label nobody has confirmed", with **Confirm sensitivity**. Nothing is unpublished or blocked for it.
+
+## Periodic review
+
+A platform admin sets how often published servers are reviewed again, per label (by default never for Public and Internal, every 180 days for Confidential and every 90 days for Restricted; see [Governance](/docs/administer/governance)). The next review is counted from the server's last approval.
+
+When a review is overdue, the team's owners and admins and the named owner get `server.review_due`, the attention list shows "The review of &lt;server&gt; is overdue", and the card shows **Its review is overdue**. The server **stays published**. Owners and admins answer it from the card:
+
+- under **Approval required**, **Ask for a review** sends the server to a platform admin, like **Request review…**;
+- under **Self-publish**, **Confirm the review** records the review at once.
+
+A platform admin can also choose to send overdue servers back to review automatically, under Approval required. Nothing is ever unpublished, disabled or deleted for being overdue.
+
+## Deprecating and retiring a server
+
+| Lifecycle | What happens |
+|---|---|
+| **Active** | Normal |
+| **Deprecated** | Still served everywhere. Every tab of the server and its catalog page show the banner "&lt;server&gt; is deprecated", with the sunset date and the replacement. The owners and admins of every gateway that selects it get `server.deprecated` |
+| **Sunset** | Served by no gateway. The banner reads "&lt;server&gt; is retired … No gateway serves it any more", and gateways list its capabilities as unavailable, "Server retired" |
+
+<Screenshot slot="server-deprecated" />
+
+A deprecated server with a sunset date becomes **Sunset** on its own when the date passes: there's no job to wait for. Fourteen days before, the team's owners and admins, the named owner and the owners of gateways that select it get `server.sunset_soon`, once per date. To bring a sunset server back, set its lifecycle to **Active** again.
+
+<Screenshot slot="catalog-deprecated" />
+
+Use a deprecation, not **Enabled**, when people should move to another server: the banner and the notices tell them where to go, and the server keeps working until the date. Turning a server off under Settings stops everything at once and gives no notice.
+
+## Transfers
+
+A server can move to another team, with its history. The owning team's owners and admins offer it; an **owner** of the receiving team accepts.
+
+1. **Offer to another team** on the Governance card opens **Offer &lt;server&gt; to another team**: the **Receiving team** (its slug, as in its address) and an optional **Note** (up to 500 characters, shown to the receiving team's owners). **Offer server** sends it. The card then shows "Offered to &lt;team&gt;: Nothing moves until an owner of &lt;team&gt; accepts. Editing the server in the meantime means asking again."
+2. The receiving team's owners see "N server transfers waiting for your team's owners to accept" in their attention list, with **See transfers**, and the offer on their **MCP servers** page in the **Server transfers** card. An owner chooses **Accept &lt;server&gt;**. Admins of the receiving team can only **Decline**.
+3. Until then, the offering team can **Withdraw** the offer, from the card or from its own **Server transfers** card.
+
+<Screenshot slot="server-transfer-incoming" />
+
+**What moves with it:** the capabilities and their approvals, gateway selections and their grants, people's permissions for the server and their keys for it, its stored credentials, and its [approval rules](/docs/teams/approval-rules), which now belong to the receiving team. The owner who accepts becomes the server's owner.
+
+**What changes:** under the receiving team's **Approval required** policy, a published server goes back to review (reason `transferred`). The old team's gateways keep their selection, which is now a catalog selection: unavailable until the server is approved again, as for any other team's server.
+
+**Refusals:**
+
+| Error | Means |
+|---|---|
+| `invalid_team` | The receiving team doesn't exist or is archived |
+| `transfer_pending` | The server already has an open offer |
+| `provider_not_allowed` | The server requires an auth provider that isn't open to the receiving team. A platform admin adds the team to the provider's access list first |
+| `changed_since_request` | The server changed after it was offered. Withdraw the offer and offer it again |
+| `transfer_closed` | The offer was already answered or withdrawn |
+| `owner_required` | Only an owner of the receiving team accepts |
+
+A platform admin can also move a server directly, without an offer. It then has no owner until the new team names one.
+
+Offers, acceptances, withdrawals and every governance change are in the team's [audit log](/docs/teams/team-settings#audit-log).

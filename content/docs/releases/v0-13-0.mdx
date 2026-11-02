@@ -1,0 +1,58 @@
+---
+title: v0.13.0
+description: "Open MCP Portal v0.13.0 (2026-11-01): catalog search also finds servers by their approved tools, resources and prompts, and list columns follow window resizing. No migrations."
+---
+
+**Released 2026-11-01.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.13.0) · image `ghcr.io/ncecere/open-mcp-portal:v0.13.0` · no migrations (the schema stays at `00056`).
+
+The first release of the v0.13 line, after [v0.12.0](/docs/releases/v0-12-0): a catalog you can search by what servers offer. **No migrations and no configuration changes;** upgrading from v0.12.0 is an image swap.
+
+## What changed
+
+- **Catalog search finds capabilities** (#49, first part). The catalog's search box (its hint reads "Server, team or approved capability") also matches the names, titles and descriptions of a server's **approved, listed** tools, resources, resource templates and prompts, besides the server's name, slug, team and description. Capabilities that aren't approved, changed since approval or are gone never match. The text is matched literally (`%`, `_` and `\` as typed), and results are servers, not snippets. Search shows only what the catalog already shows you and grants no access. Search text that isn't valid UTF-8, contains NUL or is too long gets `400 invalid_search`. See [The catalog](/docs/teams/publishing#the-catalog).
+- **List columns follow window resizing.** On every list page, columns hidden by default on a phone now hide and come back as the window crosses phone width, not only when the page loads. A column you choose in the **Columns** menu is still remembered in this browser and wins at any width.
+- **Smaller:** dependency updates (web framework libraries, the OpenAPI tooling, the Node build image). The release also contains groundwork for audit streaming (#38) and content scanning (#70) that **nothing uses yet**: no audit export, sink or scanner exists.
+
+## Upgrading
+
+1. Pin the new image (verify its signature first, see [The image](#the-image)). No migration runs.
+2. During a rolling upgrade, v0.12.0 replicas keep working; a search answered by an old replica doesn't match capabilities.
+
+[Upgrading from v0.12.0](/docs/operate/migrations-and-upgrades#upgrading-from-v0120) has the same points with the details.
+
+## Verification
+
+The release, its image and the six command-line binaries were tested and independently verified; the [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.13.0) and the [release notes](https://github.com/ncecere/open-mcp-portal/blob/v0.13.0/docs/releases/v0.13.0.md) record how.
+
+## Known limitations
+
+Carried over from [v0.12.0](/docs/releases/v0-12-0#known-limitations) unless marked new:
+
+- **Search results keep the catalog's order (new),** not relevance.
+- **The rest of the catalog work isn't built (new):** categories, tags, icons, a README per server, a verified badge and popularity.
+- **One directory, matched by the OIDC subject only;** no sign-out without a directory push; provisioning tested with authentik only.
+- **The Action hasn't run in a hosted runner;** no Terraform provider; the command line has no sign-in and only its Linux build has been run.
+- **Not run against real clients and providers.** A pilot with a real team is still open.
+- Remote servers only (no stdio); development software that has not run in production.
+
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.13.0` is signed with cosign keyless signing by the repository's `image.yml` workflow. Its digest is:
+
+```text
+sha256:29259a050743d6e34eb0ceefd8e1f925da140277bc07e4877add500a1ba5e2eb
+```
+
+Check the signature with **cosign v3.0 or newer**, then pin the image by that digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:29259a050743d6e34eb0ceefd8e1f925da140277bc07e4877add500a1ba5e2eb \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.13.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+The `omp` binaries are signed by the same workflow; [The omp command line](/docs/api/cli) shows how to check one with `cosign verify-blob`. See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/open-mcp-portal/issues](https://github.com/ncecere/open-mcp-portal/issues) (there is a form for each kind) or ask in [Discussions](https://github.com/ncecere/open-mcp-portal/discussions). Report security problems privately, as [`SECURITY.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.13.0/SECURITY.md) describes.

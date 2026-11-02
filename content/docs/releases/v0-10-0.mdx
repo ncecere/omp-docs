@@ -1,0 +1,67 @@
+---
+title: v0.10.0
+description: "Open MCP Portal v0.10.0 (2026-10-30): server governance (owner, on-call, sensitivity, lifecycle, re-review, transfers, gateway ceilings) and the omp command line. Migrations 00049 and 00050."
+---
+
+**Released 2026-10-30.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.10.0) · image `ghcr.io/ncecere/open-mcp-portal:v0.10.0` · migrations `00049` and `00050` (both expand-only).
+
+The first release of the v0.10 line, after [v0.9.0](/docs/releases/v0-9-0): every server can have someone accountable for it, a sensitivity label, a lifecycle and a review schedule, and the portal gets a command line for CI. **Nothing is unpublished or blocked by the upgrade;** existing servers start without an owner and with an unconfirmed label. Read [Upgrading](#upgrading) first.
+
+## What changed
+
+- **Server governance** (#40, decision 88). A server's Overview gets a **Governance** card: an accountable **Owner** (the person who registered it, by default), a private **On call** contact, a **Sensitivity** label (public, internal, confidential or restricted; internal until the team says otherwise) and a lifecycle. Only the team's owners and admins change it, in a browser; editors and automation tokens can't. See [Server governance](/docs/teams/server-governance).
+- **Confirmed labels.** Because internal is the default, the portal records whether an owner or admin actually chose the label: **Confirm sensitivity** on the server page, or the tick-box in the edit dialog. A published server nobody confirmed shows as an informational attention item. Nothing is blocked for it.
+- **Lifecycle.** A **deprecated** server keeps working, with a banner in the catalog and on the server, and the owners and admins of gateways that select it get `server.deprecated`. At its **sunset** date it stops being served in every gateway at once, and `server.sunset_soon` warns 14 days ahead. A replacement server can be named.
+- **Gateway ceilings.** A gateway's **Sensitivity ceiling** (on its Settings tab; default restricted, meaning no ceiling) keeps more sensitive servers out: a server above it is listed as unavailable and never served, even in its own team's gateway. Raising a published server's label sends it back to review under `approval_required`; lowering it doesn't.
+- **Re-review.** Platform admins set the days between reviews per label under Admin › Publishing › **Server reviews** (defaults: never for public and internal, 180 days for confidential, 90 for restricted). An overdue review notifies the team (`server.review_due`) and shows in attention lists; the server stays published unless an admin turns on sending overdue servers back to review (off by default). See [Governance settings](/docs/administer/governance).
+- **Transfers between teams.** A team's owners and admins can offer a server to another team; an owner of the receiving team accepts it on the **Server transfers** card. The server keeps its capabilities, gateway selections and grants and stored credentials, its approval rules move with it, and a published server goes back to review. Platform admins can force a transfer through the API.
+- **Private notices and attention.** A governance loop, run by one replica at a time, sends `server.review_due`, `server.sunset_soon` and `server.deprecated` to the inbox and email only, never to webhooks. New attention items: review due, no owner, transfer pending and unconfirmed label.
+- **Deadlines checked at the last moment.** Before every call goes upstream, the portal checks the earliest of the credential's, the gateway grant's and the server's sunset deadline against the database clock, after admission and after any approval is spent. A spent approval is never restored.
+- **The `omp` command line and a Go client** (#46, decision 89). `omp` uses automation tokens only: `whoami`, `connect` (the same client snippets as the web app), `servers list|get|register|test|refresh|publish|unpublish`, and `export` / `import --plan` for an `omp/v1` file of servers and gateways. It never writes governance, curation or ceilings, and refuses an import that would change them. The release attaches signed binaries for Linux, macOS and Windows (amd64 and arm64) and `checksums.txt`; `pkg/ompclient` is a public Go client, versioned `v0` until 1.0. See [The omp command line](/docs/api/cli).
+
+## Upgrading
+
+1. **Back up** the database together with its keys, then pin the new image (verify its signature first, see [The image](#the-image)). The init container applies `00049` and `00050`. **Do not use `goose down` for a rollback.**
+2. **Finish the rollout and drain every older serving and background-worker replica before you rely on ceilings, sunsets, transfers or the governance notices.** An older image runs against the new schema but enforces none of them.
+3. A review request that is open during the upgrade needs one reload: the review digest is now `omp-review-v6` and covers the label and lifecycle.
+4. Existing servers and servers created by tokens start with no owner and an unconfirmed label. Work through the new attention items: name owners and confirm labels. Nothing is filled in for you.
+
+[Upgrading from v0.9.0](/docs/operate/migrations-and-upgrades#upgrading-from-v090) has the same points with the details.
+
+## Verification
+
+The release, its image and the six command-line binaries were tested and independently verified; the [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.10.0) and the [release notes](https://github.com/ncecere/open-mcp-portal/blob/v0.10.0/docs/releases/v0.10.0.md) record how.
+
+## Known limitations
+
+Carried over from [v0.9.0](/docs/releases/v0-9-0#known-limitations) unless marked new:
+
+- **Contacts are plain text (new).** The on-call contact isn't a paging integration or a notification destination.
+- **The command line has no sign-in and no `omp keys` (new).** It authenticates with automation tokens only. Only the Linux binary has been run; the macOS and Windows builds are signed and reproducible but unexecuted.
+- **Some imports aren't atomic (new).** Replacing a permanent grant's scope is done in steps; a failure is reported and not rolled back. Temporary grants whose deadline would change are refused.
+- **Export files can hold private data (new):** on-call contacts and fixed argument values.
+- **Not every call can be a task;** cancelling a task proves nothing upstream; no real Tasks client or server has been run.
+- **Not run against real clients and providers.** A pilot with a real team is still open.
+- Remote servers only (no stdio); development software that has not run in production.
+
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.10.0` is signed with cosign keyless signing by the repository's `image.yml` workflow. Its digest is:
+
+```text
+sha256:b6060f98b8efc256f76ecae23a0174eaa95de5116c4ba41687f7d7b37785bf13
+```
+
+Check the signature with **cosign v3.0 or newer**, then pin the image by that digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:b6060f98b8efc256f76ecae23a0174eaa95de5116c4ba41687f7d7b37785bf13 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.10.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+The `omp` binaries are signed by the same workflow; [The omp command line](/docs/api/cli) shows how to check one with `cosign verify-blob`. See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/open-mcp-portal/issues](https://github.com/ncecere/open-mcp-portal/issues) (there is a form for each kind) or ask in [Discussions](https://github.com/ncecere/open-mcp-portal/discussions). Report security problems privately, as [`SECURITY.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.10.0/SECURITY.md) describes.

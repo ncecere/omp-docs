@@ -1,0 +1,66 @@
+---
+title: v0.12.0
+description: "Open MCP Portal v0.12.0 (2026-11-01): SCIM 2.0 provisioning, so your identity provider creates, suspends and removes people and maps groups to team roles. Migrations 00051 to 00056."
+---
+
+**Released 2026-11-01.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.12.0) · image `ghcr.io/ncecere/open-mcp-portal:v0.12.0` · migrations `00051` to `00056` (all expand-only).
+
+The first release of the v0.12 line, after [v0.11.0](/docs/releases/v0-11-0): leavers lose access when the identity provider says so, without waiting for an admin. **Nothing changes until a platform admin turns provisioning on.** Read [Upgrading](#upgrading) first: turn it on only after every replica runs v0.12.0.
+
+## What changed
+
+- **SCIM 2.0 provisioning** (#36, decision 92). An identity provider can create, update, deactivate and delete people and groups at `/scim/v2`. A platform admin sets it up under Admin › **Provisioning**: one directory, bound to the portal's OIDC issuer, turned on or off, with optional or required enrollment. Provisioning tokens (`ompscim_`) are shown once, expire within 365 days, can be revoked, belong to the directory rather than to whoever created them, and work only at `/scim/v2`. See [Provisioning](/docs/administer/provisioning).
+- **Linking by the OIDC subject only.** A provisioned account belongs to someone only when its `externalId` equals their verified OIDC subject; email and `userName` never link. New people enroll at their first sign-in; people who already signed in are adopted by an admin. With required enrollment, a new person the directory doesn't know is refused before any account, invite or session is created. Platform admins and team owners are never managed by the directory.
+- **Deactivate and delete.** Deactivation suspends the person at once; sessions they had stay ended even after reactivation, while keys and connections that weren't revoked work again for new requests. Deletion suspends at once, then a clean-up that retries until nothing is left removes sessions, OAuth grants, personal connections and their secrets, memberships and user grants, and revokes API keys. Enrolling the person again is an admin action after the clean-up.
+- **Two kinds of standing.** A suspension by an admin and a deactivation by the directory are kept apart: lifting one never lifts the other.
+- **Groups to team roles.** A directory group can be mapped to a team role (admin, editor or member). The directory manages only the memberships it created; a membership added by hand is never changed. Gateway grants to SSO groups still use the OIDC `groups` claim.
+- **Protocol.** Users and Groups, ordered PATCH applied all or nothing, `eq` filters, pagination, weak ETags with `If-Match`, and discovery. No bulk operations, sorting or password changes. Every write is audited as a `scim.*` entry that names the token.
+- **Requests and sessions can't outlive a suspension.** A request already queued when a person was suspended and reactivated can't create a personal API key (`409 request_authority_changed`), and a browser session or a consent link from before a suspension doesn't come back with reactivation. Approving an OAuth client's consent also refuses an account suspended while it waited.
+- **Smaller:** disconnecting a personal connection now commits locally before the best-effort revocation at the provider. The outcome is recorded in a separate audit entry, `provider_connection.revocation_result`; scripts that read the result from `provider_connection.revoke` should read the new entry.
+
+## Upgrading
+
+1. **Back up** the database together with its keys, then pin the new image (verify its signature first, see [The image](#the-image)). The init container applies `00051` to `00056`. **Do not use `goose down` for a rollback.**
+2. **Finish the rollout before you turn provisioning on.** An older replica doesn't serve `/scim/v2`, doesn't apply the enrollment rule, and ignores the request and session fences.
+3. A suspension or reactivation made through an older replica during the rollout counts as an admin's decision, not the directory's.
+4. If your identity provider is authentik: in our test, deleting a user didn't send a SCIM `DELETE`. Deactivate people before you delete them there.
+
+[Upgrading from v0.11.0](/docs/operate/migrations-and-upgrades#upgrading-from-v0110) has the same points with the details.
+
+## Verification
+
+The release, its image and the six command-line binaries were tested and independently verified, including provisioning from a local authentik; the [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.12.0) and the [release notes](https://github.com/ncecere/open-mcp-portal/blob/v0.12.0/docs/releases/v0.12.0.md) record how.
+
+## Known limitations
+
+Carried over from [v0.11.0](/docs/releases/v0-11-0#known-limitations) unless marked new:
+
+- **One directory, matched by the OIDC subject only (new).** No second directory and no other matching claim.
+- **No sign-out without a directory push (new).** Disabling someone in the identity provider alone doesn't end their portal session; a deactivation over SCIM does. Tokens at upstream providers aren't revoked remotely.
+- **Tested with authentik only (new),** with test accounts; not with Entra ID, Okta or a production directory.
+- **A clean-up pass can be skipped (new).** When it meets another change to the same accounts, approval upkeep fails fast and logs a warning; the next pass completes.
+- **The Action hasn't run in a hosted runner;** no Terraform provider; the command line has no sign-in and only its Linux build has been run.
+- **Not run against real clients and providers.** A pilot with a real team is still open.
+- Remote servers only (no stdio); development software that has not run in production.
+
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.12.0` is signed with cosign keyless signing by the repository's `image.yml` workflow. Its digest is:
+
+```text
+sha256:be6969216aa7972d333c6ad9cae6de8eaa875a38c3fb1153f63c2e0deb4072ef
+```
+
+Check the signature with **cosign v3.0 or newer**, then pin the image by that digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:be6969216aa7972d333c6ad9cae6de8eaa875a38c3fb1153f63c2e0deb4072ef \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.12.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+The `omp` binaries are signed by the same workflow; [The omp command line](/docs/api/cli) shows how to check one with `cosign verify-blob`. See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/open-mcp-portal/issues](https://github.com/ncecere/open-mcp-portal/issues) (there is a form for each kind) or ask in [Discussions](https://github.com/ncecere/open-mcp-portal/discussions). Report security problems privately, as [`SECURITY.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.12.0/SECURITY.md) describes.

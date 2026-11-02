@@ -7,10 +7,6 @@ A **publisher token** (`omppub_…`) belongs to your team and lets a pipeline ca
 
 It is **not** an MCP credential: it never works on `/mcp/{slug}`, and the personal keys, [service account](/docs/teams/service-accounts) keys and OAuth tokens that do work there are refused by the management API. A service account lets an agent *use* tools; a publisher token lets a pipeline *manage the team's servers*.
 
-<Callout type="warn" title="Create no token until every replica runs v0.2.0">
-If your platform was just upgraded from v0.1.0, ask the operator to confirm that every replica runs v0.2.0 before you create a token.
-</Callout>
-
 ## Create one
 
 Team **owners and admins** open **Team settings › Automation tokens** and choose **Create**. A token is created and revoked only in a browser session, never with another token.
@@ -38,9 +34,21 @@ Publishing follows the team's policy exactly as for a person. Under **Approval r
 
 On another team's path, a token gets `404 team_not_found`, the same answer as a non-member. On an **archived** team, reads work and writes answer `409 team_archived`.
 
-## A CI example
+## Using it from CI
 
-Refresh a server's capabilities after each deploy, then ask for publication (replace the placeholders):
+Use the [`omp` command line](/docs/api/cli). It takes the token from `OMP_TOKEN` and the portal's address from `OMP_URL`:
+
+```sh
+omp whoami                                       # which token this is, its team, scopes and expiry
+omp servers refresh status --fail-on-changes     # exit 10 if a tool definition changed
+omp servers publish status --note "deployed by CI"
+```
+
+For GitHub Actions, Open MCP Portal's repository also contains a composite [GitHub Action](/docs/api/github-action) built on `omp`: it registers or updates a server from a declaration file, refreshes it and can request publication. It isn't published as a separate Action repository, so pin the repository to a reviewed commit. It accepts only a team publisher token with `servers:read` and `servers:write` for that team.
+
+### With curl
+
+The same with plain HTTP: refresh a server's capabilities after each deploy, then ask for publication (replace the placeholders):
 
 ```yaml
 # .github/workflows/publish-mcp-server.yml
@@ -78,6 +86,10 @@ Check what a token is and when it expires with `GET /v1/token`. The full list of
 
 - **Approve anything.** A token can't approve a server or a capability: the review stays with a platform admin (or, under Self-publish, with the team's owners and admins in the web app). A refresh never approves anything either.
 - **Delete a server**, or touch the team's gateways, members, invites, service accounts or settings.
+- **Change governance.** Sending `governance` at all (owner, on-call contact, sensitivity, lifecycle) is `403 token_not_allowed` with `details.field` `governance`, even though the token acts as an admin for publishing; it can't confirm a sensitivity label either. It can't offer, accept or decline a [transfer](/docs/teams/server-governance#transfers).
+- **Classify tools, curate gateway tools or set a gateway's sensitivity ceiling.** Curation edits answer `403 session_required`.
+- **Set additional endpoints or upstream protection limits.** These are for the team's owners and admins in a browser session ([Upstream protection and failover](/docs/teams/protection-and-failover)).
+- **Approvals and access.** It can't read or change [approval rules](/docs/teams/approval-rules), decide or request approvals, request gateway access, or manage [shared connections](/docs/teams/service-connections).
 - **Create or revoke tokens**, of any kind.
 - **Change what a server's credentials go to.** On a server that already holds credentials, a token can't change its `url`, `authHeaderName`, `authValue`, `authMode`, `oauth` settings, user authorization `requirement` or `sendIdentity`: the answer is `403 token_not_allowed`, with the field named. It also can't send `personSecret`, `machineOAuth` or `tls`, or switch a server to each person's own key or the portal's own OAuth client, **even on a server with nothing stored yet** (`403 token_not_allowed`, with the field named): a token must not choose where a secret goes. A person makes these changes. This is why a leaked token can't redirect a server's stored secret.
 - **Switch call recording on.** Changing `capturePayloads` is `403 token_not_allowed`: only a person who accepted the notice may record call contents.

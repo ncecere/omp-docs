@@ -1,0 +1,81 @@
+---
+title: v0.13.1
+description: "Open MCP Portal v0.13.1 (2026-11-01), the release these docs describe: rebuilt on a refreshed Go builder image, with a regression test for OIDC group changes. No migrations."
+---
+
+**Released 2026-11-01.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.13.1) · image `ghcr.io/ncecere/open-mcp-portal:v0.13.1` · no migrations (the schema stays at `00056`).
+
+**These docs describe v0.13.1.** It is a patch for [v0.13.0](/docs/releases/v0-13-0) that rebuilds the image so the published image and the repository's `main` match exactly. **The portal's code, settings and schema are unchanged;** upgrading from v0.13.0 is an image swap. Coming from an older release, read [Upgrading from an older release](#upgrading-from-an-older-release).
+
+## What changed
+
+- **A refreshed builder image.** The image is built from the current `golang:1.26.10` base digest. The Go version and the portal's code are the same as in v0.13.0.
+- **A regression test for group changes.** A change to a person's groups in the identity provider takes effect at their next sign-in, for all of their sessions; a changed claim alone can't reach the portal. A test now pins this existing behaviour. See [Users and teams](/docs/administer/users-and-teams).
+
+Nothing else is in this release. Work kept for later, such as a Terraform provider and Vault or OpenBao key wrapping, is not part of it; see the [roadmap](/docs/releases/roadmap).
+
+## Upgrading
+
+From v0.13.0:
+
+1. Pin the new image by its digest (verify its signature first, see [The image](#the-image)). No migration runs and no setting changes.
+2. The Kubernetes example overlay carries a placeholder digest: replace it with the digest below.
+
+[Upgrading from v0.13.0](/docs/operate/migrations-and-upgrades#upgrading-from-v0130) has the same points.
+
+## Upgrading from an older release
+
+The migrations of every release in between apply in order in one `migrate` run (from v0.3.2, that is `00027` to `00056`). **A jump from v0.3.2 straight to v0.13.1 isn't rehearsed by the project's upgrade test**, which upgrades from the previous release only. Back up the database with its keys, then either upgrade release by release or rehearse the jump on a restored copy of your database first, as [Upgrading across several releases](/docs/operate/migrations-and-upgrades#upgrading-across-several-releases) describes. Read every release page in between. What matters most:
+
+| Coming from | Do this |
+|---|---|
+| v0.3.2 or earlier | Roll every replica before you turn on idle expiry with `SESSION_IDLE_TIMEOUT` ([v0.3.3](/docs/releases/v0-3-3#upgrading)). |
+| v0.3.x or earlier | On Kubernetes, **create the `open-mcp-portal-migrate` Secret** before you roll out ([v0.4.0](/docs/releases/v0-4-0#upgrading)). Replace callers that use relay service accounts: external agent-platform trust is retired, and its migration is forward-only. Classify tools before you give anyone a read-only scope. |
+| v0.4.x or earlier | Drain every older replica **before you create approval rules** ([v0.5.0](/docs/releases/v0-5-0#upgrading)). Run `rotate-keys` only with the new binary. |
+| v0.5.x or earlier | Drain older serving and worker replicas before you make gateways requestable or create expiring grants ([v0.6.0](/docs/releases/v0-6-0#upgrading)). |
+| v0.6.x or earlier | Drain before you rely on server quotas, concurrency caps, read retries and the breaker ([v0.7.0](/docs/releases/v0-7-0#upgrading)), or add additional endpoints ([v0.8.0](/docs/releases/v0-8-0#upgrading)). |
+| v0.8.x or earlier | Drain before you rely on task handles ([v0.9.0](/docs/releases/v0-9-0#upgrading)). |
+| v0.9.x or earlier | Drain before you rely on sensitivity ceilings, sunsets, transfers or governance notices; then name server owners and confirm labels ([v0.10.0](/docs/releases/v0-10-0#upgrading)). |
+| v0.11.x or earlier | **Finish the rollout before you turn provisioning on** ([v0.12.0](/docs/releases/v0-12-0#upgrading)). |
+
+Also, from any release before v0.10.0: reload a catalog review that is open during the upgrade (the review digest is now `omp-review-v6`). Going back to an older image doesn't take its enforcement with it; see [Migrations and upgrades](/docs/operate/migrations-and-upgrades).
+
+## Verification
+
+The release, its image and the six command-line binaries were tested and independently verified; the [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.13.1) records how.
+
+## Known limitations
+
+These apply to v0.13.1 as a whole:
+
+- **Real-world checks are still open.** An independent security review, VS Code, Cursor, a client that uses URL elicitation, real clients refreshing their tokens after an hour, real Google and Microsoft providers, a real Slack webhook and mail server, and a pilot with a real team ([roadmap](/docs/releases/roadmap#real-world-verification)).
+- **Classes and approvals.** A tool's class is its team's assertion; "used" means an approval was spent, not that the call succeeded; pending approvals can lapse after unrelated changes; governed calls fail closed while the approval lock is busy.
+- **Upstream protection.** Failover, not load balancing; only servers with no authentication or a static credential can have additional endpoints; calls that need approval don't fail over; each replica keeps its concurrency cap and breaker in memory.
+- **Tasks.** Calls that need approval, streamed calls and older clients aren't tasked; cancelling proves nothing upstream; no real Tasks client or server has been run.
+- **Provisioning.** One directory, matched by the OIDC subject only; no sign-out without a directory push; tested with authentik only.
+- **Tools.** The `omp` command line uses automation tokens only and only its Linux build has been run; the GitHub Action hasn't run in a hosted runner and isn't its own repository; there is no Terraform provider.
+- **Catalog.** Search keeps the catalog's order; categories, icons, a README per server and a verified badge aren't built.
+- **TLS.** Client certificates aren't used for the OAuth metadata and token endpoints, so a server in per-person OAuth mode behind a private CA can't be set up.
+- Remote servers only (no stdio); development software that has not run in production.
+
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.13.1` is signed with cosign keyless signing by the repository's `image.yml` workflow. Its digest is:
+
+```text
+sha256:cec6a9e1189845ca2f9827e972c55af20ce22de3a40645abdf3ab08a6730a453
+```
+
+Check the signature with **cosign v3.0 or newer**, then pin the image by that digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:cec6a9e1189845ca2f9827e972c55af20ce22de3a40645abdf3ab08a6730a453 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.13.1 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+The `omp` binaries are signed by the same workflow; [The omp command line](/docs/api/cli) shows how to check one with `cosign verify-blob`. See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/open-mcp-portal/issues](https://github.com/ncecere/open-mcp-portal/issues) (there is a form for each kind) or ask in [Discussions](https://github.com/ncecere/open-mcp-portal/discussions). Report security problems privately, as [`SECURITY.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.13.1/SECURITY.md) describes.

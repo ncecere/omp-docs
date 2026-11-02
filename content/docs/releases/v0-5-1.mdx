@@ -1,0 +1,50 @@
+---
+title: v0.5.1
+description: "Open MCP Portal v0.5.1 (2026-10-28): provider token refresh works when the runtime database pool is small. No migrations."
+---
+
+**Released 2026-10-28.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.5.1) · image `ghcr.io/ncecere/open-mcp-portal:v0.5.1` · no migrations (the schema stays at `00042`).
+
+A reliability patch for [v0.5.0](/docs/releases/v0-5-0). **No feature, API operation, setting or schema change.** Upgrading from v0.5.0 is an image swap.
+
+## What changed
+
+- **Provider token refresh under a small connection pool.** Refreshing a person's or a shared connection's provider token used to need a second database connection while it held the first, so with a small runtime pool the refresh could wait on itself until its deadline and fail. The refresh now reads what it needs on the connection it already holds, with one deadline covering the lookups and the HTTP exchange.
+- **The same checks, in the same places.** Address-policy checks still run before the request and when dialing, and a failed policy read refuses the exchange instead of using a cached answer. Linked-provider and endpoint checks still run before client credentials are attached. A narrowed personal token is cached only after its refresh commits.
+
+## Upgrading
+
+1. Pin the new image (verify its signature first, see [The image](#the-image)). No migration runs.
+2. From v0.4.x or earlier, follow [Upgrading in v0.5.0](/docs/releases/v0-5-0#upgrading) first: an older image doesn't enforce approval rules even though it runs against the schema. Keep autovacuum on in production.
+
+[Upgrading from v0.5.0](/docs/operate/migrations-and-upgrades#upgrading-from-v050) has the same points with the details.
+
+## Verification
+
+The release was tested and its published image signed and verified; the [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.5.1) and the [release notes](https://github.com/ncecere/open-mcp-portal/blob/v0.5.1/docs/releases/v0.5.1.md) record how.
+
+## Known limitations
+
+The same as [v0.5.0](/docs/releases/v0-5-0#known-limitations). This patch adds no real-provider or client check, load test or long refresh soak.
+
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.5.1` is signed with cosign keyless signing by the repository's `image.yml` workflow. Its digest is:
+
+```text
+sha256:f0752082128be618003c0a5f0e2917c7b5cabc64b60bdec60d161135519617d2
+```
+
+Check the signature with **cosign v3.0 or newer**, then pin the image by that digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:f0752082128be618003c0a5f0e2917c7b5cabc64b60bdec60d161135519617d2 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.5.1 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/open-mcp-portal/issues](https://github.com/ncecere/open-mcp-portal/issues) (there is a form for each kind) or ask in [Discussions](https://github.com/ncecere/open-mcp-portal/discussions). Report security problems privately, as [`SECURITY.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.5.1/SECURITY.md) describes.

@@ -12,6 +12,8 @@ Your MCP server keeps running where your team runs it. Open MCP Portal connects 
   <Card title="Provider tokens" href="/docs/server-authors/provider-tokens">The person's own token for GitHub, Google or another service, and the checks to make before you use it.</Card>
   <Card title="OAuth-protected servers" href="/docs/server-authors/oauth-servers">What the portal expects from a server that runs its own OAuth sign-in.</Card>
   <Card title="Parameter headers" href="/docs/server-authors/parameter-headers">Tool arguments the portal also sends as Mcp-Param-* headers.</Card>
+  <Card title="Long-running tools (MCP Tasks)" href="/docs/server-authors/tasks">Answer a tool call with a task, and how the portal relays polls, input and cancellation to your server.</Card>
+  <Card title="Retries and failover" href="/docs/server-authors/what-servers-receive#retries-and-failover">When the portal repeats a read, moves a call to a replica, or stops sending for a while.</Card>
   <Card title="The mail example" href="/docs/server-authors/mail-example">A Gmail server that relies on the portal's delegated credentials.</Card>
 </Cards>
 
@@ -20,24 +22,29 @@ Your MCP server keeps running where your team runs it. Open MCP Portal connects 
 - **Discovery.** When the server is registered, refreshed or its URL changes, the portal opens a session (it tries the 2026-07-28 revision first and falls back to `initialize` for an older server; see [MCP protocol support](/docs/server-authors/mcp-protocol#era-negotiation)) and lists every kind of capability you advertise: tools, prompts, resources and resource templates, page by page (at most 500 per kind). It never calls a tool to discover it.
 - **Health checks.** Every few minutes (5 by default), an MCP exchange to see that you answer. Plus a check whenever someone presses **Test connection** or **Refresh capabilities**. A manual Test carries an identity token for the editor who pressed it ([what a Test sends](/docs/server-authors/identity-token#what-a-test-sends)); refresh and the scheduled checks carry none.
 - **Calls.** `tools/call`, `prompts/get` and `resources/read`, only for capabilities a gateway selected and a caller was allowed to use. Lists never reach you: clients get the definitions the portal stored and approved.
+- **Repeats and replicas.** A tool your team classified as read, a prompt or a resource read may arrive up to three times for one call after a brief failure, and a call may go to one of your server's [additional endpoints](/docs/teams/protection-and-failover#additional-endpoints) instead of the primary URL. Tests and health checks also reach each enabled endpoint. See [Retries and failover](/docs/server-authors/what-servers-receive#retries-and-failover).
+- **Task operations.** `tasks/get`, `tasks/update` and `tasks/cancel`, when your server advertises the MCP Tasks extension and returned a task. See [Long-running tools](/docs/server-authors/tasks).
 
 The portal is stateless: it keeps no session with you between calls. To an older server, each call is its own MCP session with a new `initialize` handshake; to a 2026-07-28 server, each call is one request. Answer in JSON or as an SSE stream; the portal reads either. If you send `notifications/progress` for the call's progress token, the portal can stream it to a client that asked for it.
 
-Every forwarded call carries the [identity token](/docs/server-authors/identity-token) (unless your team turned off **Send identity token**, which is also the default for a new server with no authentication on a public host), your static credential if you registered one (or, [depending on the mode](/docs/server-authors/what-servers-receive), the calling person's own key or the portal's own OAuth token), and where relevant a [provider token](/docs/server-authors/provider-tokens) or, for an [OAuth-protected server](/docs/server-authors/oauth-servers), the person's own bearer token. The caller's own API key or OAuth token **never** reaches you.
+Every forwarded call carries the [identity token](/docs/server-authors/identity-token) (unless your team turned off **Send identity token**, which is also the default for a new server with no authentication on a public host), your static credential if you registered one (or, [depending on the mode](/docs/server-authors/what-servers-receive), the calling person's own key or the portal's own OAuth token), and where relevant a [provider token](/docs/server-authors/provider-tokens) or, for an [OAuth-protected server](/docs/server-authors/oauth-servers), the person's own bearer token. For a service account, the provider token or bearer token is that of a [team's shared account](/docs/teams/service-connections) instead. The caller's own API key or OAuth token **never** reaches you.
 
 ## What the portal does with your answers
 
 - Names: clients see your tool `check_outage` of server `status` as `status__check_outage`, and your resource `status://services` as `omp://status/status://services`. A `resources/read` arrives with your own URI (the prefix is stripped), and `contents[].uri` in your answer is rewritten for the client.
+- A gateway can [curate](/docs/teams/curating-gateway-tools) your tool: give it another name, rewrite its description, and fix some arguments or limit them to a list of values. Your server always receives its **original** tool name and the merged arguments, with fixed values filled in; the client never sees fixed arguments in the schema.
 - `_meta["io.modelcontextprotocol/serverInfo"]` is removed from results: clients talk to the portal, and your server's name and version aren't theirs to see. Other `_meta` entries pass through.
 - `structuredContent` that isn't a JSON object is dropped from results, and an `outputSchema` that isn't an object is dropped from tool lists, as the MCP schema requires.
 - Requests and responses are limited to 1 MiB, and every exchange to your server's timeout (1 to 120 seconds, set by your team).
-- Redirects are never followed. The portal never offers you sampling or roots, and never relays yours. It declares elicitation to a 2026-07-28 server only when the calling client did, and then relays your `input_required` questions to that client. See [MCP protocol support](/docs/server-authors/mcp-protocol#elicitation-relay).
+- Redirects are never followed. The portal never offers you sampling or roots, and never relays yours. It declares elicitation to a 2026-07-28 server only when the calling client did, and then relays your `input_required` questions to that client, except on calls a person had to [approve](/docs/teams/approval-rules), which declare none. See [MCP protocol support](/docs/server-authors/mcp-protocol#elicitation-relay).
 
 ## Definitions are reviewed
 
 What you list (names, titles, descriptions, schemas) is shown to models as instructions, so platform admins review it before it reaches the catalog. When a definition changes on a published server, that capability leaves the catalog until the change is approved. Keep descriptions stable and honest, and don't put data that changes between calls in definitions: use `_meta`, which the portal leaves out of fingerprints. See [Capabilities and change detection](/docs/teams/capabilities).
 
-Annotations (read-only, destructive, idempotent and open-world hints) are shown to people but never trusted for any decision.
+Annotations (read-only, destructive, idempotent and open-world hints) are shown to people but never trusted for any decision. Instead, your server's team [classifies](/docs/teams/capabilities#classifying-tools) each tool as read, write or destructive, and that class decides tool scopes, approval rules and retries. For a classified tool, gateways overwrite `readOnlyHint` and `destructiveHint` in the copy they list (read: true and false; write: false and false; destructive: false and true); your other annotations pass through. Keep your hints accurate: they are the suggestion the team starts from.
+
+A team can also limit how many calls the portal forwards to your server per minute and how many it keeps in flight at once: see [Upstream protection and failover](/docs/teams/protection-and-failover).
 
 ## Your server decides what callers may do
 

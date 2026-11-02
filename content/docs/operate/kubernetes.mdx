@@ -3,43 +3,52 @@ title: Install on Kubernetes
 description: "Deploy Open MCP Portal with the repository's Kustomize base and example overlay: secrets, configuration, network policies, ingress and probes."
 ---
 
-The repository's [`deploy/kubernetes`](https://github.com/ncecere/open-mcp-portal/tree/v0.3.2/deploy/kubernetes) holds a Kustomize **base** and an **example overlay** (namespace, pinned image, settings, an NGINX Ingress or a Gateway API `HTTPRoute`, narrowed NetworkPolicies, and optional metrics). Copy the overlay into your own GitOps repository and replace every `example.org` value and the image digest. The image is `ghcr.io/ncecere/open-mcp-portal:v0.3.2`, signed with cosign; the overlay at the v0.3.2 tag carries a placeholder digest that you replace with the release's (below). Bring your own PostgreSQL 17 and backups: there is no in-cluster database component. `make k8s-validate` renders the base and overlay and checks them against the Kubernetes schemas.
+The repository's [`deploy/kubernetes`](https://github.com/ncecere/open-mcp-portal/tree/v0.13.1/deploy/kubernetes) holds a Kustomize **base** and an **example overlay** (namespace, pinned image, settings, a Gateway API `HTTPRoute` or an ingress-nginx `Ingress`, narrowed NetworkPolicies, and optional metrics). Copy the overlay into your own GitOps repository and replace every `example.org` value and the image digest. The image is `ghcr.io/ncecere/open-mcp-portal:v0.13.1`, signed with cosign; the overlay at the v0.13.1 tag carries a placeholder digest that you replace with the release's (below). Bring your own PostgreSQL 17 and backups: there is no in-cluster database component. `make k8s-validate` renders the base and overlay and checks them against the Kubernetes schemas.
+
+<Callout type="warn" title="Upgrading from v0.3.x: create the migration Secret first">
+Since v0.4.0 the `migrate` init container reads its database URL from a separate Secret, **`open-mcp-portal-migrate`** (key `DATABASE_MIGRATE_URL`), and no longer from `open-mcp-portal-runtime`. With the new manifests and without that Secret, the init container has no database URL and the new pods don't start. Create it before you roll out, even for a single-login install (copy the same URL): see [Secrets](#secrets).
+</Callout>
 
 ## The image
 
-The base and the overlay use `ghcr.io/ncecere/open-mcp-portal`. Check the signature of the release you deploy (cosign v3.0 or newer), then put its digest in the overlay's `images:`. The digest of v0.3.2 is `sha256:80ee9a1c7203ac8813597a1a218902503d08378982e08b62ba48c4084add5bd6`:
+The base and the overlay use `ghcr.io/ncecere/open-mcp-portal`; the base sets the tag `v0.13.1`. Check the signature of the release you deploy (cosign v3.0 or newer), then put its digest in the overlay's `images:`. The digest of v0.13.1 is `sha256:cec6a9e1189845ca2f9827e972c55af20ce22de3a40645abdf3ab08a6730a453` (each release also attaches it as `open-mcp-portal-<tag>.digest.txt`):
 
 ```sh
-cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:80ee9a1c7203ac8813597a1a218902503d08378982e08b62ba48c4084add5bd6 \
-  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.3.2 \
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:cec6a9e1189845ca2f9827e972c55af20ce22de3a40645abdf3ab08a6730a453 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.13.1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
 ```yaml
 images:
   - name: ghcr.io/ncecere/open-mcp-portal
-    newTag: v0.3.2
-    digest: sha256:80ee9a1c7203ac8813597a1a218902503d08378982e08b62ba48c4084add5bd6
+    newTag: v0.13.1
+    digest: sha256:cec6a9e1189845ca2f9827e972c55af20ce22de3a40645abdf3ab08a6730a453
 ```
 
 ## Secrets
 
-The base references the secret `open-mcp-portal-runtime` by name and never contains values. Create it with your secrets operator or by hand:
+The base references two Secrets by name and never contains values: `open-mcp-portal-runtime` for the serving container and `open-mcp-portal-migrate` for the `migrate` init container. Create them with your secrets operator or by hand:
 
 ```sh
 kubectl create namespace open-mcp-portal   # or apply the overlay's namespace.yaml first
 kubectl -n open-mcp-portal create secret generic open-mcp-portal-runtime \
-  --from-literal=DATABASE_URL='postgres://omp:<password>@db.example.org:5432/omp?sslmode=require' \
+  --from-literal=DATABASE_URL='postgres://omp_app:<password>@db.example.org:5432/omp?sslmode=require' \
   --from-literal=ENCRYPTION_KEY="$(openssl rand -base64 32)" \
   --from-literal=API_KEY_PEPPER="$(openssl rand -base64 32)" \
   --from-literal=OIDC_CLIENT_SECRET='<from your IdP>'
+kubectl -n open-mcp-portal create secret generic open-mcp-portal-migrate \
+  --from-literal=DATABASE_MIGRATE_URL='postgres://omp_owner:<password>@db.example.org:5432/omp?sslmode=require'
 ```
 
 | Key | Used by |
 |---|---|
-| `DATABASE_URL` | The `migrate` init container and the `portal` container |
+| `DATABASE_URL` (in `open-mcp-portal-runtime`) | The `portal` container only |
+| `DATABASE_MIGRATE_URL` (in the separate `open-mcp-portal-migrate`) | The `migrate` init container only |
 | `ENCRYPTION_KEY`, `API_KEY_PEPPER`, `OIDC_CLIENT_SECRET` | `portal` (required: a missing key stops the pod with `CreateContainerConfigError`) |
 | `ENCRYPTION_KEY_PREVIOUS`, `API_KEY_PEPPER_PREVIOUS` | `portal`, optional, only during a [rotation](/docs/operate/secrets-and-key-rotation) |
+
+**A single database login** (the setup before v0.4.0): put the same owner URL in both Secrets. **Separate logins** (recommended): the owner URL goes only in `open-mcp-portal-migrate` and the runtime URL in `open-mcp-portal-runtime`, as above; see [Split database roles](#split-database-roles). The init container's key reference is optional, so an overlay can inject the URL another way; without either database URL, `migrate` fails with "DATABASE_MIGRATE_URL or DATABASE_URL is required". Never put the owner URL, or a `_FILE` mount of it, in the `portal` container or the ConfigMap. The base pins `MIGRATE_ON_START=false`.
 
 Keep `ENCRYPTION_KEY` and `API_KEY_PEPPER` in your secrets store as well: a database backup is useless without them. Secrets aren't hashed into the pod template, so after changing one, run `kubectl -n open-mcp-portal rollout restart deploy/open-mcp-portal`.
 
@@ -59,7 +68,22 @@ configMapGenerator:
       - TRUSTED_PROXIES=10.0.0.0/8
 ```
 
-The base sets `LISTEN_ADDR=:8088`, `LOG_FORMAT=json`, `LOG_LEVEL=info`, `DEV_AUTH=false`, `MIGRATE_ON_START=false` (the Deployment pins it too), `SHUTDOWN_DELAY=10s`, `SHUTDOWN_TIMEOUT=125s`, and placeholders for `APP_URL`, `OIDC_ISSUER` and `OIDC_CLIENT_ID`. Don't set `generatorOptions.disableNameSuffixHash`: pods would keep running with stale settings. Every setting is in [Configuration](/docs/operate/configuration).
+The base sets `LISTEN_ADDR=:8088`, `LOG_FORMAT=json`, `LOG_LEVEL=info`, `DEV_AUTH=false`, `MIGRATE_ON_START=false` (the Deployment pins it too), `SHUTDOWN_DELAY=10s`, `SHUTDOWN_TIMEOUT=125s`, and placeholders for `APP_URL`, `OIDC_ISSUER` and `OIDC_CLIENT_ID`. It also carries `DB_RUNTIME_ROLE=omp_app` and `DB_REQUIRE_SPLIT_ROLES=true` commented out, for split-role installs. Don't set `generatorOptions.disableNameSuffixHash`: pods would keep running with stale settings. Every setting is in [Configuration](/docs/operate/configuration).
+
+### Split database roles
+
+With separate owner and runtime logins ([Database roles](/docs/operate/database-roles)), add the role settings to the overlay's `configMapGenerator`, and keep the owner credential in `open-mcp-portal-migrate` only:
+
+```yaml
+configMapGenerator:
+  - name: open-mcp-portal-config
+    behavior: merge
+    literals:
+      - DB_RUNTIME_ROLE=omp_app
+      - DB_REQUIRE_SPLIT_ROLES=true
+```
+
+The init container then reconciles `omp_app`'s grants on every rollout, and the serving pod never sees the owner URL. On CloudNativePG, the cluster can create both logins: see [CloudNativePG](/docs/operate/database-roles#cloudnativepg).
 
 ## What the base deploys
 
@@ -90,12 +114,13 @@ The portal's own address guard applies whatever the policies allow: public addre
 
 ## Ingress
 
-- The host must equal `APP_URL`'s host; TLS terminates at the ingress. Route every path to the portal, including `/mcp/`, `/oauth/`, `/connect/` and `/.well-known/`.
-- **Timeouts.** A `/mcp/{slug}` call waits up to 120 seconds for its MCP server. Allow reads of a few minutes: the example sets `proxy-read-timeout: 300` for ingress-nginx and `timeouts.request: 300s` on the HTTPRoute, and turns off proxy buffering. Requests are capped at 1 MiB.
-- **Streaming (server-sent events).** A `tools/call` that carries `_meta.progressToken`, from a client that accepts `text/event-stream`, is answered as a stream: the server's progress, then the response, with a `: keep-alive` comment every 15 seconds while it waits. The portal sends `X-Accel-Buffering: no` and sets no write timeout of its own, so the proxy in front must neither buffer the response nor cut a quiet one. The nginx example is the one in the repository's example overlay; the other settings below follow the product's deployment guide and haven't been tested here.
-  - **ingress-nginx:** `proxy-buffering: "off"` (the example sets it; the response header does the same) and a `proxy-read-timeout` above the longest server timeout, 120 seconds (the example uses 300). Don't compress `text/event-stream`.
+- The host must equal `APP_URL`'s host; TLS terminates at the ingress or gateway. Route every path to the portal, including `/mcp/`, `/oauth/`, `/connect/`, `/scim/` and `/.well-known/`.
+- **Gateway API is the default; ingress-nginx is retired.** The community ingress-nginx controller was retired in March 2026 (its repository was archived on 24 March 2026, with no more releases or security fixes). The example overlay's `httproute.yaml` (a Gateway API `HTTPRoute`) is the recommended route, and the [smoke test](#smoke-test)'s `ingress` scenario runs exactly that on Envoy Gateway with a cert-manager certificate. The overlay's `resources:` still lists `ingress.yaml`, the ingress-nginx `Ingress`, for clusters that run it: swap it for `httproute.yaml`. The portal needs nothing controller-specific, only the settings below.
+- **Timeouts.** A `/mcp/{slug}` call waits up to 120 seconds for its MCP server. Allow reads of a few minutes: the example sets `timeouts.request: 300s` on the HTTPRoute and `proxy-read-timeout: 300` with proxy buffering off on the ingress-nginx Ingress. Requests are capped at 1 MiB.
+- **Streaming (server-sent events).** A `tools/call` that carries `_meta.progressToken`, from a client that accepts `text/event-stream`, is answered as a stream: the server's progress, then the response, with a `: keep-alive` comment every 15 seconds while it waits. The portal sends `X-Accel-Buffering: no` and sets no write timeout of its own, so the proxy in front must neither buffer the response nor cut a quiet one. **Tested:** the Gateway API route on Envoy Gateway (the smoke test checks that progress events arrive while the call is still running). The other settings below follow the product's deployment guide and aren't tested.
+  - **Gateway API (`HTTPRoute`):** `timeouts.request` of at least 300 seconds (the example sets it), and the same or unset for `timeouts.backendRequest`. Envoy Gateway needs nothing else: it doesn't buffer responses.
   - **Traefik:** don't put the `buffering` middleware on the portal's route, leave the entrypoint's `respondingTimeouts.writeTimeout` at 0, keep `idleTimeout` above 120 seconds, and, if a `ServersTransport` sets `forwardingTimeouts.responseHeaderTimeout`, make it at least 300 seconds.
-  - **Gateway API (`HTTPRoute`):** `timeouts.request` of at least 300 seconds (the example sets it), and the same or unset for `timeouts.backendRequest`.
+  - **ingress-nginx (retired):** `proxy-buffering: "off"` (the example sets it; the response header does the same) and a `proxy-read-timeout` above the longest server timeout, 120 seconds (the example uses 300). Don't compress `text/event-stream`.
   - **Cloud load balancers** have idle timeouts of their own (AWS ALB: 60 seconds by default). The keep-alive comments count as traffic, but a total call time above the balancer's request limit still ends the stream.
 
   A client that closes the stream cancels the call to the MCP server, so a proxy that ends a response early also cancels the call. Calls without a progress token, or without `text/event-stream` in `Accept`, stay one buffered JSON response (at most 1 MiB); a streamed call relays at most 64 progress events and 4 MiB.
@@ -119,35 +144,54 @@ kubectl -n open-mcp-portal exec deploy/open-mcp-portal -c portal -- /open-mcp-po
 
 ## Smoke test
 
-`make k8s-validate` only renders the manifests and checks their schemas. `make k8s-smoke` (from a checkout of the repository, [`scripts/k8s-smoke.sh`](https://github.com/ncecere/open-mcp-portal/blob/v0.3.2/scripts/k8s-smoke.sh)) applies them to a real cluster and uses what it deployed:
+`make k8s-validate` only renders the manifests and checks their schemas. `make k8s-smoke` (from a checkout of the repository, [`scripts/k8s-smoke.sh`](https://github.com/ncecere/open-mcp-portal/blob/v0.13.1/scripts/k8s-smoke.sh)) applies them to a real cluster and uses what it deployed. It has five scenarios, each in a fresh `kind` cluster of its own, chosen with `SMOKE_SCENARIO`:
+
+| Scenario | Command | Takes (warm, Linux) | Workflow |
+|---|---|---|---|
+| `base` (default): a fresh install, a rolling update, a pod deletion, the PodDisruptionBudget and NetworkPolicies | `make k8s-smoke`, `SMOKE_CNI=calico make k8s-smoke` | 3 to 5 minutes | `k8s-smoke` (both CNIs) |
+| `upgrade`: the previous release by digest, then this tree, then back | `SMOKE_SCENARIO=upgrade make k8s-smoke` | 4 minutes | `k8s-upgrade` |
+| `ingress`: Envoy Gateway, cert-manager TLS, `TRUSTED_PROXIES`, streaming and OpenID Connect through Dex | `SMOKE_SCENARIO=ingress make k8s-smoke` | 4 minutes | `k8s-smoke` (both CNIs) |
+| `restore`: `pg_dump`, more data, then a restore into a second database | `SMOKE_SCENARIO=restore make k8s-smoke` | 2 minutes | `k8s-smoke` |
+| `load`: three replicas under a k6 ramp | `SMOKE_SCENARIO=load make k8s-smoke` | 6 to 7 minutes | `k8s-load` |
 
 ```sh
-make k8s-smoke                    # about 2 minutes warm; needs docker, kind, kubectl, curl and jq
-SMOKE_CNI=calico make k8s-smoke   # about 3 minutes; Calico enforces the NetworkPolicies, which are then tested
+make k8s-smoke                    # needs docker, kind, kubectl, curl and jq (k6 for load)
+SMOKE_CNI=calico make k8s-smoke   # Calico enforces the NetworkPolicies, which are then tested
+make smoke-selftest               # the scripts' assertion helpers against stubs: no cluster, no Docker
+make shellcheck                   # ShellCheck on every script
+scripts/install-smoke-tools.sh DIR kind kubectl shellcheck k6   # the pinned, checksum-verified tools
 ```
 
-It builds the portal and the fake MCP server images from the working tree, creates a `kind` cluster of one control plane and two workers (its own kubeconfig in a temporary directory; it never touches `~/.kube`), and applies the base through a test overlay, `overlays/smoke` (a throwaway PostgreSQL 17 on a PVC, the fake MCP server, and random secrets made at run time). It stops at the first failed assertion, then always collects pod logs, events and descriptions into `bin/k8s-smoke-artifacts` and deletes the cluster; `SMOKE_KEEP=1` keeps it. On the release tree it passed with 30 assertions on the default CNI and 37 with Calico.
+Each scenario builds the portal and the fake MCP server images from the working tree, creates a cluster of one control plane and two workers (its own kubeconfig in a temporary directory; it never touches `~/.kube`), and applies the base through a test overlay, `overlays/smoke` (a throwaway PostgreSQL 17 on a PVC, the fake MCP server, and random secrets made at run time). It stops at the first failed assertion, then always collects pod logs, events and descriptions into `bin/k8s-smoke-artifacts` and deletes the cluster; `SMOKE_KEEP=1` keeps it. Only image pulls are retried.
 
-**What it proves**
+**What the scenarios prove**
 
-- The `migrate` init container completed in every pod, and `doctor` passes in the running pod.
-- Both replicas are Ready on **different nodes**, the Service has two endpoints, and the PodDisruptionBudget exists and counts two healthy pods.
-- `/healthz` and `/readyz` answer, and development sign-in works through `kubectl port-forward`.
-- Through the real API: a team, the in-cluster fake MCP server registered as a server, a gateway selecting two of its tools, and an API key. With that key, `initialize`, `tools/list` and `tools/call` work at `/mcp/{slug}` in **both protocol eras** (the legacy one, and 2026-07-28 with its required headers); a modern request without `Mcp-Method` is a `400` and a request without a key a `401`.
-- **A rolling update** (a configuration change rolls the pods) and the **deletion of a pod**, both under a loop that calls the Service from inside the cluster (`/healthz` and a real `tools/list`): no request fails. The terminating pod answers `/readyz` with `503` while it still answers `/healthz`, logs `shutting down` and, 10 seconds later (`SHUTDOWN_DELAY`), `shutdown complete`; the replacement lands on a different node from the survivor. The API key and the browser session, both in PostgreSQL, work on the new pods.
-- **The PodDisruptionBudget:** one eviction is allowed and a second one right after it is refused.
-- With `SMOKE_CNI=calico`: the NetworkPolicies are enforced. A pod in the namespace the ingress policy allows reaches the portal; a pod in another namespace and a pod beside it do not. From a pod wearing the portal's labels, PostgreSQL and the in-cluster MCP server are reachable and DNS works, while other namespaces' pods and PostgreSQL's pod on other ports are not. The portal keeps passing `doctor` and serving calls under those policies.
+- **`base`:** the `migrate` init container completed in every pod and `doctor` passes; both replicas are Ready on different nodes; through the real API a team, a server, a gateway and an API key work at `/mcp/{slug}` in both protocol eras; a rolling update and a pod deletion under a request loop fail no request; one eviction is allowed and a second refused. With `SMOKE_CNI=calico`, the NetworkPolicies admit and refuse what they should.
+- **`upgrade`:** the previous release is installed by digest, and a browser session, an API key and an OAuth grant are made on it. The Deployment rolls to the new image and **back** under a request loop with no failed request, and every credential works on both images. A breaking-migration canary (a throwaway migration in a scratch copy of the tree) proves the scenario fails when a migration breaks the previous release.
+- **`ingress`:** the portal behind Envoy Gateway (Gateway API) with a cert-manager certificate; sign-in through Dex (verified email, groups, the bootstrap admin, a refused unverified email); `DEV_AUTH` refused; `TRUSTED_PROXIES` naming the real caller in the audit log; a streamed call whose progress events arrive while it runs.
+- **`restore`:** a `pg_dump` restored into a second database owned by the migration role. Data from before the dump is back, data from after it is gone, and **a key revoked after the dump works again** (see [Backups](/docs/operate/backups#restoring)).
+- **`load`:** a shared gateway limit admits exactly its allowance across three replicas; a ramp to 24 virtual users has no failed request and a p95 under 3 seconds; every background loop has a leader; database connections stay below `max_connections`. These are loose regression gates, not a benchmark.
 
-**What it does not prove**
+**What they don't prove**
 
-- **NetworkPolicy on the default run.** kind's default CNI (kindnet) does not enforce it: the policies are applied and valid, nothing more. Only `SMOKE_CNI=calico` tests them, and the `egress-https` rule (TCP 443 to anywhere) is not exercised in either.
-- **The internal-network allowlist.** The test needs development sign-in on a loopback `APP_URL`, and then the portal allows private and plain-http MCP server addresses whatever `UPSTREAM_ALLOWED_NETWORKS` says, so registering the fake server would work without it.
-- **Ingress and TLS, and OIDC.** There is no ingress controller, certificate or `TRUSTED_PROXIES`, and the example overlay's Ingress, HTTPRoute and ServiceMonitor are only validated, never applied. Sign-in is the development sign-in.
-- **Production sizing, storage and PostgreSQL.** One throwaway PostgreSQL without backup, TLS or failover; a three-node cluster in one Docker VM; no zone spreading (kind's nodes carry no zone label); no node drain, upgrade between releases or restore.
-- **Client-visible `/readyz`.** A pod that has had SIGTERM answers `/readyz` with `503` on purpose, and for a second or so kube-proxy can still route a request to it, so a loop of `/readyz` requests during a rollout sees a few `503`s. Real traffic (`/healthz`, `/mcp`) does not.
+- **NetworkPolicy under kindnet**, the default CNI: it doesn't enforce policies. The `egress-https` rule (TCP 443 to anywhere) is exercised by neither CNI.
+- **The internal-network allowlist, negatively.** No test shows a server outside `UPSTREAM_ALLOWED_NETWORKS` being refused.
+- **Other ingress controllers, real certificates or load balancers.** One controller (Envoy Gateway), one self-signed CA. The example overlay's `Ingress`, `ServiceMonitor` and metrics NetworkPolicy are only validated.
+- **A real identity provider.** Dex with static users; not Entra, Okta or Google, refresh, logout or `OIDC_ALLOWED_EMAIL_DOMAINS`.
+- **Upgrade depth.** Only from the previous release (or a tag named with `SMOKE_FROM_TAG`), on a small database. **Nothing upgrades across more than one release.**
+- **Restore depth, production sizing and PostgreSQL.** One throwaway PostgreSQL without backup, TLS or failover; no point-in-time recovery, CloudNativePG, zones or real node drain.
+- **Client-visible `/readyz`.** A terminating pod answers `/readyz` with `503` on purpose, so a loop of `/readyz` requests during a rollout sees a few. Real traffic (`/healthz`, `/mcp`) doesn't.
+- **GitHub-hosted runners.** The `upgrade`, `ingress`, `restore` and `load` jobs were run on a Linux amd64 machine, not yet on GitHub-hosted runners.
 
-**In CI.** The repository's workflow, [`k8s-smoke.yml`](https://github.com/ncecere/open-mcp-portal/blob/v0.3.2/.github/workflows/k8s-smoke.yml), runs the script on demand, weekly and on pushes to `main` that change `deploy/**`, the `Dockerfile`, the script or the workflow, with both CNIs. The [v0.3.2 notes](/docs/releases/v0-3-2#verification) say it runs in CI on that release; the script itself was also run on macOS (Docker Desktop, arm64).
+**In CI.** The workflows [`k8s-smoke.yml`](https://github.com/ncecere/open-mcp-portal/blob/v0.13.1/.github/workflows/k8s-smoke.yml), [`k8s-upgrade.yml`](https://github.com/ncecere/open-mcp-portal/blob/v0.13.1/.github/workflows/k8s-upgrade.yml) and [`k8s-load.yml`](https://github.com/ncecere/open-mcp-portal/blob/v0.13.1/.github/workflows/k8s-load.yml) run the scenarios. `k8s-upgrade` runs for every release tag and weekly.
+
+## What's in the repository
+
+- `deploy/kubernetes/base/`: `config.env`, `deployment.yaml`, `kustomization.yaml`, `networkpolicies.yaml`, `service.yaml`, `serviceaccount.yaml`.
+- `deploy/kubernetes/overlays/example/`: `namespace.yaml`, `kustomization.yaml`, `httproute.yaml`, `ingress.yaml`, `networkpolicy-metrics.yaml`, `networkpolicy-otlp.yaml`, `servicemonitor.yaml`, `prometheusrule.yaml`.
+- `deploy/kubernetes/overlays/smoke/` and `overlays/smoke-ingress/`: the smoke test's overlays. Not for real installs.
+- `deploy/grafana/dashboards/` (five dashboards) and `deploy/prometheus/omp-alerts.yaml` with its tests ([Tracing, dashboards and alerts](/docs/operate/tracing#dashboards)).
 
 ## Not included
 
-No Helm chart, HorizontalPodAutoscaler, in-cluster PostgreSQL or backup CronJob. The manifests are rendered and schema-checked (`make k8s-validate`), exercised by the [smoke test](#smoke-test) on a `kind` cluster, and v0.2.0 was deployed to one real cluster. The example overlay's image digest is a placeholder: use the digest of the release image.
+No Helm chart, HorizontalPodAutoscaler, in-cluster PostgreSQL or backup CronJob. The manifests are rendered and schema-checked (`make k8s-validate`), exercised by the [smoke test](#smoke-test) on `kind` clusters, and the product has been deployed to one real cluster (Talos, with CloudNativePG). The example overlay's image digest is a placeholder: use the digest of the release image.

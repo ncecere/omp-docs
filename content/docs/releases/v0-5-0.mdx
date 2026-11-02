@@ -1,0 +1,68 @@
+---
+title: v0.5.0
+description: "Open MCP Portal v0.5.0 (2026-10-28): approval before sensitive tool calls, bound to the exact call, single use, decided by people other than the caller. Migrations 00035 to 00042."
+---
+
+**Released 2026-10-28.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.5.0) · image `ghcr.io/ncecere/open-mcp-portal:v0.5.0` · migrations `00035` to `00042` (all expand-only).
+
+The first release of the v0.5 line, after [v0.4.0](/docs/releases/v0-4-0): a rule can make a tool call wait until a person approves that exact call. **Nothing changes until someone creates a rule.** Read [Upgrading](#upgrading) first: rules must not be turned on while an older image still serves.
+
+## What changed
+
+- **Approval rules** (#31, decision 82). Team owners and admins add rules for their servers and gateways under Team › **Approval rules**; platform admins add rules for platform gateways under Admin › **Approval rules**. A rule targets a server or a gateway, and a tool or one or more classes. A server rule wins over a gateway rule, and a rule for one tool wins over a class rule; two equal rules that overlap are refused. An unclassified tool matches rules for destructive tools (for approval only; its class and scopes don't change). Rules never grant access. See [Approval rules for teams](/docs/teams/approval-rules) and [Approval rules for platform gateways](/docs/administer/approval-rules).
+- **Who approves.** Named people or SSO groups, or by default the server team's owners and admins. Platform admins are the fallback only when nobody else is eligible. Nobody approves their own call, and the owners and admins of a calling service account are left out unless the rule allows them. Owning a gateway gives no approval right.
+- **One exact call, once.** An approval is bound to the exact arguments (after curation), the tool definition, the caller and the destination. A pending request lasts 24 hours by default (5 minutes to 24 hours) and an approval 15 minutes by default (1 to 60 minutes); a caller can have at most 20 pending. The approval is spent immediately before the one call goes upstream, and the portal never replays it: if the response is lost, a new attempt needs a new approval. A denied call stays denied until the caller renews the request in the browser.
+- **The Approvals page.** **Approvals** in the sidebar lists the requests you made and the ones you can decide. Each request has a receipt with a redacted, sealed preview of the arguments that only the caller and eligible reviewers can see. Notices go to the inbox and email, never to webhooks. The call log shows the new outcome `needs_approval`. See [Approvals](/docs/use/approvals).
+- **What a client sees.** A modern client that handles URL elicitation gets `input_required` with the approval link; other modern clients get a tool error with the link; legacy clients get error `-32042`. A service account can ask for approval; a person decides.
+- **Retention.** A preview becomes unreadable once the request ends and is cleared within 24 hours; the receipt's metadata is kept for 90 days, separately from audit retention.
+- **Smaller:** a patched transitive web dependency (Seroval 1.7.3).
+
+## Upgrading
+
+1. **Back up first**, then pin the new image (verify its signature first, see [The image](#the-image)). The init container applies `00035` to `00042` as the owner. Protected approval state lives in a new owner-controlled schema, `omp_private`; the runtime role gets only what it needs. **Do not use `goose down` for a rollback.**
+2. **Finish the rollout and drain every older serving replica before you create an approval rule.** v0.4.0 runs against the new schema but doesn't enforce approvals. For the same reason, going back to an older image while rules exist is not a safe rollback: stop the governed calls first.
+3. **Run `rotate-keys` from the new binary** when you next rotate `ENCRYPTION_KEY`; an older binary doesn't know the new sealed columns. See [Secrets and key rotation](/docs/operate/secrets-and-key-rotation).
+4. Keep the owner and runtime logins separate if you use [split database roles](/docs/operate/database-roles), and never hand serving replicas the owner URL to fix a startup check.
+5. Keep autovacuum on in production. Approval transitions take a short lock and fail closed, without spending the approval, when it is busy.
+6. Check who is eligible to approve before you turn a rule on.
+
+[Upgrading from v0.4.0](/docs/operate/migrations-and-upgrades#upgrading-from-v040) has the same points with the details.
+
+## Verification
+
+The release was tested in both database-role modes and its published image signed and verified; the [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.5.0) and the [release notes](https://github.com/ncecere/open-mcp-portal/blob/v0.5.0/docs/releases/v0.5.0.md) record how.
+
+## Known limitations
+
+Carried over from [v0.4.0](/docs/releases/v0-4-0#known-limitations) unless marked new:
+
+- **"Used" means the approval was spent (new),** not that the upstream call succeeded. Neither a class nor an approval proves what a tool does.
+- **Pending approvals can lapse after unrelated changes (new).** Any change to access or authority invalidates pending requests conservatively; the caller asks again.
+- **Busy periods refuse governed calls (new).** If the approval lock is busy (for example during database maintenance), the call fails closed and spends nothing. Calls with no matching rule aren't affected.
+- **Latency under load hasn't been measured (new).**
+- **An owner login is still all-powerful.** Split roles protect the history from the runtime credential only.
+- **Client certificates aren't used for the OAuth metadata and token endpoints.**
+- **Not run against real clients and providers.** VS Code, Cursor, a real Google or Microsoft provider, a Slack webhook, a mail server and a pilot with a real team are still open.
+- Remote servers only (no stdio); development software that has not run in production.
+
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.5.0` is signed with cosign keyless signing by the repository's `image.yml` workflow. Its digest is:
+
+```text
+sha256:6ecbdda5ac21cf7257208c878f954d36ac7903ecb1aa0e671a9a2e516f3bdc3a
+```
+
+Check the signature with **cosign v3.0 or newer**, then pin the image by that digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:6ecbdda5ac21cf7257208c878f954d36ac7903ecb1aa0e671a9a2e516f3bdc3a \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.5.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/open-mcp-portal/issues](https://github.com/ncecere/open-mcp-portal/issues) (there is a form for each kind) or ask in [Discussions](https://github.com/ncecere/open-mcp-portal/discussions). Report security problems privately, as [`SECURITY.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.5.0/SECURITY.md) describes.

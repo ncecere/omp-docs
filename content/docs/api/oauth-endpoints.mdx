@@ -9,8 +9,8 @@ Open MCP Portal is an OAuth 2.1 authorization server for its own gateways, follo
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /.well-known/oauth-protected-resource/mcp/{slug}` | Protected-resource metadata: `resource` = `<APP_URL>/mcp/{slug}`, `authorization_servers` = `[<APP_URL>]`, `bearer_methods_supported`, `resource_name` (the instance name). Served for any well-formed slug without looking the gateway up, so it doesn't reveal which gateways exist |
-| `GET /.well-known/oauth-authorization-server` | Server metadata: authorization code only, `S256` only, `none` token authentication (public clients), `client_id_metadata_document_supported`, `authorization_response_iss_parameter_supported`, the registration and revocation endpoints. No `scopes_supported` |
+| `GET /.well-known/oauth-protected-resource/mcp/{slug}` | Protected-resource metadata: `resource` = `<APP_URL>/mcp/{slug}`, `authorization_servers` = `[<APP_URL>]`, `bearer_methods_supported`, `resource_name` (the instance name), `scopes_supported`. Served for any well-formed slug without looking the gateway up, so it doesn't reveal which gateways exist |
+| `GET /.well-known/oauth-authorization-server` | Server metadata: authorization code only, `S256` only, `none` token authentication (public clients), `client_id_metadata_document_supported`, `authorization_response_iss_parameter_supported`, the registration and revocation endpoints, and `scopes_supported`: `["omp:read", "omp:write", "omp:destructive"]` |
 | `GET /oauth/authorize` | Authorization code with PKCE |
 | `POST /oauth/token` | `authorization_code` and `refresh_token` grants |
 | `POST /oauth/register` | Dynamic Client Registration, public clients only |
@@ -21,11 +21,27 @@ Open MCP Portal is an OAuth 2.1 authorization server for its own gateways, follo
 
 ## Authorize
 
-- `response_type=code`, `code_challenge` with `code_challenge_method=S256` (`plain` is refused), `redirect_uri`, `state` (at most 1,000 characters), and `resource` equal to exactly `<APP_URL>/mcp/{slug}`. There are no scopes: a `scope` parameter is ignored.
+- `response_type=code`, `code_challenge` with `code_challenge_method=S256` (`plain` is refused), `redirect_uri`, `state` (at most 1,000 characters), and `resource` equal to exactly `<APP_URL>/mcp/{slug}`. An optional `scope` asks for a tool-class ceiling: see [Scopes](#scopes).
 - **Nothing is looked at before sign-in.** Without a browser session, the request is sent to sign in with its whole query and nothing else happens: the client's metadata document isn't fetched and no reason is given. Only a query over 8,000 characters or a repeated parameter gets a generic "Can't connect this app" page, the same for both. So a person with a bad client learns it after signing in. Uncached fetches of client metadata documents are limited to 20 a minute per source address (a signed-in person over it gets a `429` page, `slow_down`).
 - After sign-in, problems before the client and its redirect address are known (an unknown or unfetchable client, a redirect URI it didn't register) show an error page, "Can't connect this app", and never redirect. Later problems go back to the client with `state` and `iss`: `unsupported_response_type`, `invalid_request` (no PKCE, `plain`, a malformed challenge), `invalid_target` (a missing or wrong `resource`), `access_denied`.
 - Then the person signs in, if they aren't already. Signed in, the resource must be a gateway they may use **now**; otherwise `invalid_target` (unknown, turned off and no access look the same).
 - A remembered consent (the same person, client and gateway) or a [trusted client](/docs/administer/trusted-clients) gets a code at once; anyone else sees the consent page. One exception: a trusted client with a loopback redirect (`http` on `localhost`, `127.0.0.1` or `::1`) that the person hasn't connected to this gateway yet gets a notice page with Continue and Cancel first ([why](/docs/administer/trusted-clients#the-first-sign-in-from-this-computer)). Continue records the grant and issues the code; Cancel answers `access_denied`.
+
+## Scopes
+
+Since v0.4.0 the three scopes are tool-class ceilings on what the app may call ([Tool scopes](/docs/use/tool-scopes)):
+
+| Scope | Allows tools classed |
+|---|---|
+| `omp:read` | read |
+| `omp:write` | write |
+| `omp:destructive` | destructive |
+
+- **No `scope`** means unrestricted, including unclassified tools; it isn't the same as asking for all three. A scope only narrows what the person's access already allows; it never grants access. Prompts and resources aren't affected.
+- **Consent can narrow, never widen.** The consent page shows the requested scope and the person can narrow it; an empty ceiling denies every tool. A widened or named-tool scope is refused with `oauth_invalid_scope`. A remembered or trusted client is asked again when it requests more than the person allowed.
+- **A grant's scope doesn't change.** Signing the app in with another scope replaces the grant: its tokens and pending codes are revoked (reason `scope_changed`).
+- **Refresh** accepts an omitted scope or the same scope only.
+- **The token response** carries `scope` when the grant is restricted (an empty string when it denies every tool) and omits it when unrestricted.
 
 ## Clients
 
@@ -57,13 +73,15 @@ Per client address, shared by every replica: 60 a minute on authorize, token and
 
 ## Audit
 
-`oauth.client_register`, `oauth.consent` (with `how`: `allowed` or `trusted`), `oauth.grant_confirmed` (a trusted loopback client's first sign-in, confirmed on the notice), `oauth.token_issue` and `oauth.revoke`. Never a token.
+`oauth.client_register`, `oauth.consent` (with `how`: `allowed` or `trusted`, and the grant's tool scope), `oauth.grant_confirmed` (a trusted loopback client's first sign-in, confirmed on the notice), `oauth.token_issue` and `oauth.revoke`. Never a token.
 
 ## Connecting accounts
 
 Two browser routes complete [delegated credentials](/docs/use/connecting-accounts) and sign-in to OAuth-protected MCP servers, also outside the OpenAPI document:
 
 - `/connect/{provider}?request=…`: the web app's confirm page for a consent link;
-- `GET /connect/callback`: the redirect URI registered at every auth provider and OAuth-protected server, `<APP_URL>/connect/callback`. It always answers `303`, to the request's return path or to `/connect/done`.
+- `GET /connect/callback`: the redirect URI registered at every auth provider and OAuth-protected server, `<APP_URL>/connect/callback`. It always answers `303`, to the request's return path or to `/connect/done`. It also completes a team's [shared service connections](/docs/teams/service-connections), whose completion page is `/connect/done?context=service`.
+
+Ending a person's browser sessions cancels their connect flows still in progress, and a person suspended while a flow waited can't complete it.
 
 The portal's own client metadata document for OAuth-protected MCP servers is served at `/oauth/upstream-client-metadata.json`.

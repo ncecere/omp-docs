@@ -15,7 +15,7 @@ Always on. Values that look like these are replaced with `[REDACTED]` in every r
 |---|---|
 | `bearer` | `Bearer <token>` |
 | `jwt` | JSON Web Tokens (`eyJ…`) |
-| `gateway_credentials` | Open MCP Portal's own keys and tokens (`omp_`, `omp_sa_`, `ompat_`, `omprt_`, `ompac_`) |
+| `gateway_credentials` | Open MCP Portal's own keys and tokens (`omp_`, `omp_sa_`, `ompat_`, `omprt_`, `ompac_`), automation tokens (`ompadm_`, `omppub_`), provisioning tokens (`ompscim_`), webhook signing secrets (`ompwhs_`), and the prefixes the product used before its rename |
 | `github` | GitHub tokens (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`) |
 | `gitlab` | GitLab personal access tokens (`glpat-`) |
 | `slack` | Slack tokens (`xoxa-`, `xoxb-`, `xoxp-`, `xoxr-`, `xoxs-`) |
@@ -42,4 +42,8 @@ Patterns apply to calls recorded from then on (every replica within 30 seconds);
 
 **Test redaction** takes a sample (JSON, as a tool call's arguments or result, or plain text) and shows what a recording would keep, which rules matched, and whether it would be cut to 16 KiB. It uses the patterns on the page, including unsaved changes. The sample isn't stored or logged.
 
-Each part of a recording (arguments, result) is cut to 16 KiB after redaction. Recordings are encrypted with `ENCRYPTION_KEY`. The metric `omp_payload_redactions_total` counts redactions by rule; `omp_payload_capture_errors_total` counts recordings that failed (a failed recording never fails the call).
+Each part of a recording (arguments, result) is cut to 16 KiB after redaction. For [MCP tasks](/docs/server-authors/tasks), the call that creates the task is recorded like any call, but the task's result and its lifecycle messages never are. Recordings are encrypted with `ENCRYPTION_KEY`. The metric `omp_payload_redactions_total` counts redactions by rule; `omp_payload_capture_errors_total` counts recordings that failed (a failed recording never fails the call).
+
+## Approval previews
+
+The argument preview a reviewer sees for an [approval](/docs/administer/approval-rules) is redacted whether or not recording is on: with the built-in rules, the sensitive member names, your patterns on this page and the call's known credential values. On top of that, any string that looks like JSON is masked in full. The preview is then cut to 16 KiB and encrypted, and it is cleared within 24 hours after the request ends.

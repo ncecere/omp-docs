@@ -10,21 +10,26 @@ Platform roles don't reach into teams' content: a platform admin uses a team's g
 <Cards>
   <Card title="Overview" href="/docs/administer/overview">What needs attention across the platform, and the last day's calls and errors.</Card>
   <Card title="First run" href="/docs/administer/first-run">The first platform admin, the first team and the settings to check.</Card>
-  <Card title="Users and teams" href="/docs/administer/users-and-teams">Platform roles, suspending people, creating and archiving teams, and team overrides.</Card>
+  <Card title="Users and teams" href="/docs/administer/users-and-teams">Platform roles, suspending people, their browser sessions, creating and archiving teams, and team overrides.</Card>
+  <Card title="Provisioning" href="/docs/administer/provisioning">Let your identity provider create, deactivate and delete people and map groups to team roles, through SCIM 2.0.</Card>
   <Card title="Catalog review" href="/docs/administer/catalog-review">Approving servers and changed capabilities for the company catalog.</Card>
   <Card title="Publishing policy" href="/docs/administer/publishing-policy">Approval required or self-publish, and per-team overrides.</Card>
+  <Card title="Server governance" href="/docs/administer/governance">Re-review intervals by sensitivity, servers that need an owner or a label, and moving a server between teams.</Card>
   <Card title="Internal networks" href="/docs/administer/internal-networks">Which internal networks and hosts MCP servers may use.</Card>
+  <Card title="Approval rules" href="/docs/administer/approval-rules">Require a person to approve exact tool calls through platform gateways.</Card>
   <Card title="Platform gateways" href="/docs/administer/platform-gateways">Gateways shared with teams, people and SSO groups.</Card>
+  <Card title="Access requests" href="/docs/administer/access-requests">Let people find a platform gateway and ask for access, with stewards who decide.</Card>
   <Card title="Trusted clients" href="/docs/administer/trusted-clients">MCP clients that skip the consent screen.</Card>
-  <Card title="Agent platforms" href="/docs/administer/agent-platforms">Trusting Pi Durable Platform to name the person an agent acts for, relay accounts and the limits.</Card>
-  <Card title="Auth providers" href="/docs/administer/auth-providers">OAuth apps for tools that act as the person calling.</Card>
+  <Card title="Auth providers" href="/docs/administer/auth-providers">OAuth apps for tools that act as the person calling, and teams' shared service connections.</Card>
+  <Card title="Automation tokens" href="/docs/administer/automation-tokens">Platform tokens for CI and scripts that call the management API.</Card>
   <Card title="Audit log" href="/docs/administer/audit-log">Every administrative change and sign-in.</Card>
   <Card title="Usage and calls" href="/docs/administer/usage-and-calls">Calls through every gateway, and the usage dashboard.</Card>
-  <Card title="Notifications" href="/docs/administer/notifications">The inbox, email and webhooks: the eight events, who gets them, and signed JSON.</Card>
-  <Card title="Automation tokens" href="/docs/administer/automation-tokens">Platform tokens for CI and scripts that call the management API.</Card>
-  <Card title="Limits" href="/docs/administer/limits">Rate limits on gateways: defaults, ceilings and team overrides.</Card>
+  <Card title="Notifications" href="/docs/administer/notifications">The inbox, email and webhooks: the 15 events, who gets them, and signed JSON.</Card>
+  <Card title="Limits" href="/docs/administer/limits">Rate limits on gateways and upstream servers: defaults, ceilings and team overrides.</Card>
   <Card title="Retention" href="/docs/administer/retention">How long call records, contents, the audit log and usage are kept.</Card>
   <Card title="Payload capture" href="/docs/administer/payload-capture">Redaction rules and patterns for recorded call contents.</Card>
 </Cards>
+
+The admin sidebar groups these pages as **People** (Users, Teams, Provisioning), **Catalog** (MCP servers, Publishing, Internal networks), **Access** (Approval rules, Gateways, Trusted clients, Auth providers, Automation tokens), **Records** (Audit log, Calls, Usage) and **Operations** (Limits, Retention, Payload capture, Notifications).
 
 Settings that must exist before the database is read (addresses, sign-in, keys) are environment variables; see [Configuration](/docs/operate/configuration).

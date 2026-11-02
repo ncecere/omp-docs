@@ -1,0 +1,87 @@
+---
+title: Server governance
+description: "The platform side of server governance in Open MCP Portal: re-review intervals by sensitivity, servers that need an owner or a label, gateway sensitivity ceilings, retirement, and moving a server between teams."
+---
+
+Every MCP server in Open MCP Portal has governance data: an accountable **owner**, an **on-call contact**, a **sensitivity** label, a **lifecycle** (active, deprecated or sunset) and the dates of its last and next review. Teams' owners and admins set these on the server's **Governance** card; see [Server governance](/docs/teams/server-governance) for the team side. This page is for platform admins: how often published servers are reviewed again, what shows up when governance is missing, the ceilings on platform gateways, and moving a server to another team when its team can't.
+
+Governance arrived in v0.10.0. Servers that existed before start with no owner and an unconfirmed label, so expect [attention items](#what-needs-attention) after the upgrade.
+
+<Callout type="warn" title="Drain older replicas first">
+Replicas older than v0.10.0 ignore gateway ceilings, sunset dates, transfers and review intervals. Finish the rollout to every serving and background-worker replica before you rely on them. See [Migrations and upgrades](/docs/operate/migrations-and-upgrades).
+</Callout>
+
+## Re-review intervals
+
+**Admin › Publishing** has a **Server reviews** card: "How often a published server is reviewed again, by sensitivity. A server's next review is counted from its last approval; 0 means never."
+
+<Screenshot slot="admin-governance" />
+
+| Field | Default |
+|---|---|
+| **Public servers** | 0 (never) |
+| **Internal servers** | 0 (never) |
+| **Confidential servers** | 180 days |
+| **Restricted servers** | 90 days |
+| **Send overdue servers back to review** | Off |
+
+Each value is a whole number of days between reviews, 0 to 3,650. **Save review settings** saves them, separately from the publishing policy on the same page, and every published server's next review is counted again from its last approval. Platform admins change the card; auditors read it. Changes are audited as `settings.governance_update`.
+
+What an overdue review does:
+
+- **Always:** the server's team owners and admins and its named owner get `server.review_due`, once per due date, and the server appears as **review overdue** in the team's and the platform's [attention lists](/docs/administer/overview). With the switch off, that is all: the server stays published.
+- **With Send overdue servers back to review on:** a server whose team is under **Approval required** also goes back to the [review queue](/docs/administer/catalog-review), with the reason `review_due`, and leaves the catalog until a platform admin approves it, like any server sent back to review.
+
+Nothing is ever made private, disabled or deleted automatically.
+
+Every approval stamps the server's last review: publishing under **Self-publish**, a platform admin's approval, and a re-review. A team asks for a re-review with **Ask for a review** on the server's Governance card (under **Self-publish**, **Confirm the review**, which is audited as `mcp_server.review_confirm`). A platform admin can also approve an overdue published server in place through the management API, with the usual [review digest](/docs/administer/catalog-review#scripts-that-approve).
+
+## Sensitivity
+
+The labels are **Public**, **Internal**, **Confidential** and **Restricted**. A server nobody labelled is **Internal**, and stays marked unconfirmed until an owner or admin of its team confirms a label. Only team owners and admins set or confirm labels, in a browser session; platform admins don't, and automation tokens can't.
+
+- **Raising** the label of a published server sends it back to review under **Approval required**, with the reason `sensitivity_raised`. Lowering it never does.
+- The review digest covers the label and the lifecycle, so a review opened before either changed is refused as "changed since review".
+
+### Gateway ceilings
+
+Every gateway has a **Sensitivity ceiling** on its **Settings** tab: **Highest label served**. The default, **Restricted (no ceiling)**, serves everything. A server above a gateway's ceiling is never served through it, and shows on the gateway's Capabilities tab as unavailable with the reason (`sensitivity_exceeds_gateway`). Platform admins set the ceiling of [platform gateways](/docs/administer/platform-gateways); teams set their own gateways'. Automation tokens can't set it.
+
+Lowering a ceiling takes effect when you save: "Tools may disappear for everyone who uses this gateway."
+
+## Deprecated and sunset servers
+
+A team can mark its server **deprecated**, with an optional sunset date and replacement server. A deprecated server is still served, with a banner, and the owners and admins of the team of every gateway that selects it get `server.deprecated` (platform admins, for a platform gateway). Within 14 days of the sunset date, `server.sunset_soon` goes to the server's team and to the same gateway owners. From the sunset date on, the server is **sunset**: unavailable through every gateway, with the reason `sunset`.
+
+## What needs attention
+
+| Item | Listed when | Where |
+|---|---|---|
+| **Review overdue** (`review_due`) | A published server's next review date has passed | Admin overview and the team's attention card |
+| **Nobody accountable** (`server_ownerless`) | A published server has no owner, or its owner left the team, lost the editor role, or was suspended or deleted | Admin overview and the team's attention card |
+| **Sensitivity not confirmed** (`server_unlabelled`) | A published server's label was never confirmed. Information only: nothing is blocked | Admin overview and the team's attention card |
+| **Server transfer waiting** (`server_transfer_pending`) | Another team offered this team a server | The receiving team's owners only |
+
+One replica runs the governance loop every 5 minutes. It sends `server.review_due`, `server.sunset_soon` and `server.deprecated` (inbox and email only, never webhooks) and, when the switch is on, returns overdue servers to review. Each notice is sent once, even across replicas and retries. See [Notifications](/docs/administer/notifications).
+
+## Moving a server to another team
+
+Normally a team offers its server, and the receiving team's **owner** accepts it ([Transfers](/docs/teams/server-governance#transfers)). When the old team can't (it is gone, or nobody can answer), a platform admin can **force** the move over the API:
+
+```http
+POST /v1/admin/mcp-servers/{serverId}/transfer
+If-Match: "<the server's revision>"
+
+{ "toTeam": "data-platform", "note": "Support Tools was dissolved" }
+```
+
+- `toTeam` is the receiving team's slug or ID; it must exist, be active and differ from the current team (`422 invalid_team`).
+- Any open offer is cancelled. The server has **no owner** afterwards and shows in the receiving team's attention list until one is named.
+- Its capabilities, gateway selections and grants, people's permissions and keys for it, its stored credential and its [approval rules](/docs/administer/approval-rules) move with it. Under the receiving team's **Approval required**, a published server goes back to review with the reason `transferred`.
+- It is refused (`422 provider_not_allowed`) if the server requires a restricted [auth provider](/docs/administer/auth-providers#who-may-use-a-provider) whose access list covers neither the receiving team nor the server.
+
+There is no button for it in the web app. It needs a platform admin's browser session (an automation token can't), and is audited as `mcp_server.transfer` with the kind `forced`. See the [API reference](/docs/api/reference/admin/adminForceTransferMcpServer).
+
+## Over the API
+
+`GET` and `PUT /v1/admin/settings/governance` read and change the review intervals and the switch ([reference](/docs/api/reference/admin/adminGetGovernanceSettings)), with the settings' own revision in `If-Match`. Platform tokens can't use them, and no automation token can write governance, a gateway's ceiling or a transfer. The [`omp` CLI](/docs/api/cli) only compares governance in its plans and refuses to change it.

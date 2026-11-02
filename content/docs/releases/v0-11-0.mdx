@@ -1,0 +1,59 @@
+---
+title: v0.11.0
+description: "Open MCP Portal v0.11.0 (2026-10-31): API keys and personal connections recheck the person and session before they are saved, a shared secret-rule registry, and a GitHub Action for deploying servers. No migrations."
+---
+
+**Released 2026-10-31.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.11.0) · image `ghcr.io/ncecere/open-mcp-portal:v0.11.0` · no migrations (the schema stays at `00050`).
+
+The first release of the v0.11 line, after [v0.10.1](/docs/releases/v0-10-1): hardening of the last step of creating personal credentials, and a GitHub Action that registers a server on deploy. **No API, setting or schema change.** Upgrading from v0.10.x is an image swap.
+
+## What changed
+
+- **API keys recheck the person.** Creating an API key now checks that the person is still active after waiting for their account record. A request that started before an admin suspended them no longer gets a key. See [API keys](/docs/use/api-keys).
+- **Personal connections recheck the session.** When a provider sends a person back after they connect an account, the portal checks that the same person and browser session are still signed in before it saves the tokens. Signing out, being suspended, or the session expiring or going idle during the connect ends it on the usual **This attempt expired** page, and the person starts again. The one-time code is never reused. See [Connecting accounts](/docs/use/connecting-accounts).
+- **A GitHub Action for deploying servers** (#47, first part). `integrations/github-action/` in the repository is a Linux composite Action that uses the `omp` command line with an automation token: it installs a pinned `omp` release after checking its checksum and signature, imports one server, tests and refreshes it, and fails or warns when publication is still waiting for review. It can't widen a token's scopes or write governance, curation or ceilings. It isn't published as its own repository: pin it to a commit you have reviewed. See [GitHub Action](/docs/api/github-action).
+- **Smaller:** the rules that redact secrets from recorded payloads now live in one shared registry (#71), with unchanged output; a patched API-generator dependency (minimatch 11.0.1).
+
+## Upgrading
+
+1. Pin the new image (verify its signature first, see [The image](#the-image)). No migration runs.
+2. Drain older replicas to get the new checks everywhere: an older replica keeps the earlier behaviour for key creation and connect callbacks.
+
+[Upgrading from v0.10.1](/docs/operate/migrations-and-upgrades#upgrading-from-v0101) has the same points with the details.
+
+## Verification
+
+The release, its image and the six command-line binaries were tested and independently verified; the [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.11.0) and the [release notes](https://github.com/ncecere/open-mcp-portal/blob/v0.11.0/docs/releases/v0.11.0.md) record how.
+
+## Known limitations
+
+Carried over from [v0.10.1](/docs/releases/v0-10-1) unless marked new:
+
+- **The Action hasn't run in a hosted runner (new).** Its contract tests and a run against a real portal passed; it isn't published as its own repository.
+- **No Terraform provider (new).** The rest of #47 is not built.
+- **A busy account means a new consent (new).** If the person's account or session is being changed at the same moment, the connect ends and they start again rather than wait.
+- **Contacts are plain text;** the command line has no sign-in and only its Linux build has been run; some imports aren't atomic.
+- **Not run against real clients and providers.** A pilot with a real team is still open.
+- Remote servers only (no stdio); development software that has not run in production.
+
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.11.0` is signed with cosign keyless signing by the repository's `image.yml` workflow. Its digest is:
+
+```text
+sha256:1dc3b19d2d13546064165ed860ef07afd94d3e773d77a411132ffdc4a77a1a13
+```
+
+Check the signature with **cosign v3.0 or newer**, then pin the image by that digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:1dc3b19d2d13546064165ed860ef07afd94d3e773d77a411132ffdc4a77a1a13 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.11.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+The `omp` binaries are signed by the same workflow; [The omp command line](/docs/api/cli) shows how to check one with `cosign verify-blob`. See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/open-mcp-portal/issues](https://github.com/ncecere/open-mcp-portal/issues) (there is a form for each kind) or ask in [Discussions](https://github.com/ncecere/open-mcp-portal/discussions). Report security problems privately, as [`SECURITY.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.11.0/SECURITY.md) describes.

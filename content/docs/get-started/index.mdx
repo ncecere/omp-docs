@@ -5,7 +5,7 @@ description: A self-hosted place where a company's teams register their MCP serv
 
 Open MCP Portal is an open-source portal to the [Model Context Protocol](https://modelcontextprotocol.io) (MCP) servers a company runs. Teams register the remote MCP servers they build. The portal reads what each server offers (its tools, resources and prompts), keeps an eye on its health and, after review, lists it in a company **catalog**. Teams and platform admins then curate **gateways**: chosen tools from one or several servers, served at one address, `/mcp/{slug}`.
 
-People connect an AI client such as Claude Code, VS Code or Cursor to a gateway and sign in with their company account. Headless agents, CI jobs and scripts use API keys. Either way, each caller sees only what they may use, and every call is checked again before it is forwarded. Every forwarded call carries a short-lived token, signed by the portal, that tells the MCP server who is calling (a server's team can turn that off for servers run outside the company). The caller's own credential never reaches the server.
+People connect an AI client such as Claude Code, VS Code or Cursor to a gateway and sign in with their company account. Headless agents, CI jobs and scripts use API keys, preferably a team service account's. Either way, each caller sees only what they may use, and every call is checked again before it is forwarded. Every forwarded call carries a short-lived token, signed by the portal, that tells the MCP server who is calling (a server's team can turn that off for servers run outside the company). The caller's own credential never reaches the server.
 
 <Screenshot slot="my-gateway-connect" />
 
@@ -27,6 +27,9 @@ People connect an AI client such as Claude Code, VS Code or Cursor to a gateway 
   <Card title="Tools that act as you" href="/docs/use/connecting-accounts">
     A tool can use the caller's own GitHub, Google or other OAuth account. The portal asks for consent once per server, keeps and refreshes the token, and sends it only to servers the person allowed.
   </Card>
+  <Card title="Governed tool use" href="/docs/use/approvals">
+    Teams classify their tools as read, write or destructive. Keys and apps can be limited to a tool scope, a gateway can rename and constrain tools, sensitive calls can wait for a person's approval, and people can ask for access to a gateway.
+  </Card>
   <Card title="Records and limits" href="/docs/administer/usage-and-calls">
     Call records, usage dashboards, an audit log, rate limits shared by every replica, retention, and opt-in recording of call contents with secrets redacted.
   </Card>
@@ -34,7 +37,7 @@ People connect an AI client such as Claude Code, VS Code or Cursor to a gateway 
 
 ## How it is built
 
-Open MCP Portal is one Go binary, `open-mcp-portal`, in one container image. It serves the web app, the management API (`/v1/*`), the MCP endpoints (`/mcp/{slug}`), the OAuth endpoints for MCP clients, and health checks. It is stateless: several replicas can share one **PostgreSQL** database, which holds everything, including rate-limit counters. There is no cache, queue or object storage to run. Sign-in uses your OpenID Connect identity provider. See [Operate](/docs/operate).
+Open MCP Portal is one Go binary, `open-mcp-portal`, in one container image. It serves the web app, the management API (`/v1/*`), the MCP endpoints (`/mcp/{slug}`), the OAuth endpoints for MCP clients, and health checks. It is stateless: several replicas can share one **PostgreSQL** database, which holds everything, including rate-limit counters. There is no cache, queue or object storage to run. Sign-in uses your OpenID Connect identity provider. A second, separate binary, the `omp` command line, lets CI register and publish a team's servers with a token. See [Operate](/docs/operate) and [The omp CLI](/docs/api/cli).
 
 MCP servers stay where their teams run them. The portal reaches them over Streamable HTTP, through an address guard that allows public addresses and only the internal networks a platform admin has allowed. It doesn't host or run MCP servers, and it isn't an LLM gateway: it doesn't call models.
 
@@ -44,6 +47,7 @@ MCP servers stay where their teams run them. The portal reaches them over Stream
 |---|---|
 | Someone who uses gateways from an AI client | [Connect your AI client](/docs/get-started/connect-your-client), then [Use](/docs/use) |
 | A developer calling tools from your own agent | [Use from your own agents](/docs/get-started/use-from-your-agents) |
+| Someone named to approve tool calls or review gateway access | [Approving tool calls](/docs/use/approvals) and [Requesting gateway access](/docs/use/access-requests) |
 | A team owner, admin or editor registering servers and building gateways | [Teams](/docs/teams) |
 | A platform admin or auditor | [Administer](/docs/administer) |
 | An operator installing and running it | [Operate](/docs/operate) |
@@ -54,8 +58,8 @@ To see it working first, [try it locally](/docs/get-started/try-it-locally) with
 
 ## Project status
 
-Open MCP Portal is **pre-1.0 development software**. These docs describe **v0.3.2** (2026-10-20). See [Releases](/docs/releases). In short:
+Open MCP Portal is **pre-1.0 development software**. These docs describe **v0.13.1** (2026-11-01). See [Releases](/docs/releases). In short:
 
 - The management API may change between releases before 1.0. The MCP endpoint follows the MCP specification.
-- The container image is published as `ghcr.io/ncecere/open-mcp-portal:v0.3.2` and signed with cosign. See [Install with Docker Compose](/docs/operate/compose).
-- Some flows have been tested against fakes and not yet against every real client and provider; the [release notes](/docs/releases/v0-3-2#known-limitations) list what wasn't verified.
+- The container image is published as `ghcr.io/ncecere/open-mcp-portal:v0.13.1` and signed with cosign. See [Install with Docker Compose](/docs/operate/compose). The `omp` CLI binaries (`omp-<tag>-<os>-<arch>`) are release assets too, each with a cosign bundle.
+- Some flows have been tested against fakes and not yet against every real client and provider; the [release notes](/docs/releases/v0-13-1) list what wasn't verified.

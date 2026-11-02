@@ -1,6 +1,6 @@
 ---
 title: Keys for servers
-description: Some MCP servers want your own API key or token. Where to paste it once, who can use it, how to let your agents use it, what to do when a server refuses it, and what nobody can see.
+description: Some MCP servers want your own API key or token. Where to paste it once, who can use it, what to do when a server refuses it, and what nobody can see.
 ---
 
 Some MCP servers don't sign you in with OAuth; they want **your own API key or token**, such as a personal key from the service's settings page. A team can set a server up so that each person pastes their own key into Open MCP Portal once. The portal then sends your key, and only yours, with your calls to that server. Your AI client and its model never see it.
@@ -26,13 +26,9 @@ Account › **My connections** › **Keys for servers** lists the servers where 
 - **A key belongs to one server's address.** If the team moves the server to another origin (scheme, host or port), or changes where the key goes (for example from a header to a query value), everyone's keys for it are deleted and you are asked again. A change that only touches the path keeps them.
 - **Rejected keys.** If the server answers a call with `401` or `403`, your key is marked **rejected**: it isn't sent again, nothing is retried, and you are asked to enter it again. A `403` that is only a permission problem on one tool does the same, so enter the key again once the permission is fixed.
 - **Remove** a key to stop it being used. Platform admins can also remove anyone's key (never read it).
-- **Suspension** keeps your keys but blocks every call you make; reactivating restores them. Deleting your account deletes them.
+- **Suspension** keeps your keys but blocks every call you make; reactivating restores them. Deleting your account, including a deletion by your company's directory, deletes them.
 
 Only the person who entered a key can use it. A key is never shared with your team, and **a service account has no key**: its calls to such a server are refused (`-32010`, reason `service_account`).
-
-## Let my agents use this key
-
-An AI agent acting for you through an [agent platform](/docs/administer/agent-platforms) uses your key only if you switch on **Let my agents use this key** for that server. It is **off by default**. With it off, or with no key entered, the agent's call is refused with a tool error that names where to go (Account › My connections); it **never gets a link**, because an agent can't open one. Switch it off, or remove the key, to stop agents using it. Until then, an agent platform you allowed keeps using your key.
 
 ## If you are an editor: use my key to read this server's capabilities
 
@@ -45,8 +41,8 @@ That key is used only for those reads, and only while you are an active editor o
 - It is **sealed** with the installation's `ENCRYPTION_KEY`, per person and server. It isn't returned by any API, and it isn't written to logs, the audit log, call records, recorded call contents, health messages, errors or traces. A server that echoes it back has it removed from the answer, in its plain, prefixed and URL-encoded forms.
 - **A query key travels in the URL.** If the team chose a query value, the server and any proxy in between may log the address. The page you paste into says so.
 - **A key is as safe as the server that receives it.** It goes in the clear to that server (over TLS).
-- Every change you make is in the audit log (`person_secret.create`, `.rotate`, `.revoke` and `.agents_update`, naming you, the server and its origin, never the key).
-- No automation token, API key, service account or agent can enter, read or remove a key: these actions work only in your browser session.
+- Every change you make is in the audit log (`person_secret.create`, `.rotate` and `.revoke`, naming you, the server and its origin, never the key).
+- No automation token, API key or service account can enter, read or remove a key: these actions work only in your browser session.
 
 ## Not covered
 

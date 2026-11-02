@@ -59,6 +59,8 @@ What hasn't changed: the connection is still one token per person and provider, 
 
 Every provider is either **open** or **restricted**. This is the **Access** tab on a provider's page (platform admins change it; auditors read it).
 
+<Screenshot slot="admin-auth-provider-access" />
+
 - **Restricted**: only servers of the **teams** you list, and the individual **servers** you name, may require the provider and receive people's tokens. Use a team entry for every server of a team, now and later, and a server entry for a single server whatever its team.
 - **Open to every team**: any editor of any team may require the provider on their servers. The lists are kept but not used.
 
@@ -68,7 +70,7 @@ The list is checked in three places:
 
 - **When a requirement is saved.** A team can choose, on a server or a capability, only a provider the list allows for that server or its team (`422 provider_not_allowed`); the provider picker offers only those. This applies to a provider you newly choose. A server that already requires a provider keeps it when the list stops covering it, so its other settings stay editable, but its calls are refused until the list is fixed.
 - **When a person allows a server.** On the consent link, in its callback and under [Allow servers… on My connections](/docs/use/connecting-accounts#allow-servers-from-my-connections). A server the list excludes isn't offered there and can't be allowed. If someone follows a consent link for such a server, the account is connected but nothing is allowed, and the result page says "Connected to the provider, but the server can't use it": ask a platform admin to add the team or server.
-- **On every call**, including a call an agent relays for a person. A server the list excludes gets error `-32010` with the reason `provider_not_allowed`, recorded as `denied`, with no consent link, and nothing is sent to the server. Taking a team off the list therefore stops delivery on the next call. People's connections and allowances are kept, so listing the team again restores delivery.
+- **On every call.** A server the list excludes gets error `-32010` with the reason `provider_not_allowed`, recorded as `denied`, with no consent link, and nothing is sent to the server. Taking a team off the list therefore stops delivery on the next call. People's connections and allowances are kept, so listing the team again restores delivery.
 
 A team's server in [OAuth mode](/docs/teams/register-a-server#sign-in-with-oauth-per-person) that links a platform provider's client is not gated by the list: it shares only the client, never the connections.
 
@@ -103,9 +105,23 @@ Optional, and off by default. Set `PROVIDER_REFRESH_INTERVAL` (default `0`, whic
 - Token requests are form-encoded; answers may be JSON or form-encoded. Every exchange has a 10-second limit (userinfo 5 seconds) and a 64 KiB answer limit, follows no redirects and uses no proxy.
 - Access tokens are refreshed when they expire within 60 seconds, under a database row lock so two replicas never use a rotating refresh token twice. A refused refresh marks the connection as needing to connect again; an unreachable provider answers `-32010` (`provider_unavailable`) and keeps the connection.
 - Tokens and the client secret are never returned, logged, audited, recorded in calls or captured.
+- **Disconnecting** (by the person, or by a platform admin on the person's page) deletes the connection and its tokens in the portal first, and audits it. Only then does the portal ask the provider to revoke the token, where the provider has a revocation URL. That request is best effort: if it fails, the connection stays deleted, and the outcome is recorded in a separate `provider_connection.revocation_result` entry.
 - The portal doesn't check that the provider account belongs to the person (for example by email). The account label is informational.
 
-Audit: `auth_provider.create`, `.update` (with `clientSecretChanged` and `connectionsReset`), `.access_update` (the lists before and after), `.delete`, and `provider_connection.create`, `.refresh_failed`, `.revoke`, `.server_allow` (a person allowed a server, with the server and its address), and, in the server's team log, `mcp_server.provider_grants_reset`.
+Audit: `auth_provider.create`, `.update` (with `clientSecretChanged` and `connectionsReset`), `.access_update` (the lists before and after), `.delete`, and `provider_connection.create`, `.refresh_failed`, `.revoke`, `.revocation_result`, `.server_allow` (a person allowed a server, with the server and its address), and, in the server's team log, `mcp_server.provider_grants_reset`.
+
+## Team service connections
+
+A person's connection is theirs alone, and a team's [service accounts](/docs/teams/service-accounts) never use it. When a service account's tools need an account on another service, the team's owners and admins connect a **shared** account for the team instead: a [service connection](/docs/teams/service-connections), under Team › **Service accounts** › **Connections**. They choose which of the team's service accounts use it and which servers may receive its token.
+
+What applies to it from this page:
+
+- The provider's [access list](#who-may-use-a-provider) is checked against the team of the **server that receives the token**, not the team that owns the connection.
+- A connection **lapses** while the person who connected it is suspended, deleted, or no longer an owner or admin of the team: calls that need it are refused until someone reconnects it.
+- When the provider refuses a refresh, the connection needs a new consent, and the team's owners and admins get `connection.needs_reconsent`.
+- Disconnecting it works like a person's disconnect: deleted in the portal first, then a best-effort revocation at the provider.
+
+There is no admin page for service connections. Platform admins and auditors can list their metadata (never tokens) with `GET /v1/admin/service-connections` ([reference](/docs/api/reference/service-accounts/adminListServiceConnections)), in a browser session. Changes are audited in the team's log as `service_connection.create`, `.connect`, `.reconnect`, `.update`, `.revoke`, `.refresh_failed` and `.revocation_result`.
 
 ## OAuth-protected MCP servers
 

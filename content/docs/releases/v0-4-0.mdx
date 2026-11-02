@@ -1,0 +1,74 @@
+---
+title: v0.4.0
+description: "Open MCP Portal v0.4.0 (2026-10-28): tool scopes on credentials, per-gateway tool curation, shared service connections and separate database roles. Breaking: external agent-platform trust is retired. Migrations 00029 to 00034."
+---
+
+**Released 2026-10-28.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.4.0) · image `ghcr.io/ncecere/open-mcp-portal:v0.4.0` · migrations `00029` to `00034` (`00029` to `00033` expand-only; `00034` is forward-only).
+
+The first release of the v0.4 line, after [v0.3.3](/docs/releases/v0-3-3): credentials that reach only some tools, tools a gateway can rename and pin, team-owned connections for service accounts, and a database login that can't rewrite history. **This release is breaking:** it retires the external agent-platform trust that [v0.3.0](/docs/releases/v0-3-0) added, and on Kubernetes the migration step now reads its own Secret. Read [Upgrading](#upgrading) before you pull the image.
+
+## What changed
+
+- **Breaking: external agent-platform trust is retired** (#68, decision 81). The portal is an MCP portal, not an impersonation service for external agent platforms. Removed: trusted agent platforms (the admin page and its API), relay service accounts that act as a person, **Require a present person** on servers and capabilities, **Let my agents use this key**, the `act` claim in the identity token and the `omp_agent_token_total` metric. Migration `00034` disables trusted platforms and every relay account and revokes their keys; former relay accounts show as **Retired** and are read-only, and their history stays. An MCP request that sends `MCP-Gateway-Identity` to `/mcp/{slug}` is refused with `403`. The portal still sends that header **outbound** to servers whose credential owns `Authorization`. Ordinary MCP clients (pi included), OAuth, API keys and service accounts are unaffected. See [Agent platforms](/docs/administer/agent-platforms).
+- **Tool scopes on credentials** (#29). A personal API key, a service account and its keys, a gateway grant and an MCP client's OAuth grant can each be limited to tool classes (read, write, destructive) or to exact tool names. Every layer applies: a scope only narrows what the owner may already use. Tools outside the scope are hidden from `tools/list` and refused like unknown tools; prompts and resources are unchanged. OAuth clients can ask for `omp:read`, `omp:write` and `omp:destructive`, and the consent page can narrow the grant; a refresh never widens it. See [Tool scopes](/docs/use/tool-scopes).
+- **Per-gateway tool curation** (#30). For a tool selected in a gateway, the team can give it another name and description, fix argument values (and hide them from the client) and narrow the input schema the client sees. The approved definition is kept unchanged beside it; when the server's definition changes, the curation stops applying and the call fails closed until someone updates it. See [Curating gateway tools](/docs/teams/curating-gateway-tools).
+- **Shared service connections** (#26). Team owners and admins can connect an upstream account (a provider token or a server sign-in) for the team's service accounts, separately from anyone's personal connections. They choose which service accounts use it and which servers, origins and scopes it may reach. A person's own call never borrows a shared account. See [Service connections](/docs/teams/service-connections).
+- **Separate owner and runtime database roles** (#44). `DATABASE_MIGRATE_URL` runs migrations as the schema owner; `DATABASE_URL` can then use a runtime role (`DB_RUNTIME_ROLE`) that can't change or delete the append-only audit and call tables. `DB_REQUIRE_SPLIT_ROLES=true` makes the split mandatory and turns doctor's `postgres roles` check into a failure. Retention deletes through narrow owner functions. On Kubernetes, the `migrate` init container reads `DATABASE_MIGRATE_URL` from the new `open-mcp-portal-migrate` Secret and no longer reads the runtime Secret. See [Database roles](/docs/operate/database-roles).
+
+## Upgrading
+
+1. **Back up first**, the database together with `ENCRYPTION_KEY` and `API_KEY_PEPPER`. Pin the new image (verify its signature first, see [The image](#the-image)).
+2. **On Kubernetes, create the `open-mcp-portal-migrate` Secret before you roll out.** The init container reads `DATABASE_MIGRATE_URL` from it; without a database URL, migration fails and the new pods don't start. For a single-role install, put the same owner URL you use in `DATABASE_URL`:
+
+   ```sh
+   kubectl -n open-mcp-portal create secret generic open-mcp-portal-migrate \
+     --from-literal=DATABASE_MIGRATE_URL='postgres://omp:<password>@db.example.com:5432/omp?sslmode=require'
+   ```
+
+   Never put the owner URL in the serving container, even to get past a readiness failure. See [Install on Kubernetes](/docs/operate/kubernetes).
+3. **Replace relay callers before you upgrade.** Calls on a relay account stop working, with or without an identity header. A person connects through normal OAuth or their own API key; a machine gets a **new ordinary service account and key**, with grants and scopes you review. Don't clear an old relay mark to reuse its authority.
+4. The init container applies `00029` to `00034`. **`00034` is forward-only**: its down migration restores no trust and no keys, so don't go back to an image that accepts external identity. Restoring a backup taken before the upgrade restores the old exposure too.
+5. Remove retired API calls and fields from your scripts (the agent-platform endpoints and the capability `present-person` endpoint are gone, and removed fields are rejected). Check any server that expected an `act` claim. If one portal is registered as a server on another, switch **Send identity token** off on that registration and give it an ordinary MCP credential: the portal behind it now refuses the header.
+6. **Finish the rollout before you rely on scopes, curation or shared connections.** Existing credentials start unrestricted and no tool is curated, and an older replica doesn't enforce any of it.
+7. **Classify tools before you switch credentials to read-only:** a read-only scope excludes unclassified tools unless a name allows them. Exact names are the names the gateway exposes, after curation, so renaming a tool can stop a named scope from matching.
+8. Separate database logins are optional. To adopt them, follow [Database roles](/docs/operate/database-roles): migrate as the owner with `DB_RUNTIME_ROLE` set, then give the serving replicas only the runtime URL.
+
+[Upgrading from v0.3.3](/docs/operate/migrations-and-upgrades#upgrading-from-v033) has the same points with the details.
+
+## Verification
+
+The release was tested in both database-role modes and its published image signed and verified; the [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.4.0) and the [release notes](https://github.com/ncecere/open-mcp-portal/blob/v0.4.0/docs/releases/v0.4.0.md) record how.
+
+## Known limitations
+
+Carried over from [v0.3.3](/docs/releases/v0-3-3) unless marked new:
+
+- **Scopes and curation don't ask anyone before a call (new).** Approval of sensitive calls came in [v0.5.0](/docs/releases/v0-5-0).
+- **An owner login is still all-powerful (new).** Split roles protect the history from the runtime credential, not from someone holding the owner URL.
+- **The agent-platform follow-ups were withdrawn, not verified (new).** Binding agent tokens to a gateway (#62) and a live platform run (#63) were closed as not planned.
+- **A class is the team's assertion.** The portal doesn't verify what a tool really does.
+- **Client certificates aren't used for the OAuth metadata and token endpoints.** A server in per-person OAuth mode behind a private CA can't be set up yet.
+- **Not run against real clients and providers.** VS Code, Cursor, a real Google or Microsoft provider, a Slack webhook, a mail server and a pilot with a real team are still open.
+- Remote servers only (no stdio); development software that has not run in production.
+
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.4.0` is signed with cosign keyless signing by the repository's `image.yml` workflow. Its digest is:
+
+```text
+sha256:7610c003c56d92e460c504b9752d91e89b75c7006630ca0e2b8d5c235d57a016
+```
+
+Check the signature with **cosign v3.0 or newer**, then pin the image by that digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:7610c003c56d92e460c504b9752d91e89b75c7006630ca0e2b8d5c235d57a016 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.4.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/open-mcp-portal/issues](https://github.com/ncecere/open-mcp-portal/issues) (there is a form for each kind) or ask in [Discussions](https://github.com/ncecere/open-mcp-portal/discussions). Report security problems privately, as [`SECURITY.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.4.0/SECURITY.md) describes.

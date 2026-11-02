@@ -8,33 +8,36 @@ description: Pull and verify the Open MCP Portal image, try the demo, and run a 
 Each release publishes a multi-arch (linux/amd64, linux/arm64) image to GitHub's container registry, tagged with the release:
 
 ```sh
-docker pull ghcr.io/ncecere/open-mcp-portal:v0.3.2
-docker run --rm ghcr.io/ncecere/open-mcp-portal:v0.3.2 version     # open-mcp-portal 0.3.2 (<commit>)
+docker pull ghcr.io/ncecere/open-mcp-portal:v0.13.1
+docker run --rm ghcr.io/ncecere/open-mcp-portal:v0.13.1 version     # open-mcp-portal 0.13.1 (<commit>)
 ```
 
-The digest of the v0.3.2 image is:
+The digest of the v0.13.1 image is:
 
 ```text
-sha256:80ee9a1c7203ac8813597a1a218902503d08378982e08b62ba48c4084add5bd6
+sha256:cec6a9e1189845ca2f9827e972c55af20ce22de3a40645abdf3ab08a6730a453
 ```
 
 The image is scanned for known vulnerabilities before it is published, carries an SBOM and build provenance, and is signed with cosign keyless signing by the repository's `image.yml` workflow. Check the signature (use **cosign v3.0 or newer**) before you use it:
 
 ```sh
-cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:80ee9a1c7203ac8813597a1a218902503d08378982e08b62ba48c4084add5bd6 \
-  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.3.2 \
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:cec6a9e1189845ca2f9827e972c55af20ce22de3a40645abdf3ab08a6730a453 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.13.1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-Then pin the image by that digest (`ghcr.io/ncecere/open-mcp-portal@sha256:80ee9a1c7203ac8813597a1a218902503d08378982e08b62ba48c4084add5bd6`) in your Compose file, so a moved tag can't change what you run. `docker buildx imagetools inspect ghcr.io/ncecere/open-mcp-portal:v0.3.2` shows the digest a tag points to now; compare it with the one above.
+Then pin the image by that digest (`ghcr.io/ncecere/open-mcp-portal@sha256:cec6a9e1189845ca2f9827e972c55af20ce22de3a40645abdf3ab08a6730a453`) in your Compose file, so a moved tag can't change what you run. `docker buildx imagetools inspect ghcr.io/ncecere/open-mcp-portal:v0.13.1` shows the digest a tag points to now; compare it with the one above.
 
 To build the image yourself instead, from a checkout of the tag:
 
 ```sh
-git clone --branch v0.3.2 https://github.com/ncecere/open-mcp-portal
+git clone --branch v0.13.1 https://github.com/ncecere/open-mcp-portal
 cd open-mcp-portal
 make docker                         # open-mcp-portal:<git describe>
+make docker-omp                     # omp-cli:<git describe>, the omp command line (docker build --target omp)
 ```
+
+No image is published for the `omp` command line; each release attaches signed binaries instead ([The omp command line](/docs/api/cli#install)).
 
 - The image is distroless: the binary is `/open-mcp-portal` (the entrypoint) and there is no shell. Commands: `serve` (default), `migrate`, `doctor`, `rotate-keys`, `version`.
 - It runs as UID/GID 65532, listens on port 8088 (`LISTEN_ADDR`) and needs no writable filesystem.
@@ -65,7 +68,7 @@ services:
       retries: 30
 
   portal:
-    image: ghcr.io/ncecere/open-mcp-portal@sha256:80ee9a1c7203ac8813597a1a218902503d08378982e08b62ba48c4084add5bd6   # v0.3.2
+    image: ghcr.io/ncecere/open-mcp-portal@sha256:cec6a9e1189845ca2f9827e972c55af20ce22de3a40645abdf3ab08a6730a453   # v0.13.1
     command: ["serve"]
     depends_on:
       postgres:
@@ -104,11 +107,28 @@ volumes:
 Then:
 
 1. Register `https://mcp.example.com/auth/callback` as the redirect URI of the portal's client at your identity provider.
-2. Point your reverse proxy's host at port 8088, with read timeouts of a few minutes (a call can wait up to 120 seconds for its MCP server), request bodies of at least 1 MiB, and **response buffering off**: a call that asks for progress is answered as a stream of server-sent events, which a buffering proxy holds back (see [Ingress](/docs/operate/kubernetes#ingress) for the settings per proxy). Route every path to the portal, including `/mcp/`, `/oauth/`, `/connect/` and `/.well-known/`.
+2. Point your reverse proxy's host at port 8088, with read timeouts of a few minutes (a call can wait up to 120 seconds for its MCP server), request bodies of at least 1 MiB, and **response buffering off**: a call that asks for progress is answered as a stream of server-sent events, which a buffering proxy holds back (see [Ingress](/docs/operate/kubernetes#ingress) for the settings per proxy). Route every path to the portal, including `/mcp/`, `/oauth/`, `/connect/`, `/scim/` and `/.well-known/`.
 3. `docker compose up -d`, then `docker compose exec portal /open-mcp-portal doctor` to check everything.
 4. Sign in as the bootstrap admin and follow [First run](/docs/administer/first-run).
 
 Every setting is in [Configuration](/docs/operate/configuration). Keep the encryption key and pepper somewhere safe besides the server: see [Backups](/docs/operate/backups).
+
+### Separate database logins
+
+The file above runs the portal as the database owner, which is the single-owner setup. To keep the owner credential out of the serving container, create two PostgreSQL logins ([Database roles](/docs/operate/database-roles#set-it-up-on-a-new-database)) and change the file:
+
+- Point `database-url` at the **runtime** login (`omp_app`) and set `MIGRATE_ON_START: "false"` and `DB_REQUIRE_SPLIT_ROLES: "true"` on `portal`.
+- Put the **owner** URL (`omp_owner`) in a second secret file that only the migration run mounts, and run it once before each upgrade:
+
+```sh
+docker compose run --rm \
+  -e DATABASE_MIGRATE_URL_FILE=/run/secrets/database-migrate-url \
+  -e DB_RUNTIME_ROLE=omp_app \
+  -v "$PWD/secrets/database-migrate-url:/run/secrets/database-migrate-url:ro" \
+  portal migrate
+```
+
+`migrate` uses `DATABASE_MIGRATE_URL` and then grants the runtime role what it needs. Don't list the owner secret under the `portal` service.
 
 <Callout type="warn" title="Never reuse the demo's settings">
 Off a loopback `APP_URL`, `serve` refuses to start with the example `ENCRYPTION_KEY` or `API_KEY_PEPPER` from `.env.example`, with `DEV_AUTH=true`, or with an `http://` `APP_URL`.

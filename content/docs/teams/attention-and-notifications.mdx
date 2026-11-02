@@ -3,7 +3,7 @@ title: Team attention and notifications
 description: "The attention card on your team's page in Open MCP Portal, who gets which notification, and how owners and admins set up the team's webhooks."
 ---
 
-A team's page used to say nothing about a server that had been down since Tuesday. Since v0.2.0 it does, in two ways: an **attention card** for whoever opens the page, and **notifications** that reach people when something happens.
+Open MCP Portal tells a team what needs someone in two ways: an **attention card** on the team's page for whoever opens it, and **notifications** that reach people when something happens.
 
 ## The attention card
 
@@ -23,6 +23,11 @@ What it can list, and who sees it:
 | **Server certificate expiring** | An enabled server of the team, **published or not**, whose [mTLS client certificate](/docs/teams/register-a-server#tls-to-the-server) has expired or expires within 14 days | Information; warning within 3 days; critical once expired | Every member |
 | **Publisher tokens expiring** | The team's [publisher tokens](/docs/teams/publisher-tokens) expiring within 14 days | As above | Owners and admins |
 | **Notification failures** | The team's webhook destinations that keep failing or were stopped | Warning | Owners and admins |
+| **Review overdue** ("The review of &lt;server&gt; is overdue") | A published server is past its [periodic review](/docs/teams/server-governance#periodic-review) date | Warning | Every member |
+| **Nobody accountable** ("&lt;server&gt; has nobody accountable for it", **Choose an owner**) | A published server has no [owner](/docs/teams/server-governance#owner), or its owner left the team, lost the editor role, was suspended or deleted | Warning | Every member |
+| **Sensitivity not confirmed** ("&lt;server&gt; is published with a sensitivity label nobody has confirmed", **Confirm sensitivity**) | A published server whose [sensitivity](/docs/teams/server-governance#confirm-sensitivity) nobody on the team has confirmed | Information | Every member |
+| **Server transfers** ("N server transfers waiting for your team's owners to accept", **See transfers**) | Another team offered this team a server ([Transfers](/docs/teams/server-governance#transfers)) | Information | Owners only |
+| **Approval waiting** ("&lt;tool call&gt; needs your approval", **Review exact call**) | A tool call is waiting for a decision you may make ([Approving sensitive tool calls](/docs/use/approvals)) | Information | Only the people who may approve it |
 
 Members see what they can already open: the team's servers, review state and capability changes. Only **owners, admins and platform staff** see key and token expiries and notification problems, because only they can list those. A server's expiring client certificate is a server item, so every member sees it. Personal API keys and people's connections aren't on the team card: they belong to individuals.
 
@@ -40,10 +45,18 @@ Notifications reach people in the inbox (the bell), by email if the operator set
 | `publish.decided` | An owner or admin | A platform admin approved or rejected a server |
 | `upstream_signin.lapsed` | An owner, admin or editor | A server's setup sign-in needs a new consent |
 | `key.expiring` | An owner or admin (for the team's service account keys and publisher tokens); an owner, admin or editor (for a server's client certificate) | A key or token that lasted more than 7 days is within 7 days of expiring; or a server's mTLS client certificate expires within 14 days (`keyKind` `server_certificate`) |
+| `server.review_due` | An owner or admin, or the server's named owner | A published server's periodic review date passed. Once per due date |
+| `server.sunset_soon` | An owner or admin, or the server's named owner; and the owners of gateways that select it | A deprecated server stops being served within 14 days. Once per date |
+| `server.deprecated` | An owner or admin of a gateway that selects the server | A server one of your gateways selects was deprecated; it is still served until its sunset date |
+| `connection.needs_reconsent` | An owner or admin (for the team's [shared connections](/docs/teams/service-connections)) | A shared account stopped working and needs reconnecting |
+| `approval.requested` | A person who may approve the call | A tool call is waiting for approval. The notice links to the receipt, never its arguments |
+| `approval.decided` | The requester, or an owner or admin of the requesting service account's team | A tool-call approval was approved or denied |
+
+`server.review_due`, `server.sunset_soon` and `server.deprecated` come in the portal and by email only. Governance, approval and shared-connection notices never go to webhooks: team webhooks carry only the six events listed [below](#team-webhooks).
 
 You also get notifications about **your own** things, whatever your role: your personal API keys expiring and your connections needing a new consent. Each person turns events and channels on or off for themselves: see [Notification preferences](/docs/use/notification-preferences). Publication requests (`publish.requested`) go to platform admins, not to teams.
 
-Email goes only to your **verified** address, and only once you have signed in after the upgrade to v0.2.0. The inbox always works.
+Email goes only to your **verified** address. The inbox always works.
 
 ## Team webhooks
 

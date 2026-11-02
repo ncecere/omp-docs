@@ -1,11 +1,36 @@
 {
+  "access-request-review": {
+    "src": "/images/access-request-review.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "access-requests-discover": {
+    "src": "/images/access-requests-discover.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "access-requests-mine": {
+    "src": "/images/access-requests-mine.webp",
+    "width": 1440,
+    "height": 900
+  },
   "add-server-detect": {
     "src": "/images/add-server-detect.webp",
     "width": 1440,
     "height": 900
   },
+  "admin-approval-rules": {
+    "src": "/images/admin-approval-rules.webp",
+    "width": 1440,
+    "height": 900
+  },
   "admin-audit": {
     "src": "/images/admin-audit.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-auth-provider-access": {
+    "src": "/images/admin-auth-provider-access.webp",
     "width": 1440,
     "height": 900
   },
@@ -39,6 +64,11 @@
     "width": 1440,
     "height": 900
   },
+  "admin-governance": {
+    "src": "/images/admin-governance.webp",
+    "width": 1440,
+    "height": 900
+  },
   "admin-internal-networks": {
     "src": "/images/admin-internal-networks.webp",
     "width": 1440,
@@ -56,6 +86,16 @@
   },
   "admin-overview": {
     "src": "/images/admin-overview.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-provisioning": {
+    "src": "/images/admin-provisioning.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-provisioning-people": {
+    "src": "/images/admin-provisioning-people.webp",
     "width": 1440,
     "height": 900
   },
@@ -104,13 +144,48 @@
     "width": 1440,
     "height": 900
   },
+  "approval-receipt": {
+    "src": "/images/approval-receipt.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "approval-review": {
+    "src": "/images/approval-review.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "approvals-queue": {
+    "src": "/images/approvals-queue.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "approvals-requester": {
+    "src": "/images/approvals-requester.webp",
+    "width": 1440,
+    "height": 900
+  },
   "call-detail-payload": {
     "src": "/images/call-detail-payload.webp",
     "width": 1440,
     "height": 900
   },
+  "capability-classes": {
+    "src": "/images/capability-classes.webp",
+    "width": 1440,
+    "height": 900
+  },
   "catalog": {
     "src": "/images/catalog.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "catalog-deprecated": {
+    "src": "/images/catalog-deprecated.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "catalog-search": {
+    "src": "/images/catalog-search.webp",
     "width": 1440,
     "height": 900
   },
@@ -141,6 +216,11 @@
   },
   "gateway-access": {
     "src": "/images/gateway-access.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "gateway-access-requests": {
+    "src": "/images/gateway-access-requests.webp",
     "width": 1440,
     "height": 900
   },
@@ -194,6 +274,11 @@
     "width": 1440,
     "height": 900
   },
+  "oauth-consent-scope": {
+    "src": "/images/oauth-consent-scope.webp",
+    "width": 1440,
+    "height": 900
+  },
   "publish-request": {
     "src": "/images/publish-request.webp",
     "width": 1440,
@@ -201,6 +286,21 @@
   },
   "server-capabilities": {
     "src": "/images/server-capabilities.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "server-deprecated": {
+    "src": "/images/server-deprecated.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "server-endpoints": {
+    "src": "/images/server-endpoints.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "server-governance": {
+    "src": "/images/server-governance.webp",
     "width": 1440,
     "height": 900
   },
@@ -214,6 +314,11 @@
     "width": 1440,
     "height": 900
   },
+  "server-protection": {
+    "src": "/images/server-protection.webp",
+    "width": 1440,
+    "height": 900
+  },
   "server-protocol": {
     "src": "/images/server-protocol.webp",
     "width": 1440,
@@ -221,6 +326,11 @@
   },
   "server-sign-in-card": {
     "src": "/images/server-sign-in-card.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "server-transfer-incoming": {
+    "src": "/images/server-transfer-incoming.webp",
     "width": 1440,
     "height": 900
   },
@@ -239,8 +349,23 @@
     "width": 1440,
     "height": 900
   },
+  "service-connections": {
+    "src": "/images/service-connections.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "sessions": {
+    "src": "/images/sessions.webp",
+    "width": 1440,
+    "height": 900
+  },
   "sign-in": {
     "src": "/images/sign-in.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "team-approval-rules": {
+    "src": "/images/team-approval-rules.webp",
     "width": 1440,
     "height": 900
   },

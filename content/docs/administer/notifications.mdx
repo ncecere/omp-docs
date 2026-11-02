@@ -1,6 +1,6 @@
 ---
 title: Notifications
-description: "Open MCP Portal's notifications: the in-portal inbox, email through your SMTP server, and signed or Slack-compatible webhooks; the eight events, who gets them, delivery and retries, and platform webhooks."
+description: "Open MCP Portal's notifications: the in-portal inbox, email through your SMTP server, and signed or Slack-compatible webhooks; the 15 events, who gets them, delivery and retries, and platform webhooks."
 ---
 
 Open MCP Portal tells the right people when something needs them: a server is down or changed, a review is waiting or decided, a sign-in lapsed, a key is about to expire. There are three channels:
@@ -15,20 +15,27 @@ A notification never blocks or changes the thing it reports on. Everything about
 
 ## The events
 
-There are eight events. Recipients are worked out when the event is delivered, from people's **current** roles: suspended people and archived teams get nothing, and the person who caused a manual event doesn't get notified of their own action.
+There are 15 events. Recipients are worked out when the event is delivered, from people's **current** roles: suspended people and archived teams get nothing, and the person who caused a manual event doesn't get notified of their own action.
 
 | Event | Fires when | Inbox and email to | Webhooks |
 |---|---|---|---|
 | `server.unhealthy` | A server's last 3 health checks (scheduled or manual) all failed. Once per incident, then a reminder every 24 hours while it still fails | The team's owners, admins and editors | The team's; platform ones if they ask for team events |
 | `server.recovered` | The first successful check after an incident that raised `server.unhealthy` | The team's owners, admins and editors | The team's; platform ones if they ask for team events |
 | `capability.changed` | A refresh leaves a published server with changed or new capabilities that are held back from the catalog until approved | The team's owners, admins and editors | The team's; platform ones if they ask for team events |
-| `publish.requested` | A server enters review: first request, or sent back because its URL, upstream sign-in, TLS CA or requirement changed | Platform admins | Platform |
+| `publish.requested` | A server enters review: first request, or sent back because its URL, upstream sign-in, TLS CA, additional endpoints, requirement, tool classes or sensitivity changed, because it moved to another team, or because its review is overdue ([reasons](/docs/administer/catalog-review#what-comes-back-for-review)) | Platform admins | Platform |
 | `publish.decided` | A platform admin approves or rejects a server | The team's owners and admins | The team's; platform ones if they ask for team events |
-| `connection.needs_reconsent` | A person's connection to a service needs a new consent (not a server's setup sign-in) | That person | Never |
+| `connection.needs_reconsent` | A person's connection to a service needs a new consent (not a server's setup sign-in), or a team's shared [service connection](/docs/teams/service-connections) does | That person; for a service connection, the owning team's owners and admins | Never |
 | `upstream_signin.lapsed` | The setup sign-in of a Sign-in with OAuth server needs a new consent | The team's owners, admins and editors | The team's; platform ones if they ask for team events |
 | `key.expiring` | A key or token that lasted more than 7 days is within 7 days of expiring; or a server's [mTLS client certificate](/docs/teams/register-a-server#tls-to-the-server) expires within 14 days and hasn't expired yet | A personal key: the person. A service account key or publisher token: the team's owners and admins. A platform token: platform admins. A server certificate: the team's owners, admins and editors | Service account keys, publisher tokens and server certificates: the team's, and platform ones if they ask for team events. Platform tokens: platform |
+| `approval.requested` | A tool call that needs [approval](/docs/administer/approval-rules) creates a new pending request (not when an identical request is reused) | The people who may currently review it | Never |
+| `approval.decided` | A request is approved or denied | The requester; for a service account's call, its team's owners and admins | Never |
+| `access.requested` | Someone [requests access](/docs/administer/access-requests) to a gateway | Platform admins and the gateway's stewards, never the requester | Never |
+| `access.decided` | An access request is approved or denied | The requester | Never |
+| `server.review_due` | A published server's periodic [re-review](/docs/administer/governance#re-review-intervals) is overdue. Once per due date | The team's owners and admins, and the server's named owner | Never |
+| `server.sunset_soon` | A deprecated server stops being served within 14 days. Once per sunset date | The team's owners, admins and the server's named owner; and the owners and admins of each gateway that selects it (platform admins for a platform gateway) | Never |
+| `server.deprecated` | A server that a gateway selects is deprecated. Once per gateway | That gateway's team owners and admins (platform admins for a platform gateway) | Never |
 
-Personal events (`connection.needs_reconsent`, and a personal key's `key.expiring` for the person) never go to webhooks. There is no event for creating a token; creation is in the [audit log](/docs/administer/audit-log). Delivery failures aren't an event either: they show in Admin › Notifications, on the destination, and on the [overview](/docs/administer/overview).
+Personal and private events never go to webhooks: `connection.needs_reconsent`, a personal key's `key.expiring`, and the seven events added since v0.5.0 (`approval.*`, `access.*` and the three `server.*` governance events). Approval and access notices carry only the request's ID and status (and, for approvals, the tool's name), never reasons, notes, arguments or previews. There is no event for creating a token; creation is in the [audit log](/docs/administer/audit-log). Delivery failures aren't an event either: they show in Admin › Notifications, on the destination, and on the [overview](/docs/administer/overview).
 
 Each person chooses, per event and channel, what they receive: see [Notification preferences](/docs/use/notification-preferences). By default the inbox and email are both on.
 

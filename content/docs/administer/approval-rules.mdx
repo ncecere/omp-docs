@@ -1,0 +1,99 @@
+---
+title: Approval rules
+description: "Platform approval rules in Open MCP Portal: require a person to approve exact tool calls through platform gateways, who reviews, limits, privacy and the rollout caveat."
+---
+
+An **approval rule** makes certain tool calls wait for a person's approval before the portal forwards them. The approval is for one **exact call**: that tool, with those arguments, by that caller, through that gateway. It is used once. Rules never grant access to anything: a caller still needs gateway access, a credential and tool scope that allow the tool.
+
+Teams write rules for their own servers and gateways ([Approval rules for teams](/docs/teams/approval-rules)). Platform admins write rules for **platform gateways** in **Admin › Approval rules** (`/admin/approval-rules`, in the **Access** group). Approving and requesting calls is described in [Approvals](/docs/use/approvals).
+
+<Screenshot slot="admin-approval-rules" />
+
+<Callout type="warn" title="Drain older replicas before you add a rule">
+Replicas older than v0.5.0 don't know about approval rules and forward governed calls without asking. Finish the rollout to every serving replica before you enable any rule. Rolling the image back while rules are active is not a safe rollback of enforcement: remove the reliance on rules first. See [Migrations and upgrades](/docs/operate/migrations-and-upgrades).
+</Callout>
+
+## The page
+
+Platform admins see every rule in the portal, the teams' included, with a note on team-owned rules: "Open the team's Approval rules page to manage it with owner/admin membership." Platform admins can create, edit and delete only platform rules; a team's rules are changed by that team's owners and admins. Platform auditors read the page. Each rule shows whether it is enabled, its target, its revision, what it matches, its deadlines and its reviewers.
+
+## Create a rule
+
+**Create approval rule** opens the editor.
+
+**Rule and immutable target**
+
+| Field | |
+|---|---|
+| **Rule name** | Up to 200 characters |
+| **Target** | A platform gateway. Platform rules can target only platform-owned gateways. The target can't be changed after the rule is created |
+| **Enabled** | On by default |
+
+**Exactly one tool selector**
+
+| Match by | |
+|---|---|
+| **Tool classes** | **Read**, **Write** and/or **Destructive**: the [class](/docs/teams/capabilities) the server's team gave each tool. Destructive is selected by default |
+| **Specific tool capability** | One tool, by its capability UUID: a tool selected through this gateway |
+
+Unclassified tools match **destructive** rules, for approval only: their real class and how tool scopes treat them don't change.
+
+**Deadlines and reviewers**
+
+| Field | Default | Allowed |
+|---|---|---|
+| **Pending lifetime (minutes)** | 1440 (24 hours) | 5 to 1440. How long a request waits for a decision |
+| **Approved validity (minutes)** | 15 | 1 to 60. How long an approval can be used. It never goes beyond the pending request's own expiry |
+| **Approver user IDs** | Empty | Active people's UUIDs, one per line |
+| **Approver SSO groups** | Empty | Exact group names from the groups claim, one per line; case matters |
+| **Allow requesting service account's owners/admins to review** | Off | See [Who reviews](#who-reviews) |
+
+**Create rule** saves it. Every save is checked against the rule's revision: if someone else changed it first, reload and review again. Deleting a rule asks for confirmation: "Policy changes invalidate existing approvals. This does not undo an already authorized dispatch."
+
+## Which rule applies
+
+- A rule on a **server** (written by the server's team) outranks a rule on a **gateway**.
+- Within each tier, a rule for a **specific capability** outranks a **class** rule.
+- Two overlapping rules at the same priority are refused when you save.
+
+Saving, editing or deleting a rule invalidates approvals already given under the old policy; changing it back doesn't bring them back.
+
+## Who reviews
+
+- The people and SSO groups named on the rule.
+- With nobody named: the active owners and admins of the **server's** team.
+- Only when that set is empty: any platform admin other than the requester.
+- Nobody ever approves their own request. Owning or administering the gateway gives no review right.
+- For a call by a service account, that account's team owners and admins are excluded, fallback included, unless the rule switches on **Allow requesting service account's owners/admins to review**. "Off by default. This is an explicit separation-of-duties exception, not permission for human self-approval."
+- If nobody is eligible, the call is refused: it is never approved by default.
+
+Eligibility is checked again when a reviewer opens, decides and when the approval is used.
+
+## What happens to a call
+
+1. A call that matches a rule isn't forwarded. It is recorded with the outcome `needs_approval`, and the caller gets a link to the request: as `input_required` in clients that can open a URL, as a tool error with the link in other current clients, or as JSON-RPC error `-32042` in older-protocol clients.
+2. Eligible reviewers see it under **Approvals** (`/approvals`, tabs **Actionable** and **Requested**), on their [overview](/docs/administer/overview) and in a notification. The page shows a **Call receipt** and a **Redacted argument preview**, and they choose **Approve exact call** or **Deny**.
+3. When the same call is made again and matches the approval exactly while it is still valid, it is forwarded once and the approval becomes **used**.
+
+Things to know:
+
+- **Used means authorization spent, not that the tool ran.** The receipt warns: "Authorization spent — execution is not confirmed." Nothing is retried automatically.
+- **Identical requests are combined.** The same call by the same caller gets the same request, without extending its deadlines.
+- **A denial sticks.** Repeating a denied call stays denied until the requester explicitly chooses **Request new attempt** on the receipt page.
+- **At most 20 pending requests per requester.**
+- **Any change to who may do what** (a rule, a grant, a role, the server) can make an open approval stale; the reviewer is asked to reload.
+
+## Privacy and records
+
+- Previews are redacted with the built-in rules, your [redaction patterns](/docs/administer/payload-capture) and known credential values, then cut to 16 KiB and encrypted. A preview can't be read once the request has ended (denied, used, cancelled or expired), and it is cleared within 24 hours. The request's metadata is kept for 90 days.
+- Being a platform admin or auditor shows a request's metadata, never its preview: only the requester and eligible reviewers see it.
+- `approval.requested` and `approval.decided` [notifications](/docs/administer/notifications) go to the inbox and email only, never to webhooks, and carry no arguments or preview.
+- Rule changes are audited as `approval_rule.created`, `.replaced` and `.deleted`. Requests are audited as `approval_request.requested`, `.approved`, `.denied`, `.cancelled`, `.renewed`, `.expired` and `.used`, with digests and IDs, never arguments or previews.
+
+## Limits
+
+- Rules and decisions need a browser session. Automation tokens can't read or write rules or decide requests.
+- A governed call is sent only to a server's primary endpoint and isn't retried automatically. It can't continue an elicitation from the server.
+- Using an approval takes a short exclusive lock on the tables that decide access. When a concurrent change to access or database maintenance (such as `ANALYZE`) holds them, the governed call is refused rather than delayed, and nothing is spent. Keep PostgreSQL's autovacuum on.
+
+Over the API: `/v1/admin/approval-rules` ([reference](/docs/api/reference/approvals/adminListApprovalRules)).

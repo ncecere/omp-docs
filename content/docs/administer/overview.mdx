@@ -33,12 +33,17 @@ An **active** team is one that isn't archived. Archived teams' servers are unava
 | **Gateways switched off** | One item: disabled platform gateways, and disabled team gateways of active teams | Information | Gateways |
 | **Rate limited** | One item when calls were refused by a rate limit in the last 24 hours | Information | Usage |
 | **Notification failures** | One item: webhook destinations that failed repeatedly or were stopped (platform and team), plus one if an email delivery failed in the last 24 hours | Warning | Notification settings |
+| **Review overdue** | A published server of an active team whose periodic [re-review](/docs/administer/governance#re-review-intervals) is past its due date. One item per server | Warning | The server |
+| **Nobody accountable** | A published server of an active team with no accountable owner: none was named, or the owner left the team, lost the editor role, was suspended or was deleted. One item per server | Warning | The server |
+| **Sensitivity not confirmed** | A published server of an active team whose sensitivity label no owner or admin of its team has confirmed. One item per server. Nothing is blocked for it | Information | The server |
+| **Calls awaiting your approval** | One item per exact tool call that **you** may review under an [approval rule](/docs/administer/approval-rules). Never your own request, and never one that is no longer valid | Information | The approval |
+| **Gateway access requests** | One item: the [access requests](/docs/administer/access-requests) you may decide, with the count | Information | Access requests |
 
 Nothing here reaches a secret: the page shows counts, names, times and error classes. The platform's failing-server and lapsed-sign-in items cover **published** servers only; a team sees all of its own servers, published or not, on its [attention card](/docs/teams/attention-and-notifications).
 
 ## Over the API
 
-`GET /v1/admin/overview` returns the same data for scripts: counts, the 24-hour figures and the attention items, each with a one-line English `summary`, a severity, a `count` where it applies, a time and a link target. It is available to platform admins and auditors, and to a [platform token](/docs/administer/automation-tokens) with `platform:read`. It is computed per request and never cached. See the [API reference](/docs/api/reference/admin/adminGetOverview).
+`GET /v1/admin/overview` returns the same data for scripts: counts, the 24-hour figures and the attention items, each with a one-line English `summary`, a severity, a `count` where it applies, a time and a link target. It is available to platform admins and auditors, and to a [platform token](/docs/administer/automation-tokens) with `platform:read`. The approval and access-request items belong to the person looking, so a token never gets them. It is computed per request and never cached. See the [API reference](/docs/api/reference/admin/adminGetOverview).
 
 ## Notifications and the overview
 

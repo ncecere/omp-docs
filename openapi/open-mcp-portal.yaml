@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Open MCP Portal API
-  version: 0.3.2
+  version: 0.13.1
   description: 'Management API. Browser sessions authenticate with a cookie; writes need the session''s `X-CSRF-Token`
     (from `GET /v1/me`) and a same-origin `Origin`. Success responses are `{"data": ...}` and errors `{"error":
     {"code": "...", "message": "..."}}`.
@@ -56,11 +56,13 @@ tags:
   description: Hourly usage rollups of calls through gateways
 - name: notifications
   description: In-app inbox, preferences, webhook destinations and email status (docs/notifications.md)
+- name: provisioning
+  description: SCIM 2.0 directory provisioning setup (docs/scim.md, decision 92); browser session only
 - name: automation-tokens
   description: Tokens for CI and scripts that call /v1 (docs/automation-tokens.md); never valid for /mcp
-- name: agent-platforms
-  description: External agent platforms the portal trusts to name the person behind a relayed agent call, and the
-    service accounts that relay for them (docs/agent-platforms.md). Session-only; automation tokens never change or read them
+- name: approvals
+  description: Session-only sensitive tool-call approvals and rules (docs/tool-approvals.md, decision 82).
+    Rules never grant access. No automation token can use these operations.
 paths:
   /healthz:
     get:
@@ -1127,6 +1129,160 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '404':
           $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/mcp-servers/{serverId}/transfer:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    - $ref: '#/components/parameters/ServerIdParam'
+    post:
+      tags:
+      - mcp-servers
+      operationId: requestTeamMcpServerTransfer
+      summary: Ask another team to take over a server (the server's team owners and admins; browser session only)
+      description: 'Nothing moves until an owner of the receiving team accepts (acceptMcpServerTransfer). One open transfer per
+        server: 409 transfer_pending. 422 invalid_team when the receiving team does not exist, is archived or is this team;
+        422 provider_not_allowed when the server requires a restricted auth provider that lists neither the receiving team nor
+        the server (the move would stop its calls). An editor gets 403 governance_role and an automation token 403
+        token_not_allowed. Audited as mcp_server.transfer_request.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServerTransferRequest'
+      responses:
+        '201':
+          description: The open transfer
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ServerTransfer'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '422':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/mcp-server-transfers:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    get:
+      tags:
+      - mcp-servers
+      operationId: listTeamMcpServerTransfers
+      summary: A team's transfers, out of it and into it, newest first (owners and admins; platform staff read any team)
+      parameters:
+      - name: pendingOnly
+        in: query
+        required: false
+        schema:
+          type: boolean
+        description: Only the transfers still waiting for an answer
+      responses:
+        '200':
+          description: At most 100 transfers
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ServerTransfer'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/mcp-server-transfers/{transferId}:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    - $ref: '#/components/parameters/TransferIdParam'
+    delete:
+      tags:
+      - mcp-servers
+      operationId: cancelMcpServerTransfer
+      summary: Withdraw a transfer (the offering team) or decline it (the receiving team); owners and admins, browser session only
+      description: 'Moves nothing. The team in the path is the offering or the receiving one. 409 transfer_closed when it was
+        already decided; 412 when If-Match is not the transfer''s revision. Audited as mcp_server.transfer_cancel.'
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      responses:
+        '200':
+          description: The closed transfer
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ServerTransfer'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/mcp-server-transfers/{transferId}/accept:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    - $ref: '#/components/parameters/TransferIdParam'
+    post:
+      tags:
+      - mcp-servers
+      operationId: acceptMcpServerTransfer
+      summary: Accept a transfer (the receiving team's owners; browser session only)
+      description: 'The server moves to this team with its capabilities, gateway selections, people''s grants, sealed values
+        and approval rules; the accepting owner becomes its owner; under approval_required a published server goes back to review
+        (reason transferred). 403 owner_required for an admin; 409 transfer_closed (it was decided or withdrawn meanwhile);
+        409 changed_since_request (details.requestedRevision, currentRevision) when the server was edited after the request: the
+        offering team withdraws it and asks again; 412 when If-Match is not the transfer''s revision; 422 provider_not_allowed as for the request.
+        Audited as mcp_server.transfer.'
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      responses:
+        '200':
+          description: The accepted transfer
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ServerTransfer'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '422':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
   /v1/teams/{team}/mcp-servers/{serverId}/test:
     parameters:
     - $ref: '#/components/parameters/TeamParam'
@@ -1308,6 +1464,95 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '409':
           $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/mcp-servers/{serverId}/capabilities/{capabilityId}/class:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    - $ref: '#/components/parameters/ServerIdParam'
+    - $ref: '#/components/parameters/CapabilityIdParam'
+    put:
+      tags: [mcp-servers]
+      operationId: setTeamMcpCapabilityClass
+      summary: Classify a tool (team owners and admins, browser session only)
+      description: Server If-Match is required and its revision is bumped. Null clears classification. Lowering a class under approval_required resubmits a published server for review. viaSuggestion must match the current suggestion. Non-tools and gone tools cannot be classified.
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CapabilityClassInput'
+      responses:
+        '200':
+          description: Updated capability
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/McpCapability'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/mcp-servers/{serverId}/capabilities/classes:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    - $ref: '#/components/parameters/ServerIdParam'
+    put:
+      tags: [mcp-servers]
+      operationId: setTeamMcpCapabilityClasses
+      summary: Atomically classify tools (team owners and admins, browser session only)
+      description: At most 500 unique capability IDs. Server If-Match applies to the whole batch; one revision bump and no partial changes. viaSuggestion must match each current suggestion. Null clears classification.
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CapabilityClassesInput'
+      responses:
+        '200':
+          description: Updated capabilities in input order
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/McpCapability'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
   /v1/teams/{team}/mcp-servers/{serverId}/capabilities/{capabilityId}/requirement:
     parameters:
     - $ref: '#/components/parameters/TeamParam'
@@ -1337,61 +1582,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CapabilityRequirementOverride'
-      responses:
-        '200':
-          description: The capability with its new override
-          headers:
-            ETag:
-              $ref: '#/components/headers/ETag'
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - data
-                properties:
-                  data:
-                    $ref: '#/components/schemas/McpCapability'
-        '400':
-          $ref: '#/components/responses/ErrorReply'
-        '403':
-          $ref: '#/components/responses/ErrorReply'
-        '404':
-          $ref: '#/components/responses/ErrorReply'
-        '409':
-          $ref: '#/components/responses/ErrorReply'
-        '412':
-          $ref: '#/components/responses/ErrorReply'
-        '428':
-          $ref: '#/components/responses/ErrorReply'
-  /v1/teams/{team}/mcp-servers/{serverId}/capabilities/{capabilityId}/present-person:
-    parameters:
-    - $ref: '#/components/parameters/TeamParam'
-    - $ref: '#/components/parameters/ServerIdParam'
-    - $ref: '#/components/parameters/CapabilityIdParam'
-    put:
-      tags:
-      - mcp-servers
-      - agent-platforms
-      operationId: setTeamMcpCapabilityPresentPerson
-      summary: Require, or stop requiring, a present person for one capability's calls from agents (editors and above)
-      description: 'inherit: follow the server''s McpServer.requiresPresentPerson. required: a call on a relay service account
-        is refused with a tool error, recorded as denied with error class person_not_present, unless its token
-        names a person the platform says is present (so also when the token says the person is not present, names
-        nobody, or there is no token). not_required: allowed even when the server requires it. Calls that don''t
-        arrive on a relay service account are never affected. If-Match is the server''s revision,
-        which this bumps (ETag). Requiring never needs review; relaxing a requirement (a capability that required a
-        present person no longer does) sends a published server back to pending under approval_required (audited
-        mcp_server.publish_request, reason requirement_changed). Audited as mcp_capability.presence_set. 400
-        invalid_mode; 409 team_archived.'
-      parameters:
-      - $ref: '#/components/parameters/IfMatchHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CapabilityPresentPersonOverride'
       responses:
         '200':
           description: The capability with its new override
@@ -1545,6 +1735,14 @@ paths:
       - catalog
       operationId: listCatalogServers
       summary: Published servers (any signed-in person)
+      description: >-
+        Case-insensitive literal substring search across server name, slug, description and team name,
+        or a listed capability's name, title or description whose CURRENT fingerprint is approved.
+        Changed, unapproved and gone capabilities cannot produce hits. Results retain the catalog's
+        published/enabled/active-team visibility and are ordered by (server name, id), not relevance.
+        q is trimmed and bounded to 200 UTF-8 bytes; %, _ and backslash are literal.
+        Pagination returns at most limit servers (1–200, default 50), without totals or snippets.
+        Search does not grant invocation access. No automation-token access is added.
       parameters:
       - $ref: '#/components/parameters/SearchParam'
       - $ref: '#/components/parameters/CursorParam'
@@ -1872,6 +2070,113 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '428':
           $ref: '#/components/responses/ErrorReply'
+  /v1/admin/mcp-servers/{serverId}/transfer:
+    parameters:
+    - $ref: '#/components/parameters/ServerIdParam'
+    post:
+      tags:
+      - admin
+      operationId: adminForceTransferMcpServer
+      summary: Move a server to another team without that team's acceptance (platform admins; browser session only)
+      description: 'For a server whose team is gone or whose owners cannot be reached. Any open transfer is cancelled; the server
+        has no owner afterwards (it shows in the receiving team''s attention list until one is named); its capabilities, selections,
+        grants, sealed values and approval rules move with it and, under approval_required, a published server goes back to review.
+        If-Match is the server''s revision. 422 invalid_team, 422 provider_not_allowed as for the request. Audited as
+        mcp_server.transfer (kind forced).'
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServerTransferForce'
+      responses:
+        '200':
+          description: The server, now the receiving team's
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/McpServer'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '422':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/settings/governance:
+    get:
+      tags:
+      - admin
+      operationId: adminGetGovernanceSettings
+      summary: Re-review intervals and the overdue setting (platform admins and auditors; browser session only)
+      responses:
+        '200':
+          description: Settings
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/GovernanceSettings'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+    put:
+      tags:
+      - admin
+      operationId: adminUpdateGovernanceSettings
+      summary: Change the re-review intervals and whether an overdue re-review returns a server to review (platform admins; browser session only)
+      description: 'Every published server''s next review date is counted again from its latest approval. 400 invalid_interval.
+        Audited as settings.governance_update.'
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceSettingsUpdate'
+      responses:
+        '200':
+          description: Updated settings
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/GovernanceSettings'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
   /v1/admin/settings/network:
     get:
       tags:
@@ -1972,269 +2277,6 @@ paths:
         '400':
           $ref: '#/components/responses/ErrorReply'
         '403':
-          $ref: '#/components/responses/ErrorReply'
-  /v1/admin/agent-platforms:
-    get:
-      tags:
-      - admin
-      - agent-platforms
-      operationId: adminListAgentPlatforms
-      summary: The trusted agent platforms (platform admins and auditors)
-      description: By name, with the result of each one's last JWKS fetch and how many service accounts relay for it.
-        Session-only, like every operation on agent platforms (automation tokens get 403 token_not_allowed).
-      responses:
-        '200':
-          description: The platforms
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - data
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/AgentPlatform'
-        '403':
-          $ref: '#/components/responses/ErrorReply'
-    post:
-      tags:
-      - admin
-      - agent-platforms
-      operationId: adminCreateAgentPlatform
-      summary: Trust an agent platform as an issuer of identity tokens (platform admins; browser session only)
-      description: 'jwksUrl defaults to <issuer>/.well-known/mcp-identity-jwks.json and audience to this portal''s
-        APP_URL (the platform sets it as the server''s identityAudience). The JWKS URL follows the rule for MCP
-        servers (an internal address only for a host a platform admin allowed) and is https always, even for an
-        allowed internal host (422 url_not_allowed with details.reason). 422 invalid_issuer; 400 invalid_name or invalid_audience; 409 name_taken, issuer_taken or
-        too_many_agent_platforms (at most 20). Nothing is fetched. Audited as agent_platform.create.'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AgentPlatformCreate'
-      responses:
-        '201':
-          description: The platform
-          headers:
-            ETag:
-              $ref: '#/components/headers/ETag'
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - data
-                properties:
-                  data:
-                    $ref: '#/components/schemas/AgentPlatform'
-        '400':
-          $ref: '#/components/responses/ErrorReply'
-        '403':
-          $ref: '#/components/responses/ErrorReply'
-        '409':
-          $ref: '#/components/responses/ErrorReply'
-        '422':
-          $ref: '#/components/responses/ErrorReply'
-  /v1/admin/agent-platforms/{platformId}:
-    parameters:
-    - $ref: '#/components/parameters/AgentPlatformIdParam'
-    get:
-      tags:
-      - admin
-      - agent-platforms
-      operationId: adminGetAgentPlatform
-      summary: One trusted agent platform (platform admins and auditors)
-      responses:
-        '200':
-          description: The platform
-          headers:
-            ETag:
-              $ref: '#/components/headers/ETag'
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - data
-                properties:
-                  data:
-                    $ref: '#/components/schemas/AgentPlatform'
-        '403':
-          $ref: '#/components/responses/ErrorReply'
-        '404':
-          $ref: '#/components/responses/ErrorReply'
-    patch:
-      tags:
-      - admin
-      - agent-platforms
-      operationId: adminUpdateAgentPlatform
-      summary: Edit, turn on or turn off a trusted agent platform (platform admins; browser session only)
-      description: If-Match is the platform's revision. A disabled platform's tokens are refused from the next request
-        (relay accounts stay marked). Same validation as create; 409 name_taken or issuer_taken. Audited as
-        agent_platform.update.
-      parameters:
-      - $ref: '#/components/parameters/IfMatchHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AgentPlatformUpdate'
-      responses:
-        '200':
-          description: The platform
-          headers:
-            ETag:
-              $ref: '#/components/headers/ETag'
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - data
-                properties:
-                  data:
-                    $ref: '#/components/schemas/AgentPlatform'
-        '400':
-          $ref: '#/components/responses/ErrorReply'
-        '403':
-          $ref: '#/components/responses/ErrorReply'
-        '404':
-          $ref: '#/components/responses/ErrorReply'
-        '409':
-          $ref: '#/components/responses/ErrorReply'
-        '412':
-          $ref: '#/components/responses/ErrorReply'
-        '422':
-          $ref: '#/components/responses/ErrorReply'
-        '428':
-          $ref: '#/components/responses/ErrorReply'
-    delete:
-      tags:
-      - admin
-      - agent-platforms
-      operationId: adminDeleteAgentPlatform
-      summary: Stop trusting an agent platform (platform admins; browser session only)
-      description: Its tokens are refused from the next request and its relay service accounts are ordinary service
-        accounts again (their keys keep working as before). Audited as agent_platform.delete (relaysCleared).
-      responses:
-        '200':
-          $ref: '#/components/responses/OkReply'
-        '403':
-          $ref: '#/components/responses/ErrorReply'
-        '404':
-          $ref: '#/components/responses/ErrorReply'
-  /v1/admin/agent-platforms/{platformId}/test:
-    parameters:
-    - $ref: '#/components/parameters/AgentPlatformIdParam'
-    post:
-      tags:
-      - admin
-      - agent-platforms
-      operationId: adminTestAgentPlatform
-      summary: Fetch the platform's JWKS now (platform admins; browser session only)
-      description: Through the same guarded path as a verification (address rule and allowlist of MCP servers, no
-        redirects, 5 seconds, at most 64 KiB, a JSON content type). Always 200; ok false with an error code says why
-        the fetch failed (not_allowed, redirect, timeout, unreachable, http_status, content_type, too_large,
-        invalid_json, no_usable_keys). The result is stored as the platform's last fetch; a good one refreshes this
-        replica's cache. Not audited (it changes nothing but the stored result).
-      responses:
-        '200':
-          description: The result
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - data
-                properties:
-                  data:
-                    $ref: '#/components/schemas/AgentPlatformTestResult'
-        '403':
-          $ref: '#/components/responses/ErrorReply'
-        '404':
-          $ref: '#/components/responses/ErrorReply'
-  /v1/admin/agent-platforms/{platformId}/relays:
-    parameters:
-    - $ref: '#/components/parameters/AgentPlatformIdParam'
-    get:
-      tags:
-      - admin
-      - agent-platforms
-      - service-accounts
-      operationId: adminListAgentPlatformRelays
-      summary: The service accounts that relay for the platform (platform admins and auditors)
-      responses:
-        '200':
-          description: The relay accounts by team and name
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - data
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/AgentPlatformRelay'
-        '403':
-          $ref: '#/components/responses/ErrorReply'
-        '404':
-          $ref: '#/components/responses/ErrorReply'
-  /v1/admin/agent-platforms/{platformId}/relays/{serviceAccountId}:
-    parameters:
-    - $ref: '#/components/parameters/AgentPlatformIdParam'
-    - $ref: '#/components/parameters/ServiceAccountIdParam'
-    put:
-      tags:
-      - admin
-      - agent-platforms
-      - service-accounts
-      operationId: adminSetServiceAccountRelay
-      summary: Mark a team service account as a relay for the platform (platform admins; browser session only)
-      description: Only a relay account's calls may carry the platform's identity token; the person it names is
-        authorised as that person limited to what the account itself could reach (docs/agent-platforms.md). Only
-        platform admins can mark an account; a team's owners and admins can't. Moves the account from another
-        platform it relayed for. 409 platform_disabled (turn the platform on first) or team_archived. Bumps the
-        account's revision. Audited as service_account.relay_set.
-      responses:
-        '200':
-          description: The relay account
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - data
-                properties:
-                  data:
-                    $ref: '#/components/schemas/AgentPlatformRelay'
-        '403':
-          $ref: '#/components/responses/ErrorReply'
-        '404':
-          $ref: '#/components/responses/ErrorReply'
-        '409':
-          $ref: '#/components/responses/ErrorReply'
-    delete:
-      tags:
-      - admin
-      - agent-platforms
-      - service-accounts
-      operationId: adminClearServiceAccountRelay
-      summary: Stop a service account relaying for the platform (platform admins; browser session only)
-      description: 404 relay_not_found unless the account relays for this platform. Its keys keep working as an
-        ordinary service account's; a token sent with them is ignored (and counted). Audited as
-        service_account.relay_clear.
-      responses:
-        '200':
-          $ref: '#/components/responses/OkReply'
-        '403':
-          $ref: '#/components/responses/ErrorReply'
-        '404':
           $ref: '#/components/responses/ErrorReply'
   /v1/admin/teams/{team}/publishing:
     parameters:
@@ -2474,7 +2516,9 @@ paths:
       description: 422 capability_not_selectable (details.capabilityIds, and details.reasons mapping each to unsupported_template
         or not_offered) when a capability is not offered by gateway-options (another team's private server, unapproved,
         gone, or a resource template with unsupported expressions). 422 too_many (at most 200). 422 name_clash (details.exposedName)
-        when two selected capabilities expose the same name or URI.
+        when non-tool selections collide. Tool name collisions are 409 name_taken, including unavailable selections.
+        Explicit curation edits (including null) require a browser session and the current expectedFingerprint;
+        mismatch or omission is 409 changed_since_review. Omitted curation preserves existing policy.
       parameters:
       - $ref: '#/components/parameters/IfMatchHeader'
       requestBody:
@@ -2509,6 +2553,8 @@ paths:
         '422':
           $ref: '#/components/responses/ErrorReply'
         '428':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
           $ref: '#/components/responses/ErrorReply'
   /v1/teams/{team}/gateway-options:
     parameters:
@@ -2762,7 +2808,9 @@ paths:
       - platform:write
       summary: Replace a platform gateway's selection (platform admins); If-Match is the gateway's revision
       description: Platform gateways may select approved, listed tools and prompts of published, enabled servers
-        only, and minRole must be absent. Same 422 codes as the team operation; 403 team_gateway for a team gateway.
+        only, and minRole must be absent. Same error codes and curation semantics as the team operation;
+        403 team_gateway for a team gateway. Automation tokens may change selections but cannot explicitly edit curation
+        (403 session_required).
       parameters:
       - $ref: '#/components/parameters/IfMatchHeader'
       requestBody:
@@ -2797,6 +2845,8 @@ paths:
         '422':
           $ref: '#/components/responses/ErrorReply'
         '428':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
           $ref: '#/components/responses/ErrorReply'
   /v1/admin/gateway-options:
     get:
@@ -2857,7 +2907,7 @@ paths:
       - platform:write
       summary: Grant a platform gateway to a team, a user or an SSO group (platform admins)
       description: 403 team_gateway for a team gateway. 409 grant_exists. 404 subject_not_found for an unknown team
-        or user.
+        or user. 400 invalid_tool_scope for an invalid tool ceiling. Matching grants union their tool ceilings.
       requestBody:
         required: true
         content:
@@ -2939,6 +2989,136 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '403':
           $ref: '#/components/responses/ErrorReply'
+  /v1/gateways/requestable:
+    get:
+      tags: [gateways]
+      operationId: listRequestableGateways
+      summary: Opted-in platform gateways, browser session only; never grants MCP access
+      parameters:
+      - $ref: '#/components/parameters/CursorParam'
+      - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Minimal discoverable projection
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/RequestableGatewayPage'}
+        '403': {$ref: '#/components/responses/ErrorReply'}
+  /v1/me/access-requests:
+    get:
+      tags: [gateways]
+      operationId: listMyAccessRequests
+      summary: Private requested or gateway-scoped review queue, browser session only
+      parameters:
+      - $ref: '#/components/parameters/CursorParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - name: view
+        in: query
+        schema: {type: string, enum: [requested, review], default: requested}
+      - name: pendingOnly
+        in: query
+        schema: {type: boolean, default: false}
+      responses:
+        '200':
+          description: Authorized private requests and actionable review count
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/AccessRequestPage'}
+        '403': {$ref: '#/components/responses/ErrorReply'}
+    post:
+      tags: [gateways]
+      operationId: createAccessRequest
+      summary: Request for oneself or a currently administered team, browser session only
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AccessRequestCreate'}
+      responses:
+        '201': {$ref: '#/components/responses/AccessRequestReply'}
+        '400': {$ref: '#/components/responses/ErrorReply'}
+        '403': {$ref: '#/components/responses/ErrorReply'}
+        '404': {$ref: '#/components/responses/ErrorReply'}
+        '409': {$ref: '#/components/responses/ErrorReply'}
+        '429': {$ref: '#/components/responses/ErrorReply'}
+  /v1/access-requests/{requestId}:
+    parameters:
+    - $ref: '#/components/parameters/AccessRequestIdParam'
+    get:
+      tags: [gateways]
+      operationId: getAccessRequest
+      summary: Private request, requester or current gateway reviewer, browser session only
+      responses:
+        '200': {$ref: '#/components/responses/AccessRequestReply'}
+        '403': {$ref: '#/components/responses/ErrorReply'}
+        '404': {$ref: '#/components/responses/ErrorReply'}
+  /v1/access-requests/{requestId}/decision:
+    parameters:
+    - $ref: '#/components/parameters/AccessRequestIdParam'
+    post:
+      tags: [gateways]
+      operationId: decideAccessRequest
+      summary: Current platform admin or gateway steward, never requester, browser session only
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AccessRequestDecision'}
+      responses:
+        '200': {$ref: '#/components/responses/AccessRequestReply'}
+        '400': {$ref: '#/components/responses/ErrorReply'}
+        '403': {$ref: '#/components/responses/ErrorReply'}
+        '404': {$ref: '#/components/responses/ErrorReply'}
+        '409': {$ref: '#/components/responses/ErrorReply'}
+  /v1/access-requests/{requestId}/withdraw:
+    parameters:
+    - $ref: '#/components/parameters/AccessRequestIdParam'
+    post:
+      tags: [gateways]
+      operationId: withdrawAccessRequest
+      summary: Requester's pending request only, browser session only
+      responses:
+        '200': {$ref: '#/components/responses/AccessRequestReply'}
+        '403': {$ref: '#/components/responses/ErrorReply'}
+        '404': {$ref: '#/components/responses/ErrorReply'}
+        '409': {$ref: '#/components/responses/ErrorReply'}
+  /v1/admin/gateways/{gatewayId}/access-settings:
+    parameters:
+    - $ref: '#/components/parameters/GatewayIdParam'
+    get:
+      tags: [admin]
+      operationId: adminGetGatewayAccessSettings
+      summary: Platform gateway discoverability/stewards, platform staff browser session only
+      responses:
+        '200': {$ref: '#/components/responses/GatewayAccessSettingsReply'}
+        '403': {$ref: '#/components/responses/ErrorReply'}
+        '404': {$ref: '#/components/responses/ErrorReply'}
+    put:
+      tags: [admin]
+      operationId: adminSetGatewayAccessSettings
+      summary: Replace discoverability/stewards, platform admin browser session only, gateway If-Match required
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GatewayAccessSettingsUpdate'}
+      responses:
+        '200': {$ref: '#/components/responses/GatewayAccessSettingsReply'}
+        '400': {$ref: '#/components/responses/ErrorReply'}
+        '403': {$ref: '#/components/responses/ErrorReply'}
+        '404': {$ref: '#/components/responses/ErrorReply'}
+        '412': {$ref: '#/components/responses/ErrorReply'}
+        '428': {$ref: '#/components/responses/ErrorReply'}
   /v1/me/gateways:
     get:
       tags:
@@ -3014,7 +3194,7 @@ paths:
       summary: Create a personal API key (browser session only); the secret is shown once
       description: 409 too_many_keys (at most 20 active keys per person). 400 too_many_gateways (more than 50 gatewayIds).
         422 gateway_not_usable (details.gatewayIds) when a gateway in gatewayIds doesn't exist, is switched off
-        or the caller can't use it now. An API key can't create keys.
+        or the caller can't use it now. 400 invalid_tool_scope for an invalid tool ceiling. An API key can't create keys.
       requestBody:
         required: true
         content:
@@ -3137,7 +3317,9 @@ paths:
       summary: Allow or deny an authorization request; returns where to send the browser
       description: Allow records the caller's consent for the client and gateway (audited as oauth.consent, or as
         oauth.grant_confirmed when the page was the first-use notice of a trusted client) and issues a single-use
-        authorization code valid for 60 seconds. Deny sends the client access_denied.
+        authorization code valid for 60 seconds. Deny sends the client access_denied. The optional toolScope contains
+        classes only and may narrow but not widen the request (400 oauth_invalid_scope); omission uses the requested
+        ceiling. Changing scope replaces the grant and invalidates its old tokens and pending codes.
       requestBody:
         required: true
         content:
@@ -3163,6 +3345,95 @@ paths:
                         type: string
         '400':
           $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/me/sessions:
+    get:
+      tags: [me]
+      operationId: listMySessions
+      summary: Active browser sessions, newest first (session only)
+      responses:
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '200':
+          $ref: '#/components/responses/SessionListReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/me/sessions/{sessionId}:
+    parameters:
+    - name: sessionId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    delete:
+      tags: [me]
+      operationId: revokeMySession
+      summary: End one of the caller's browser sessions (session only)
+      description: Cancels connect flows bound to that session. Unknown and foreign sessions are both 404.
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/me/sessions/revoke-all:
+    post:
+      tags: [me]
+      operationId: signOutEverywhere
+      summary: End all browser sessions, optionally keeping this one (session only)
+      description: Does not disconnect OAuth connected apps or other credentials. Cancels connect flows bound to ended sessions.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokeSessionsInput'
+      responses:
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/users/{userId}/sessions:
+    parameters:
+    - $ref: '#/components/parameters/UserIdParam'
+    get:
+      tags: [admin]
+      operationId: adminListUserSessions
+      summary: Active browser sessions of a person (platform admins only, session only)
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '200':
+          $ref: '#/components/responses/SessionListReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+    delete:
+      tags: [admin]
+      operationId: adminRevokeUserSessions
+      summary: End all browser sessions of a person (platform admins only, session only)
+      description: Audited with a count, not session metadata. Cancels connect flows bound to ended sessions; other credentials remain.
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '200':
+          $ref: '#/components/responses/OkReply'
         '401':
           $ref: '#/components/responses/ErrorReply'
         '403':
@@ -3353,6 +3624,7 @@ paths:
       operationId: createServiceAccount
       summary: Create a service account (team owners and admins)
       description: 409 name_taken (names are unique within the team); 409 team_archived. At most 100 per team.
+        400 invalid_tool_scope for an invalid tool ceiling.
       requestBody:
         required: true
         content:
@@ -3413,6 +3685,8 @@ paths:
       - service-accounts
       operationId: updateServiceAccount
       summary: Change a service account (team owners and admins); turning it off stops its keys at the next request
+      description: 400 invalid_tool_scope for an invalid tool ceiling. Omitted toolScope retains, null clears, an object
+        replaces; all keys intersect the live account ceiling on their next call.
       parameters:
       - $ref: '#/components/parameters/IfMatchHeader'
       requestBody:
@@ -3524,6 +3798,8 @@ paths:
       summary: Create a key (team owners and admins, browser session only); the secret is shown once
       description: 409 too_many_keys (at most 2 active keys, for rotation). 422 gateway_not_usable (details.gatewayIds)
         when a scoped gateway isn't one the service account can use. 409 disabled for a turned-off account.
+        400 invalid_tool_scope for an invalid tool ceiling. A null key ceiling inherits the account ceiling by runtime
+        intersection; a key never widens account or gateway-grant access.
       requestBody:
         required: true
         content:
@@ -3621,8 +3897,16 @@ paths:
         server of that team may require are listed (open ones, and restricted ones that list the team or, with serverId
         (a server of that team), that server). That is a convenience for the picker; saving a requirement and every call
         check the provider's access list again. Without team every enabled provider is listed (connecting an account is
-        not limited by it).
+        not limited by it). With serviceTeam (browser only, genuine team membership required), also includes enabled
+        server-bound providers for servers reachable through a gateway by the caller, for the shared-connection picker.
+        serviceTeam cannot be combined with team or serverId.
       parameters:
+      - name: serviceTeam
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 100
       - name: team
         in: query
         required: false
@@ -3865,7 +4149,7 @@ paths:
         kept but not consulted). restricted: only a server of a listed team, or a listed server, may; it is checked when
         a requirement is saved (422 provider_not_allowed), when a person allows a server to use their account (a consent
         link or My connections) and on every call, so removing a team stops delivery on the next call (also an
-        agent''s relayed call). Providers created after the upgrade start restricted with empty lists; existing ones
+        ordinary MCP call). Providers created after the upgrade start restricted with empty lists; existing ones
         stay open. The provider''s revision (If-Match) must match and moves. 422 team_not_found or server_not_found
         for an ID that does not exist; 422 too_many_entries (500 each); 400 invalid_access_mode. Session only: an
         automation token never decides who may use a credential provider (decision 58). Audited as
@@ -4019,7 +4303,7 @@ paths:
       description: 'Browser session only (403 session_required; API keys, automation tokens, service accounts and agents
         are refused: a key is a person''s own decision). The key is sealed with ENCRYPTION_KEY, bound to the person, the
         server and the origin it has now, and never returned, logged or audited (person_secret.create, person_secret.rotate;
-        person_secret.agents_update when only allowAgents changes). The request names the origin the person was shown.
+        never the secret value). The request names the origin the person was shown.
         404 server_not_found (no such server, or one the caller may not use through a gateway); 409 not_person_secret;
         409 server_changed (another origin than the one shown: reload); 400 invalid_secret (no origin); 400
         invalid_secret_value (8-4096 characters on one line); 400 secret_required (no key stored and none sent); 403
@@ -4178,6 +4462,146 @@ paths:
                       $ref: '#/components/schemas/ProviderConnection'
         '401':
           $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/service-connections:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    get:
+      tags: [service-accounts]
+      operationId: listTeamServiceConnections
+      summary: List shared upstream accounts owned by this team (browser only)
+      responses:
+        '200':
+          description: Connection metadata, never tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceConnectionList'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+    post:
+      tags: [service-accounts]
+      operationId: startTeamServiceConnection
+      summary: Create a tokenless shared connection and begin consent (team owners/admins only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceConnectionStart'
+      responses:
+        '200':
+          description: Browser authorization destination
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ConnectStarted'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/service-connections/{connectionId}:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    - $ref: '#/components/parameters/ConnectionIdParam'
+    put:
+      tags: [service-accounts]
+      operationId: updateTeamServiceConnection
+      summary: Atomically replace account assignments and destination grants (browser owners/admins only)
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceConnectionUpdate'
+      responses:
+        '200':
+          description: Updated metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ServiceConnection'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+    delete:
+      tags: [service-accounts]
+      operationId: revokeTeamServiceConnection
+      summary: Erase a shared connection and its pending consent (browser owners/admins only)
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+  /v1/teams/{team}/service-connections/{connectionId}/allowable-servers:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    - $ref: '#/components/parameters/ConnectionIdParam'
+    get:
+      tags: [service-accounts]
+      operationId: listServiceConnectionAllowableServers
+      summary: List reachable destinations and exact scopes an administrator may grant (browser only)
+      responses:
+        '200':
+          description: Live destinations, origins and required scopes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AllowableServer'
+  /v1/teams/{team}/service-connections/{connectionId}/reconnect:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    - $ref: '#/components/parameters/ConnectionIdParam'
+    post:
+      tags: [service-accounts]
+      operationId: reconnectTeamServiceConnection
+      summary: Begin new consent for a shared connection (browser owners/admins only)
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      responses:
+        '200':
+          description: Browser authorization destination
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ConnectStarted'
+  /v1/admin/service-connections:
+    get:
+      tags: [service-accounts]
+      operationId: adminListServiceConnections
+      summary: Paginated shared connection metadata for browser admins and auditors
+      parameters:
+      - $ref: '#/components/parameters/CursorParam'
+      - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Connection metadata, never tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ServiceConnectionPage'
   /v1/me/connections/start:
     post:
       tags:
@@ -4514,7 +4938,7 @@ paths:
       - platform:write
       summary: Set or clear a team's rate limit overrides (platform admins); If-Match is the team's revision
       description: Each listed key is replaced (value null inherits the platform default); keys not listed are kept.
-        Only service_account_per_minute and gateway_per_minute can be overridden. 422 invalid_limit with details.key
+        Only service_account_per_minute, gateway_per_minute and server_per_minute can be overridden. 422 invalid_limit with details.key
         and details.reason (not_overridable, above_ceiling, duplicate). Audited as team.limits_update.
       parameters:
       - $ref: '#/components/parameters/IfMatchHeader'
@@ -4934,6 +5358,399 @@ paths:
                   data:
                     $ref: '#/components/schemas/TeamAttention'
         '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/me/approvals:
+    get:
+      tags:
+      - approvals
+      operationId: listMyApprovals
+      summary: Requested or currently actionable tool-call approvals
+      description: >-
+        Browser session only. requested includes the caller's requests and requests of service accounts whose
+        owning team the caller owns/administers. actionable includes only requests the caller is currently
+        eligible to decide; neither platform-admin status nor gateway ownership alone makes a reviewer.
+        Human self-approval is forbidden. A requesting service account's owners/admins are excluded from
+        review (including fallback) unless the rule explicitly allows them. Visibility and authority are
+        re-evaluated on every read. Lists NEVER contain preview, raw arguments, ciphertext or notes.
+      parameters:
+      - name: view
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [requested, actionable]
+          default: actionable
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalPageReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/approvals/{approvalId}:
+    parameters:
+    - $ref: '#/components/parameters/ApprovalIdParam'
+    get:
+      tags:
+      - approvals
+      operationId: getApproval
+      summary: An authorized approval receipt, with a restricted redacted preview
+      description: >-
+        Browser session only. The requester, authorized owning-team humans for a service account, and
+        currently eligible reviewers can read the receipt. Platform admins/auditors may read metadata for
+        oversight, but that role alone NEVER reveals preview. Preview is available only while pending or
+        approved and only to the requester/authorized service-account humans or an eligible reviewer.
+        Terminal previews are immediately inaccessible. Missing and private receipts both return the same
+        generic 404 approval_not_found, without disclosing existence. Expiry is enforced synchronously.
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalReceiptReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/approvals/{approvalId}/decision:
+    parameters:
+    - $ref: '#/components/parameters/ApprovalIdParam'
+    post:
+      tags:
+      - approvals
+      operationId: decideApproval
+      summary: Approve or deny the exact tool call reviewed by an eligible human
+      description: >-
+        Browser session only; current eligibility and requester authority are checked transactionally.
+        No human self-approval. A requesting service account's owners/admins are excluded, including from
+        platform-admin fallback, unless the rule opts in. Gateway ownership is not review authority.
+        expectedReviewRevision and expectedArgsDigest must match the displayed receipt; 409
+        changed_since_review if either changed. 409 approval_unavailable if the request can no longer be
+        decided (including expiry or stale bindings). Missing/private receipts use generic 404
+        approval_not_found. No notes or raw arguments are accepted. Approval never grants underlying access.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalDecisionInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalReceiptReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/approvals/{approvalId}/cancel:
+    parameters:
+    - $ref: '#/components/parameters/ApprovalIdParam'
+    post:
+      tags:
+      - approvals
+      operationId: cancelApproval
+      summary: Cancel a pending or approved request controlled by the caller
+      description: >-
+        Browser session only; the human requester or the requesting service account's current owning-team
+        owners/admins may cancel. expectedReviewRevision must match the reviewed receipt; 409
+        changed_since_review if changed. 409 approval_unavailable when cancellation is no longer possible.
+        Missing/private receipts use generic 404 approval_not_found. Cancellation makes preview inaccessible.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalReviewInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalReceiptReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/approvals/{approvalId}/renew:
+    parameters:
+    - $ref: '#/components/parameters/ApprovalIdParam'
+    post:
+      tags:
+      - approvals
+      operationId: renewApproval
+      summary: Explicitly request a new approval attempt, returning a new receipt
+      description: >-
+        Browser session only; the human requester or the requesting service account's current owning-team
+        owners/admins may renew when canRenew is true. Current authority and policy are re-evaluated;
+        renewal never resurrects or extends the old approval. Denied requests remain denied on ordinary MCP
+        retries. expectedReviewRevision must match; 409 changed_since_review if changed. 409
+        approval_unavailable if renewal cannot safely create a new attempt. Missing/private receipts use
+        generic 404 approval_not_found. A used receipt means authorization spent, not confirmed execution;
+        repeating an uncertain call may duplicate effects.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalReviewInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalReceiptReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/approval-rules:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    get:
+      tags:
+      - approvals
+      operationId: listTeamApprovalRules
+      summary: The team's approval rules (team owners/admins; platform staff may read)
+      description: Browser session only. Only rules targeting this team's servers or team gateways are listed.
+        A missing or private team returns generic 404 team_not_found.
+      parameters:
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalRulePageReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+    post:
+      tags:
+      - approvals
+      operationId: createTeamApprovalRule
+      summary: Create a rule for the team's server or gateway (team owners/admins)
+      description: >-
+        Browser session only. The caller must own/administer this team, and the target must belong to this
+        team. A platform role alone does not authorize team-server or team-gateway policy writes. The service
+        validates selector exclusivity, capability/target membership and consistent user/group approver arms.
+        Server rules outrank gateway rules; capability selectors outrank class selectors. Equal-priority
+        overlapping rules are rejected with 409 approval_unavailable. Rules never grant access.
+        Missing/private targets return generic 404 rule_not_found without disclosing their existence.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRuleInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/ApprovalRuleReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/approval-rules/{ruleId}:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    - $ref: '#/components/parameters/ApprovalRuleIdParam'
+    put:
+      tags:
+      - approvals
+      operationId: replaceTeamApprovalRule
+      summary: Replace a team's approval rule (team owners/admins)
+      description: >-
+        Browser session only. The caller must own/administer the target's team; a platform role cannot bypass
+        this. Target kind and ID are immutable and must match the existing rule in the replacement body;
+        moving a rule across ownership boundaries is forbidden. The service validates selectors and approver
+        arms as on creation. If-Match is the rule revision (428 missing, 412 stale); 409 approval_unavailable
+        for overlapping policy. Missing/private rules or targets return generic 404 rule_not_found.
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRuleInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalRuleReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+    delete:
+      tags:
+      - approvals
+      operationId: deleteTeamApprovalRule
+      summary: Delete a team's approval rule (team owners/admins)
+      description: >-
+        Browser session only. Only this team's owners/admins may delete its server/gateway rules;
+        a platform role alone cannot bypass team ownership. If-Match is the rule revision (428 missing,
+        412 stale). Missing/private rules return generic 404 rule_not_found.
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/approval-rules:
+    get:
+      tags:
+      - approvals
+      - admin
+      operationId: adminListApprovalRules
+      summary: Approval-rule metadata across the portal (platform admins and auditors)
+      description: Browser session only. Oversight does not grant team-policy write authority or access to
+        approval previews. Only platform-gateway rules may be written through admin approval-rule routes.
+      parameters:
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalRulePageReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+    post:
+      tags:
+      - approvals
+      - admin
+      operationId: adminCreateApprovalRule
+      summary: Create an approval rule for a platform gateway (platform admins)
+      description: >-
+        Browser session only. targetKind must be gateway and targetId must identify a platform-owned gateway;
+        team servers and team gateways cannot be managed through this route, even by platform admins.
+        The service validates selectors and approver arms as on team creation; 409 approval_unavailable for
+        equal-priority overlap. Missing/private or out-of-scope targets return generic 404 rule_not_found.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRuleInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/ApprovalRuleReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/approval-rules/{ruleId}:
+    parameters:
+    - $ref: '#/components/parameters/ApprovalRuleIdParam'
+    put:
+      tags:
+      - approvals
+      - admin
+      operationId: adminReplaceApprovalRule
+      summary: Replace a platform-gateway approval rule (platform admins)
+      description: >-
+        Browser session only. Only platform-gateway rules are writable here, never team-server or team-gateway
+        rules. Target kind and ID are immutable and must match the existing rule. The service validates
+        selectors and approver arms as on creation. If-Match is the rule revision (428 missing, 412 stale);
+        409 approval_unavailable for overlapping policy. Missing/private or out-of-scope rules/targets return
+        generic 404 rule_not_found, without exposing their existence.
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRuleInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalRuleReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+    delete:
+      tags:
+      - approvals
+      - admin
+      operationId: adminDeleteApprovalRule
+      summary: Delete a platform-gateway approval rule (platform admins)
+      description: >-
+        Browser session only. Only platform-gateway rules are writable here, never team-server or team-gateway
+        rules. If-Match is the rule revision (428 missing, 412 stale). Missing/private or out-of-scope rules
+        return generic 404 rule_not_found.
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
           $ref: '#/components/responses/ErrorReply'
   /v1/me/notifications:
     get:
@@ -5693,6 +6510,355 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '429':
           $ref: '#/components/responses/ErrorReply'
+  /v1/admin/provisioning:
+    get:
+      tags:
+      - provisioning
+      operationId: adminGetProvisioning
+      summary: SCIM provisioning setup (platform admins and auditors, browser session only)
+      description: 404 directory_not_found until a platform admin sets it up. issuerMatches is false when single sign-on
+        now uses another issuer than the one the directory was bound to; the directory then can't be enabled.
+      responses:
+        '200':
+          description: Directory
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProvisioningDirectory'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+    post:
+      tags:
+      - provisioning
+      operationId: adminCreateProvisioning
+      summary: Set up SCIM provisioning, bound to the configured OIDC issuer (platform admins, browser session only)
+      description: 409 oidc_required without single sign-on; 412 revision_conflict when it already exists.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisioningSettings'
+      responses:
+        '201':
+          description: Created
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProvisioningDirectory'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+    patch:
+      tags:
+      - provisioning
+      operationId: adminUpdateProvisioning
+      summary: Enable or disable provisioning and choose the enrollment policy (platform admins, browser session only)
+      description: enrollment required refuses a new sign-in identity that has no active provisioned resource. Existing
+        unmanaged people keep signing in. 409 issuer_changed when enabling a directory bound to another issuer.
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisioningSettings'
+      responses:
+        '200':
+          description: Updated
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProvisioningDirectory'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/provisioning/tokens:
+    get:
+      tags:
+      - provisioning
+      operationId: adminListProvisioningTokens
+      summary: Provisioning tokens, newest first; never the secret (platform admins and auditors, browser session only)
+      responses:
+        '200':
+          description: Tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProvisioningToken'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+    post:
+      tags:
+      - provisioning
+      operationId: adminCreateProvisioningToken
+      summary: Create a provisioning token for the identity provider (platform admins, browser session only); the secret is
+        shown once
+      description: 'Prefix ompscim_. It authenticates only /scim/v2 (never /v1 or /mcp), is bound to the directory rather
+        than its creator, and always expires (expiresInDays 1-365, default 90). 409 too_many_tokens (at most 5 active).'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisioningTokenCreate'
+      responses:
+        '201':
+          description: Created; the secret is shown only now
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProvisioningTokenCreated'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/provisioning/tokens/{tokenId}:
+    parameters:
+    - name: tokenId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    delete:
+      tags:
+      - provisioning
+      operationId: adminRevokeProvisioningToken
+      summary: Revoke a provisioning token at once (platform admins, browser session only)
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/provisioning/users:
+    get:
+      tags:
+      - provisioning
+      operationId: adminListProvisionedUsers
+      summary: Provisioned resources and the directory-managed people (platform admins and auditors, browser session only)
+      description: A resource links to a portal person only when its externalId equals that person's verified sign-in
+        subject. candidate is an existing unmanaged person with that subject, who an admin can adopt.
+      responses:
+        '200':
+          description: Provisioned people
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProvisionedUsers'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/provisioning/users/{scimUserId}/adopt:
+    parameters:
+    - name: scimUserId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      tags:
+      - provisioning
+      operationId: adminAdoptProvisionedUser
+      summary: Put an existing person under directory control, or re-enroll a deprovisioned one (platform admins, browser
+        session only)
+      description: The person must have signed in with the resource's externalId as subject. 409 protected_principal for
+        platform admins and team owners, cleanup_pending while a deprovisioning clean-up runs, already_linked, no_match.
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/provisioning/people/{userId}/unlink:
+    parameters:
+    - $ref: '#/components/parameters/UserIdParam'
+    post:
+      tags:
+      - provisioning
+      operationId: adminUnlinkProvisionedPerson
+      summary: Return a directory-managed person to manual control (platform admins, browser session only)
+      description: Only the manual status applies afterwards; memberships the directory created become manual. 409
+        not_linked, cleanup_pending.
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/provisioning/groups:
+    get:
+      tags:
+      - provisioning
+      operationId: adminListProvisionedGroups
+      summary: Directory groups (platform admins and auditors, browser session only)
+      responses:
+        '200':
+          description: Groups
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProvisionedGroup'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/provisioning/mappings:
+    get:
+      tags:
+      - provisioning
+      operationId: adminListProvisioningMappings
+      summary: Directory group to team role mappings (platform admins and auditors, browser session only)
+      responses:
+        '200':
+          description: Mappings
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProvisioningMapping'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+    post:
+      tags:
+      - provisioning
+      operationId: adminCreateProvisioningMapping
+      summary: Give members of a directory group a team role (platform admins, browser session only)
+      description: Roles admin, editor or member; owners are never granted by a directory. Applied to linked members at once.
+        Memberships someone added by hand are never changed. 409 mapping_exists.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisioningMappingCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProvisioningMapping'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/provisioning/mappings/{mappingId}:
+    parameters:
+    - name: mappingId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    delete:
+      tags:
+      - provisioning
+      operationId: adminDeleteProvisioningMapping
+      summary: Remove a mapping and the memberships only it created (platform admins, browser session only)
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
   /v1/admin/automation-tokens:
     get:
       tags:
@@ -5937,6 +7103,20 @@ components:
       description: nextCursor from the previous page
       schema:
         type: string
+    ApprovalIdParam:
+      name: approvalId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ApprovalRuleIdParam:
+      name: ruleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     IfMatchHeader:
       name: If-Match
       in: header
@@ -5983,6 +7163,13 @@ components:
       schema:
         type: string
         format: uuid
+    TransferIdParam:
+      name: transferId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     CapabilityIdParam:
       name: capabilityId
       in: path
@@ -6019,6 +7206,11 @@ components:
         minimum: 1
         maximum: 500
         default: 100
+    AccessRequestIdParam:
+      name: requestId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
     GatewayIdParam:
       name: gatewayId
       in: path
@@ -6067,13 +7259,6 @@ components:
         format: uuid
     OAuthGrantIdParam:
       name: grantId
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
-    AgentPlatformIdParam:
-      name: platformId
       in: path
       required: true
       schema:
@@ -6207,6 +7392,89 @@ components:
         type: string
         format: uuid
   responses:
+    AccessRequestReply:
+      description: Authorized private access request
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: {$ref: '#/components/schemas/AccessRequest'}
+    GatewayAccessSettingsReply:
+      description: Platform gateway access-request settings
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: {$ref: '#/components/schemas/GatewayAccessSettings'}
+    ApprovalReceiptReply:
+      description: Approval receipt; preview is restricted to authorized detail reads, never list results
+      headers:
+        Cache-Control:
+          description: Always no-store
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                $ref: '#/components/schemas/ApprovalReceipt'
+    ApprovalPageReply:
+      description: A page of visible approval metadata, newest first; NEVER includes preview
+      headers:
+        Cache-Control:
+          description: Always no-store
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                $ref: '#/components/schemas/ApprovalPage'
+    ApprovalRuleReply:
+      description: Approval rule; ETag is its revision for replacement or deletion
+      headers:
+        ETag:
+          $ref: '#/components/headers/ETag'
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                $ref: '#/components/schemas/ApprovalRule'
+    ApprovalRulePageReply:
+      description: A page of approval rules
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                $ref: '#/components/schemas/ApprovalRulePage'
+    SessionListReply:
+      description: Active browser sessions, newest first
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BrowserSession'
     AuditPageReply:
       description: A page of audit entries, newest first
       content:
@@ -6377,6 +7645,469 @@ components:
               data:
                 $ref: '#/components/schemas/UsageReport'
   schemas:
+    ApprovalTargetKind:
+      type: string
+      enum: [server, gateway]
+    ApprovalApprover:
+      type: object
+      additionalProperties: false
+      required: [kind, userId, groupName]
+      description: >-
+        The service validates the discriminated arms: kind user requires a non-null active userId and null
+        groupName; kind group requires a nonempty groupName and null userId. Named users/groups do not
+        bypass current eligibility, requester separation of duties or underlying access checks.
+      properties:
+        kind:
+          type: string
+          enum: [user, group]
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        groupName:
+          type: string
+          minLength: 1
+          maxLength: 256
+          nullable: true
+    ApprovalRuleInput:
+      type: object
+      additionalProperties: false
+      required: [name, targetKind, targetId, capabilityId, classes, enabled, approvers]
+      description: >-
+        Complete editable rule body for creation/replacement. The service requires exactly one selector:
+        a non-null capabilityId with empty classes, OR null capabilityId with nonempty classes. The capability
+        must be a tool belonging to the target (or selected through the target gateway). Unclassified tools
+        match destructive for approval matching only; their actual class/scopes do not change. Target kind
+        and ID must match the existing rule on PUT; they cannot move ownership. Omitted TTLs and the
+        separation-of-duties opt-in use the documented defaults, including on replacement. An empty approvers
+        array selects the server team's active owners/admins by default. Decision 52's non-requester
+        platform-admin fallback applies only when there is no eligible primary reviewer. Gateway owners are
+        not implicit reviewers. An empty eligible reviewer set fails closed. All cross-field checks are
+        authoritative service validation.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        targetKind:
+          $ref: '#/components/schemas/ApprovalTargetKind'
+        targetId:
+          type: string
+          format: uuid
+        capabilityId:
+          type: string
+          format: uuid
+          nullable: true
+        classes:
+          type: array
+          uniqueItems: true
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/ToolClass'
+        enabled:
+          type: boolean
+        pendingMinutes:
+          type: integer
+          minimum: 5
+          maximum: 1440
+          default: 1440
+        validMinutes:
+          type: integer
+          minimum: 1
+          maximum: 60
+          default: 15
+          description: Approved validity, bounded by the request's absolute pending expiry
+        allowServiceAccountAdmins:
+          type: boolean
+          default: false
+          description: Explicit separation-of-duties exception allowing otherwise eligible owning-team
+            owners/admins of the requesting service account to review; never permits human self-approval
+        approvers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalApprover'
+    ApprovalRule:
+      type: object
+      additionalProperties: false
+      required: [id, name, teamId, targetKind, targetId, capabilityId, classes, enabled, pendingMinutes,
+        validMinutes, allowServiceAccountAdmins, approvers, revision, createdAt, updatedAt]
+      description: >-
+        Approval policy metadata. Server rules outrank gateway rules; within a tier, capability-specific
+        rules outrank class rules. Equal-priority overlap is rejected, and ambiguous stored policy fails
+        closed. Exactly one selector is active, as validated for ApprovalRuleInput. Rule mutations invalidate
+        prior authority context even if changed back; rules never grant access.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        teamId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Target's owning team; null only for a platform gateway
+        targetKind:
+          $ref: '#/components/schemas/ApprovalTargetKind'
+        targetId:
+          type: string
+          format: uuid
+          description: Immutable server or gateway ID
+        capabilityId:
+          type: string
+          format: uuid
+          nullable: true
+        classes:
+          type: array
+          uniqueItems: true
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/ToolClass'
+        enabled:
+          type: boolean
+        pendingMinutes:
+          type: integer
+          minimum: 5
+          maximum: 1440
+          default: 1440
+        validMinutes:
+          type: integer
+          minimum: 1
+          maximum: 60
+          default: 15
+          description: Approved validity, bounded by the request's absolute pending expiry
+        allowServiceAccountAdmins:
+          type: boolean
+          default: false
+        approvers:
+          type: array
+          description: Empty means the server team's active owners/admins; fallback and exclusions still apply
+          items:
+            $ref: '#/components/schemas/ApprovalApprover'
+        revision:
+          $ref: '#/components/schemas/Revision'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ApprovalRulePage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalRule'
+        nextCursor:
+          type: string
+          nullable: true
+    ApprovalDigest:
+      type: string
+      pattern: '^[0-9a-f]{64}$'
+      description: Lowercase hexadecimal 256-bit digest; argument receipts use a keyed HMAC-SHA-256 so redacted low-entropy values cannot be guessed offline
+    ApprovalRequesterKind:
+      type: string
+      enum: [user, service_account]
+    ApprovalStatus:
+      type: string
+      enum: [pending, approved, denied, expired, used, cancelled]
+      description: >-
+        pending transitions to approved, denied, expired or cancelled; approved transitions to used, expired
+        or cancelled. Terminal states never return to approved. used means authorization spent, NOT confirmed
+        execution; a crash before sending or an unknown upstream result still spends it, and a repeat may
+        duplicate effects. No automatic replay or restoration of spent approval is permitted.
+    ApprovalReceipt:
+      type: object
+      additionalProperties: false
+      required: [id, ruleId, ruleRevision, contextEpoch, requesterKind, requesterId, requesterTeamId, gatewayId,
+        serverId, capabilityId, exposedName, toolClass, argsDigest, capabilityFingerprint, serverOrigin, status,
+        reviewRevision, createdAt, expiresAt, validUntil, decidedBy, decidedAt, usedAt, terminalAt, stale,
+        canDecide, canCancel, canRenew, previewTruncated, previewRedacted]
+      description: >-
+        Approval metadata bound to one exact merged tool call. Lists NEVER include preview; detail may
+        include it only under the restrictions below. No raw arguments, ciphertext or free-text notes are
+        exposed. Flags are computed from current authority, eligibility, binding and expiry; they grant no
+        authority and are rechecked for every mutation. A stale or terminal approval cannot authorize a
+        dispatch. Identical pending/approved MCP requests reuse their ID without extending deadlines;
+        explicit browser renewal creates a new attempt instead of mutating history.
+      properties:
+        id:
+          type: string
+          format: uuid
+        ruleId:
+          type: string
+          format: uuid
+        ruleRevision:
+          $ref: '#/components/schemas/Revision'
+        contextEpoch:
+          type: integer
+          format: int64
+          description: Monotonic authorization-context epoch bound at request creation
+        requesterKind:
+          $ref: '#/components/schemas/ApprovalRequesterKind'
+        requesterId:
+          type: string
+          format: uuid
+          description: User or service-account ID, never the account's creator/operator
+        requesterTeamId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Owning team for a service-account requester; null for a user
+        gatewayId:
+          type: string
+          format: uuid
+        serverId:
+          type: string
+          format: uuid
+        capabilityId:
+          type: string
+          format: uuid
+        exposedName:
+          type: string
+          description: Curated tool name exposed through the gateway
+        toolClass:
+          allOf:
+          - $ref: '#/components/schemas/ToolClass'
+          nullable: true
+          description: Actual owner-set class; null remains unclassified
+        argsDigest:
+          allOf:
+          - $ref: '#/components/schemas/ApprovalDigest'
+          description: Digest of exact merged arguments actually forwarded, normalizing absent/null to {}
+        capabilityFingerprint:
+          allOf:
+          - $ref: '#/components/schemas/ApprovalDigest'
+          description: Approved capability fingerprint bound to this request
+        serverOrigin:
+          type: string
+          description: Canonical upstream server origin bound to this request
+        status:
+          $ref: '#/components/schemas/ApprovalStatus'
+        reviewRevision:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Revision of the displayed review, sent back in decision/cancel/renew bodies
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          description: Absolute pending expiry; never extended by approval or deduplication
+        validUntil:
+          type: string
+          format: date-time
+          nullable: true
+          description: Approved validity deadline, never later than expiresAt
+        decidedBy:
+          type: string
+          format: uuid
+          nullable: true
+        decidedAt:
+          type: string
+          format: date-time
+          nullable: true
+        usedAt:
+          type: string
+          format: date-time
+          nullable: true
+        terminalAt:
+          type: string
+          format: date-time
+          nullable: true
+        stale:
+          type: boolean
+          description: The bound policy, authority context, arguments, fingerprint or origin is no longer current
+        canDecide:
+          type: boolean
+          description: Current caller may decide now; never based on platform/gateway ownership alone
+        canCancel:
+          type: boolean
+          description: Current caller controls the requester and may cancel now
+        canRenew:
+          type: boolean
+          description: Current caller controls the requester and may explicitly request a new attempt
+        previewTruncated:
+          type: boolean
+        previewRedacted:
+          type: boolean
+        preview:
+          type: string
+          maxLength: 16384
+          description: >-
+            Optional redacted argument preview; NEVER included in lists. Only available
+            while pending/approved to the requester, authorized owning-team humans for a service account, or
+            a currently eligible reviewer. Platform-admin/auditor oversight alone NEVER permits it. The
+            service enforces at most 16384 UTF-8 bytes (not merely characters), truncating on a UTF-8 boundary
+            after independent redaction. Display as escaped text, never HTML, with redaction/truncation
+            warnings. No terminal preview is accessible.
+    ApprovalPage:
+      type: object
+      required: [items, nextCursor]
+      description: Metadata-only page; items NEVER contain preview
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApprovalReceipt'
+        nextCursor:
+          type: string
+          nullable: true
+    ApprovalReviewInput:
+      type: object
+      additionalProperties: false
+      required: [expectedReviewRevision]
+      description: Cancel/renew precondition; 409 changed_since_review if the displayed revision changed
+      properties:
+        expectedReviewRevision:
+          type: integer
+          format: int64
+          minimum: 1
+    ApprovalDecisionInput:
+      type: object
+      additionalProperties: false
+      required: [decision, expectedReviewRevision, expectedArgsDigest]
+      description: Decision on the exact displayed review; both preconditions are checked transactionally
+      properties:
+        decision:
+          type: string
+          enum: [approve, deny]
+          x-enum-varnames: [ApprovalDecisionApprove, ApprovalDecisionDeny]
+        expectedReviewRevision:
+          type: integer
+          format: int64
+          minimum: 1
+        expectedArgsDigest:
+          $ref: '#/components/schemas/ApprovalDigest'
+    ServiceConnectionGrant:
+      type: object
+      additionalProperties: false
+      required: [serverId, origin, scopes]
+      properties:
+        serverId:
+          type: string
+          format: uuid
+        origin:
+          type: string
+        scopes:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+    ServiceConnectionStart:
+      type: object
+      additionalProperties: false
+      required: [providerId, name]
+      properties:
+        providerId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        scopes:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+    ServiceConnectionUpdate:
+      type: object
+      additionalProperties: false
+      required: [accounts, servers]
+      properties:
+        accounts:
+          type: array
+          maxItems: 500
+          items:
+            type: string
+            format: uuid
+        servers:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/ServiceConnectionGrant'
+    ServiceConnection:
+      type: object
+      required: [id, teamId, providerId, providerName, name, status, scopes, revision, accounts, servers]
+      properties:
+        id:
+          type: string
+          format: uuid
+        teamId:
+          type: string
+          format: uuid
+        providerId:
+          type: string
+          format: uuid
+        providerName:
+          type: string
+        name:
+          type: string
+        accountLabel:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, needs_reconsent, lapsed]
+        scopes:
+          type: array
+          items:
+            type: string
+        revision:
+          type: integer
+          format: int64
+        accounts:
+          type: array
+          items:
+            type: string
+            format: uuid
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceConnectionGrant'
+    ServiceConnectionPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceConnection'
+        nextCursor:
+          type: string
+          nullable: true
+    ServiceConnectionList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceConnection'
+        nextCursor:
+          type: string
+    BrowserSession:
+      type: object
+      required: [id, createdAt, lastSeenAt, expiresAt, userAgent, clientIp, current]
+      properties:
+        id: {type: string, format: uuid}
+        createdAt: {type: string, format: date-time}
+        lastSeenAt: {type: string, format: date-time, description: Activity recorded at most once a minute}
+        expiresAt: {type: string, format: date-time, description: Absolute expiry; an idle limit may end it earlier}
+        userAgent: {type: string}
+        clientIp: {type: string}
+        current: {type: boolean}
+    RevokeSessionsInput:
+      type: object
+      properties:
+        keepCurrent: {type: boolean, default: false}
     AuditActor:
       type: object
       description: Who made the change, resolved when the log is read
@@ -6962,6 +8693,10 @@ components:
           $ref: '#/components/schemas/PlatformRole'
         status:
           $ref: '#/components/schemas/UserStatus'
+        manualStatus:
+          $ref: '#/components/schemas/UserStatus'
+        directoryStanding:
+          $ref: '#/components/schemas/DirectoryStanding'
         createdAt:
           type: string
           format: date-time
@@ -7044,6 +8779,8 @@ components:
       - too_large
       - not_allowed
       - tls
+      - server_busy
+      - circuit_open
       description: 'not_allowed: the URL or an address it resolves to is refused (blocked, or internal and not allowlisted),
         or the server redirected. tls: the TLS handshake failed (the server''s certificate isn''t trusted or isn''t valid
         for the host name, or the server refused the portal''s client certificate); the message says which and what to
@@ -7152,6 +8889,12 @@ components:
         url:
           type: string
           example: https://status.example.com/mcp
+        endpoints:
+          type: array
+          maxItems: 2
+          description: Ordered additional replicas, not the canonical primary URL. None on existing servers. Governing approval/NoReplay calls use the primary only; ordinary failover is bounded by the same three-iteration deadline/quota budget. Values are never returned.
+          items:
+            $ref: '#/components/schemas/McpServerEndpoint'
         transport:
           type: string
           enum:
@@ -7182,8 +8925,27 @@ components:
           format: int32
           minimum: 1
           maximum: 120
+        rateLimitPerMinute:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 1
+          maximum: 1000000
+          description: Own forwarded-operation attempts per minute; null inherits the owning team/platform default, capped by the platform ceiling. Retries count again.
+        maxConcurrent:
+          type: integer
+          format: int32
+          nullable: true
+          minimum: 1
+          maximum: 10000
+          description: Fail-fast concurrent forwarded operations per server and replica; null is unlimited. This is not a cluster-wide lease.
         enabled:
           type: boolean
+        governance:
+          allOf:
+          - $ref: '#/components/schemas/McpServerGovernance'
+          description: Who is accountable for the server, how sensitive it is, when it is re-reviewed and whether it is
+            being retired (decision 88). Always returned; absent from servers before the schema it needs.
         publishState:
           $ref: '#/components/schemas/PublishState'
         effectivePublishPolicy:
@@ -7253,13 +9015,6 @@ components:
           nullable: true
           description: The portal's own OAuth client for this server when authMode is machine_oauth, else null. The
             client secret is never returned. Absent from servers before v0.3.2
-        requiresPresentPerson:
-          type: boolean
-          description: 'Refuse calls on a relay service account unless they are for a person the platform says is
-            present (person_present true), for every capability without its own override (McpCapability.presentPerson):
-            scheduled or background work, a token that names nobody and a relay key with no token are refused too.
-            Default false. Calls that don''t arrive on a relay service account are never affected. Absent from
-            servers before v0.3 (false)'
         sendIdentity:
           type: boolean
           description: 'Send the identity token (decision 45). true (the default) keeps decision 7: every forwarded
@@ -7273,6 +9028,10 @@ components:
           - $ref: '#/components/schemas/McpServerProtocol'
           nullable: true
           description: The MCP protocol version the portal last negotiated with the upstream server (set by refresh, health checks and test); read-only. Null until the first successful exchange.
+        supportsTasks:
+          type: boolean
+          readOnly: true
+          description: Whether the canonical primary last advertised the modern io.modelcontextprotocol/tasks extension; discovery metadata, not permission to bypass task policy. Optional for older responses; absence does not advertise task support.
         reviewDigest:
           type: string
           readOnly: true
@@ -7490,6 +9249,66 @@ components:
           type: string
           format: date-time
           description: When it expires (or expired)
+    McpServerEndpoint:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - position
+      - url
+      - enabled
+      - authMode
+      - credentials
+      properties:
+        id:
+          type: string
+          format: uuid
+        position:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 2
+        url:
+          type: string
+          maxLength: 500
+        enabled:
+          type: boolean
+        authMode:
+          type: string
+          enum:
+          - none
+          - static_header
+          description: Effective mode when this endpoint's origin/credential was explicitly configured; mismatches fail closed.
+        credentials:
+          type: array
+          maxItems: 8
+          description: Public shape/hints only; never values, ciphertext or inherited primary secrets.
+          items:
+            $ref: '#/components/schemas/McpServerCredential'
+    McpServerEndpointInput:
+      type: object
+      additionalProperties: false
+      required:
+      - url
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Update only; retain this server's existing endpoint. Absent creates a new endpoint with independent credentials. Never copy another server's ID.
+        url:
+          type: string
+          maxLength: 500
+          description: Each actual destination passes address/origin rules. A new origin requires every credential value again.
+        enabled:
+          type: boolean
+          default: true
+          description: Omit to keep for an existing entry; defaults true on a new entry. Disabled entries retain encrypted credentials and still participate in mode compatibility and review.
+        credentials:
+          type: array
+          maxItems: 8
+          description: This endpoint's independent multipart credential. No implicit primary inheritance. A new static endpoint requires all values; an unchanged-origin existing endpoint may omit to retain or use keep parts. A changed origin requires all values again, never keep or hints. No-auth entries accept no parts.
+          items:
+            $ref: '#/components/schemas/McpServerCredentialInput'
     McpServerCreate:
       type: object
       required:
@@ -7512,6 +9331,12 @@ components:
           type: string
           maxLength: 500
           description: The Streamable HTTP endpoint, https only (plain http for loopback in development)
+        endpoints:
+          type: array
+          maxItems: 2
+          description: Optional ordered additional endpoints, owner/admin browser sessions only. Initially only none/static_header with no provider requirement or TLS settings; unsupported combinations are 422 failover_not_supported. Each static entry requires independently entered credentials, never a primary copy. IDs are absent on create.
+          items:
+            $ref: '#/components/schemas/McpServerEndpointInput'
         authHeaderName:
           type: string
           description: A header such as Authorization or X-API-Key; send it with authValue, or neither
@@ -7535,6 +9360,20 @@ components:
           minimum: 1
           maximum: 120
           default: 30
+        rateLimitPerMinute:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 1
+          maximum: 1000000
+          description: Absent/null inherits; server team owners/admins only, never publisher tokens. Must not exceed the server_per_minute ceiling.
+        maxConcurrent:
+          type: integer
+          format: int32
+          nullable: true
+          minimum: 1
+          maximum: 10000
+          description: Per-replica concurrent forwards, null unlimited; server team owners/admins only, never publisher tokens.
         enabled:
           type: boolean
           default: true
@@ -7584,6 +9423,12 @@ components:
         url:
           type: string
           maxLength: 500
+        endpoints:
+          type: array
+          maxItems: 2
+          description: Omit to retain, empty list clears; null is invalid. Ordered full replacement with stable IDs for retained entries, owner/admin browser sessions only. New origins require every static value re-entered. URL/order/enabled/credential shape changes require catalog re-review. Remove extras before selecting an unsupported mode/provider/TLS combination (422 failover_not_supported). Governed/NoReplay calls remain primary-only.
+          items:
+            $ref: '#/components/schemas/McpServerEndpointInput'
         authHeaderName:
           type: string
           description: Omit to keep; an empty string removes the header and its value
@@ -7616,8 +9461,32 @@ components:
           format: int32
           minimum: 1
           maximum: 120
+        rateLimitPerMinute:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 1
+          maximum: 1000000
+          description: Omit to keep, null inherits. Server team owners/admins only; not a catalog review trigger. Must not exceed the server_per_minute ceiling.
+        maxConcurrent:
+          type: integer
+          format: int32
+          nullable: true
+          minimum: 1
+          maximum: 10000
+          description: Omit to keep, null unlimited. Per-replica fail-fast cap; server team owners/admins only, never publisher tokens.
         enabled:
           type: boolean
+        governance:
+          allOf:
+          - $ref: '#/components/schemas/McpServerGovernanceInput'
+          description: 'Omit to keep. Team owners and admins, in a browser session: an editor gets 403 governance_role and
+            an automation token never changes owner, on-call contact, sensitivity, lifecycle or replacement (403 token_not_allowed,
+            details.field governance). Raising the sensitivity of a published server sends it back to review under approval_required
+            (mcp_server.publish_request, reason sensitivity_raised); lowering it does not. Sending sensitivity, even with the
+            value the server already has, confirms the label (see McpServerGovernance.sensitivityConfirmed); no other field or
+            edit does. Audited as mcp_server.governance_update.
+            Moving the server to another team is requestTeamMcpServerTransfer.'
         requirement:
           allOf:
           - $ref: '#/components/schemas/McpServerRequirementInput'
@@ -7657,11 +9526,6 @@ components:
         sendIdentity:
           type: boolean
           description: Omit to keep. Not a review trigger (turning it off sends less). Audited in mcp_server.update
-        requiresPresentPerson:
-          type: boolean
-          description: Omit to keep. Turning it on never needs review; turning it off, when it made some capability
-            require a present person, sends a published server back to pending under approval_required (reason
-            requirement_changed), like widening a requirement. Audited in mcp_server.update
     McpServerCreated:
       type: object
       required:
@@ -7683,6 +9547,40 @@ components:
           type: boolean
           description: true for a server created in oauth mode; nobody has signed in yet, so capabilities weren't read.
             Call authorizeTeamMcpServerSetup next
+    ToolClass:
+      type: string
+      enum: [read, write, destructive]
+    CapabilityClassInput:
+      type: object
+      required: [toolClass]
+      properties:
+        toolClass:
+          allOf:
+          - $ref: '#/components/schemas/ToolClass'
+          nullable: true
+        viaSuggestion:
+          type: boolean
+    CapabilityClassesInput:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            type: object
+            required: [capabilityId, toolClass]
+            properties:
+              capabilityId:
+                type: string
+                format: uuid
+              toolClass:
+                allOf:
+                - $ref: '#/components/schemas/ToolClass'
+                nullable: true
+              viaSuggestion:
+                type: boolean
     McpCapability:
       type: object
       description: 'A tool, resource, resource template or prompt as the server listed it. Descriptions and schemas
@@ -7702,7 +9600,22 @@ components:
       - lastSeenAt
       - requirementOverride
       - requires
+      - toolClass
+      - suggestedClass
+      - classDrift
       properties:
+        toolClass:
+          allOf:
+          - $ref: '#/components/schemas/ToolClass'
+          nullable: true
+        suggestedClass:
+          allOf:
+          - $ref: '#/components/schemas/ToolClass'
+          nullable: true
+          description: Untrusted annotation suggestion; null for non-tools
+        classDrift:
+          type: boolean
+          description: A classified tool differs from its annotation suggestion
         id:
           type: string
           format: uuid
@@ -7757,8 +9670,6 @@ components:
           nullable: true
           description: The effective requirement (the server's, or the override); null when calls get no provider
             token
-        presentPerson:
-          $ref: '#/components/schemas/CapabilityPresentPerson'
     McpRefreshResult:
       type: object
       required:
@@ -7825,6 +9736,17 @@ components:
       - latencyMs
       - trigger
       properties:
+        endpointId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Additional endpoint checked; absent/null is the canonical primary or historical primary-only record. History retains the ID after endpoint deletion.
+        endpointPosition:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 2
+          description: Position when checked (zero primary); a historical fact, not a current routing selector.
         checkedAt:
           type: string
           format: date-time
@@ -7909,6 +9831,352 @@ components:
       properties:
         defaultPolicy:
           $ref: '#/components/schemas/PublishPolicy'
+    Sensitivity:
+      type: string
+      enum:
+      - public
+      - internal
+      - confidential
+      - restricted
+      description: 'A server''s label (default internal) and a gateway''s ceiling (default restricted: no ceiling). A gateway
+        serves no capability of a server above its ceiling (unavailable reason sensitivity_exceeds_gateway). Public
+        < internal < confidential < restricted.'
+    ServerLifecycle:
+      type: string
+      enum:
+      - active
+      - deprecated
+      - sunset
+      description: deprecated shows a banner and tells the owners of gateways that select the server; sunset (or a passed
+        sunsetAt) stops serving it everywhere (unavailable reason sunset).
+    ServerReplacementRef:
+      type: object
+      required:
+      - id
+      - slug
+      - name
+      - teamSlug
+      - teamName
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        teamSlug:
+          type: string
+        teamName:
+          type: string
+    McpServerGovernance:
+      type: object
+      required:
+      - sensitivity
+      - lifecycle
+      - ownerless
+      - reviewOverdue
+      properties:
+        ownerUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: The person accountable for the server (an active editor or above of its team when named)
+        ownerName:
+          type: string
+          description: The owner's name, for the team's members and platform staff
+        ownerless:
+          type: boolean
+          description: >-
+            Nobody is accountable now: none named, or the owner left the team, lost their role or was suspended or deleted (the server shows in attention lists while published)
+        oncallContact:
+          type: string
+          nullable: true
+          maxLength: 200
+          description: >-
+            Whom to page, an email address, an http(s) or tel link or a channel such as #oncall (team members and platform staff only)
+        sensitivity:
+          $ref: '#/components/schemas/Sensitivity'
+        lastReviewedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: The latest approval of a published server
+        reviewDueAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            When the next re-review is due (null: none; set from the platform's interval for its sensitivity)
+        sensitivityConfirmed:
+          type: boolean
+          description: >-
+            Whether an owner or admin of the team has confirmed the sensitivity label. A new server is labelled internal by
+            default, which nobody has checked until this is true; existing servers start unconfirmed. Sending sensitivity in
+            updateTeamMcpServer confirms it (even the value it already has). A published unconfirmed server shows in attention
+            lists (server_unlabelled). Bookkeeping only: the label, not this marker, is what a gateway's ceiling reads.
+        reviewOverdue:
+          type: boolean
+          description: The re-review date has passed. The team asks again with publishTeamMcpServer (or a platform admin approves
+            in place with adminReviewMcpServer)
+        lifecycle:
+          allOf:
+          - $ref: '#/components/schemas/ServerLifecycle'
+          description: As it is now, a deprecated server past its sunsetAt is sunset
+        deprecatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        sunsetAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: The moment the server stops being served
+        replacement:
+          allOf:
+          - $ref: '#/components/schemas/ServerReplacementRef'
+          nullable: true
+        pendingTransfer:
+          allOf:
+          - $ref: '#/components/schemas/ServerTransferRef'
+          nullable: true
+          description: An open transfer to another team (the owning team's members only)
+    McpServerGovernanceInput:
+      type: object
+      description: >-
+        Omitted fields keep their values; null clears ownerUserId, oncallContact, sunsetAt and replacementServerId.
+        Sending sensitivity is the one way to confirm the label: it confirms it even when it equals the stored value (a
+        server's label is internal by default until a team owner or admin confirms it). Omitting it, and every other
+        field or edit of the server, leaves the confirmation as it was. Confirmation is bookkeeping only: it never
+        changes what a gateway serves.
+      properties:
+        ownerUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: An active person who is an editor, admin or owner of the server's team (422 invalid_owner)
+        oncallContact:
+          type: string
+          nullable: true
+          maxLength: 200
+          description: 422 invalid_oncall_contact unless an email address, an http(s) or tel link or a channel (#oncall, @team)
+        sensitivity:
+          $ref: '#/components/schemas/Sensitivity'
+        lifecycle:
+          $ref: '#/components/schemas/ServerLifecycle'
+        sunsetAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: The moment a deprecated server stops being served; it must lie ahead (422 sunset_in_past). Moving to
+            sunset without a date sunsets it now. 422 lifecycle_active on an active server.
+        replacementServerId:
+          type: string
+          format: uuid
+          nullable: true
+          description: A published server (or one of this team) that is not retired itself and does not lead back here
+            (422 invalid_replacement)
+    ServerTransferRef:
+      type: object
+      required:
+      - id
+      - toTeamSlug
+      - toTeamName
+      - requestedAt
+      - revision
+      properties:
+        id:
+          type: string
+          format: uuid
+        toTeamSlug:
+          type: string
+        toTeamName:
+          type: string
+        requestedAt:
+          type: string
+          format: date-time
+        revision:
+          $ref: '#/components/schemas/Revision'
+    ServerTransferState:
+      type: string
+      enum:
+      - pending
+      - accepted
+      - declined
+      - cancelled
+      - forced
+    ServerTransfer:
+      type: object
+      description: A request to move a server to another team. Nothing moves until the receiving team's owner accepts.
+      required:
+      - id
+      - serverId
+      - serverSlug
+      - serverName
+      - fromTeamSlug
+      - fromTeamName
+      - toTeamSlug
+      - toTeamName
+      - state
+      - requestedAt
+      - revision
+      properties:
+        id:
+          type: string
+          format: uuid
+        serverId:
+          type: string
+          format: uuid
+        serverSlug:
+          type: string
+        serverName:
+          type: string
+        fromTeamSlug:
+          type: string
+        fromTeamName:
+          type: string
+        toTeamSlug:
+          type: string
+        toTeamName:
+          type: string
+        state:
+          $ref: '#/components/schemas/ServerTransferState'
+        note:
+          type: string
+          nullable: true
+          maxLength: 500
+        requestedByName:
+          type: string
+        requestedAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: string
+          format: date-time
+          nullable: true
+        revision:
+          $ref: '#/components/schemas/Revision'
+    ServerTransferRequest:
+      type: object
+      required:
+      - toTeam
+      properties:
+        toTeam:
+          type: string
+          description: The receiving team's slug or ID. 422 invalid_team when it does not exist, is archived or is this team.
+        note:
+          type: string
+          maxLength: 500
+    ServerTransferForce:
+      type: object
+      required:
+      - toTeam
+      properties:
+        toTeam:
+          type: string
+        note:
+          type: string
+          maxLength: 500
+    GovernanceSettings:
+      type: object
+      required:
+      - reviewIntervalDays
+      - returnOverdueToReview
+      - revision
+      - updatedAt
+      properties:
+        reviewIntervalDays:
+          type: object
+          description: >-
+            Days between re-reviews of a published server per sensitivity (0: none). A published server's next review is counted from its latest approval.
+          required:
+          - public
+          - internal
+          - confidential
+          - restricted
+          properties:
+            public:
+              type: integer
+              format: int32
+              minimum: 0
+              maximum: 3650
+            internal:
+              type: integer
+              format: int32
+              minimum: 0
+              maximum: 3650
+            confidential:
+              type: integer
+              format: int32
+              minimum: 0
+              maximum: 3650
+            restricted:
+              type: integer
+              format: int32
+              minimum: 0
+              maximum: 3650
+        returnOverdueToReview:
+          type: boolean
+          description: 'Off by default: an overdue re-review only notifies the team and shows in attention lists. On: under approval_required
+            the governance loop also sends the overdue published server back to review (reason review_due). Never unpublishes.'
+        revision:
+          $ref: '#/components/schemas/Revision'
+        updatedAt:
+          type: string
+          format: date-time
+    GovernanceSettingsUpdate:
+      type: object
+      description: Omitted fields keep their values.
+      properties:
+        reviewIntervalDays:
+          type: object
+          properties:
+            public:
+              type: integer
+              format: int32
+              minimum: 0
+              maximum: 3650
+            internal:
+              type: integer
+              format: int32
+              minimum: 0
+              maximum: 3650
+            confidential:
+              type: integer
+              format: int32
+              minimum: 0
+              maximum: 3650
+            restricted:
+              type: integer
+              format: int32
+              minimum: 0
+              maximum: 3650
+        returnOverdueToReview:
+          type: boolean
+    CatalogServerGovernance:
+      type: object
+      description: What anyone who can read the catalog sees of a server's governance (never its owner or on-call contact).
+      required:
+      - sensitivity
+      - lifecycle
+      properties:
+        sensitivity:
+          $ref: '#/components/schemas/Sensitivity'
+        lifecycle:
+          $ref: '#/components/schemas/ServerLifecycle'
+        deprecatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        sunsetAt:
+          type: string
+          format: date-time
+          nullable: true
+        replacement:
+          allOf:
+          - $ref: '#/components/schemas/ServerReplacementRef'
+          nullable: true
+          description: Only a published replacement
     NetworkEntry:
       type: object
       description: One allowlist entry. A cidr entry allows private addresses inside it (literal or resolved); a
@@ -8032,215 +10300,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/NetworkCheckAddress'
-    AgentPlatform:
-      type: object
-      description: An external agent platform the portal trusts to name the person behind a relayed agent call
-        (decisions 65 and 66). It holds no secrets, because the keys are public.
-      required:
-      - id
-      - name
-      - issuer
-      - jwksUrl
-      - audience
-      - enabled
-      - relayCount
-      - keyIds
-      - revision
-      - createdAt
-      - updatedAt
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        issuer:
-          type: string
-          description: The iss of the platform's tokens, exactly as it writes it (its APP_URL)
-        jwksUrl:
-          type: string
-        audience:
-          type: string
-          description: The aud a token must contain (this portal's APP_URL by default; the platform sets it as the
-            server's identityAudience)
-        enabled:
-          type: boolean
-        relayCount:
-          type: integer
-          format: int64
-          description: Service accounts marked as relays for the platform
-        lastFetch:
-          allOf:
-          - $ref: '#/components/schemas/AgentPlatformFetch'
-          nullable: true
-          description: The latest JWKS fetch by any replica (a verification or a Test); null before the first
-        keyIds:
-          type: array
-          items:
-            type: string
-          description: The key IDs the last successful fetch published (empty after a failed one)
-        revision:
-          $ref: '#/components/schemas/Revision'
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-    AgentPlatformFetch:
-      type: object
-      required:
-      - at
-      - ok
-      properties:
-        at:
-          type: string
-          format: date-time
-        ok:
-          type: boolean
-        error:
-          type: string
-          nullable: true
-          description: not_allowed, redirect, timeout, unreachable, http_status, content_type, too_large,
-            invalid_json or no_usable_keys
-    AgentPlatformCreate:
-      type: object
-      required:
-      - name
-      - issuer
-      properties:
-        name:
-          type: string
-          minLength: 1
-          maxLength: 100
-        issuer:
-          type: string
-          maxLength: 500
-          description: An absolute https URL without query or fragment, compared exactly with the token's iss
-        jwksUrl:
-          type: string
-          maxLength: 500
-          description: Default <issuer>/.well-known/mcp-identity-jwks.json
-        audience:
-          type: string
-          maxLength: 500
-          description: Default this portal's APP_URL
-        enabled:
-          type: boolean
-          default: true
-    AgentPlatformUpdate:
-      type: object
-      properties:
-        name:
-          type: string
-          minLength: 1
-          maxLength: 100
-        issuer:
-          type: string
-          maxLength: 500
-        jwksUrl:
-          type: string
-          maxLength: 500
-          description: An empty string goes back to the default for the issuer
-        audience:
-          type: string
-          maxLength: 500
-          description: An empty string goes back to this portal's APP_URL
-        enabled:
-          type: boolean
-    AgentPlatformTestResult:
-      type: object
-      required:
-      - ok
-      - keyIds
-      - checkedAt
-      - latencyMs
-      properties:
-        ok:
-          type: boolean
-        error:
-          type: string
-          nullable: true
-          description: AgentPlatformFetch.error
-        httpStatus:
-          type: integer
-          nullable: true
-          description: The platform's answer when error is http_status
-        keyIds:
-          type: array
-          items:
-            type: string
-        checkedAt:
-          type: string
-          format: date-time
-        latencyMs:
-          type: integer
-          format: int64
-        cacheSeconds:
-          type: integer
-          format: int64
-          nullable: true
-          description: How long a replica caches a good answer (Cache-Control max-age within 10 seconds to 5 minutes)
-    AgentPlatformRelay:
-      type: object
-      required:
-      - serviceAccountId
-      - name
-      - teamId
-      - teamSlug
-      - teamName
-      - role
-      - enabled
-      properties:
-        serviceAccountId:
-          type: string
-          format: uuid
-        name:
-          type: string
-        teamId:
-          type: string
-          format: uuid
-        teamSlug:
-          type: string
-        teamName:
-          type: string
-        role:
-          $ref: '#/components/schemas/ServiceAccountRole'
-        enabled:
-          type: boolean
-        markedAt:
-          type: string
-          format: date-time
-          nullable: true
-    CapabilityPresentPersonOverride:
-      type: object
-      required:
-      - mode
-      properties:
-        mode:
-          type: string
-          enum:
-          - inherit
-          - required
-          - not_required
-    CapabilityPresentPerson:
-      type: object
-      required:
-      - mode
-      - effective
-      properties:
-        mode:
-          type: string
-          enum:
-          - inherit
-          - required
-          - not_required
-        effective:
-          type: boolean
-          description: Relayed calls of this capability need the person present (the override, else the server's switch)
     AgentCall:
       type: object
-      description: The agent behind a call relayed by a trusted agent platform. The principal of such a call is the
+      description: Read-only historical attribution from the retired external-platform integration. The agent behind an old call. The principal of such a call is the
         relay service account; person (when the token named one) is who the agent acted for.
       required:
       - platformName
@@ -8355,6 +10417,8 @@ components:
           - $ref: '#/components/schemas/McpServerAuthMode'
           description: oauth means each person signs in to the server's own service before calling it. Absent from
             servers before Phase 7
+        governance:
+          $ref: '#/components/schemas/CatalogServerGovernance'
     CatalogServerPage:
       type: object
       required:
@@ -8383,6 +10447,10 @@ components:
           - $ref: '#/components/schemas/CapabilityRequirement'
           nullable: true
           description: The account a person must connect to use it (null; none)
+        toolClass:
+          allOf:
+          - $ref: '#/components/schemas/ToolClass'
+          nullable: true
         id:
           type: string
           format: uuid
@@ -8478,6 +10546,15 @@ components:
           type: integer
           format: int64
           description: Selected capabilities not served right now (see GatewayCapability.unavailableReason)
+        maxSensitivity:
+          allOf:
+          - $ref: '#/components/schemas/Sensitivity'
+          description: >-
+            The gateway's ceiling (default restricted): a server above it is listed as unavailable with the reason sensitivity_exceeds_gateway and never served.
+        accessRequestsEnabled:
+          type: boolean
+          readOnly: true
+          description: Platform gateways only; change through the browser-only access-settings operation.
         grantCount:
           type: integer
           format: int64
@@ -8542,6 +10619,10 @@ components:
         capturePayloads:
           type: boolean
           default: false
+        maxSensitivity:
+          allOf:
+          - $ref: '#/components/schemas/Sensitivity'
+          description: 'Absent: restricted (no ceiling). An automation token can''t set it (403 token_not_allowed, details.field maxSensitivity).'
         rateLimitPerMinute:
           type: integer
           format: int64
@@ -8566,6 +10647,12 @@ components:
           type: boolean
           description: Omit to keep. Platform admins can't change it on team gateways (403 team_gateway). Audited in
             gateway.update.
+        maxSensitivity:
+          allOf:
+          - $ref: '#/components/schemas/Sensitivity'
+          description: Omit to keep. The ceiling lowers or widens what the gateway serves at once; audited in gateway.update.
+            An automation token can't change it (403 token_not_allowed, details.field maxSensitivity), and platform admins
+            can't on team gateways (403 team_gateway).
         rateLimitPerMinute:
           type: integer
           format: int64
@@ -8583,7 +10670,12 @@ components:
       - changed
       - gone
       - team_archived
-      description: 'server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved
+      - curation_stale
+      - sensitivity_exceeds_gateway
+      - sunset
+      description: 'sensitivity_exceeds_gateway: the server''s sensitivity is above this gateway''s ceiling (maxSensitivity); raise
+        the ceiling or have the server lowered. sunset: the server is retired (its lifecycle is sunset, or its sunset date
+        has passed) and is served by no gateway. curation_stale: the curated definition changed and requires owner review. server_disabled: its server is off. not_published: a catalog server left the catalog. not_approved
         / changed: the current definition isn''t approved. gone: the server no longer lists it. team_archived: the
         team that owns its server, or the team gateway''s own team, is archived (unarchiving restores it).'
     GatewayCapability:
@@ -8602,12 +10694,46 @@ components:
       - available
       - requires
       properties:
+        fingerprint:
+          type: string
+        originalDefinition:
+          type: object
+          additionalProperties: true
+          x-go-type: json.RawMessage
+          x-go-type-skip-optional-pointer: true
+        effectiveDefinition:
+          type: object
+          additionalProperties: true
+          x-go-type: json.RawMessage
+          x-go-type-skip-optional-pointer: true
+        curation:
+          allOf:
+          - $ref: '#/components/schemas/GatewayToolCuration'
+          nullable: true
+          x-go-type: json.RawMessage
+          x-go-type-skip-optional-pointer: true
+        stale:
+          type: boolean
+        baseFingerprint:
+          type: string
+        curatedBy:
+          type: string
+          format: uuid
+          nullable: true
+        curatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        toolClass:
+          allOf:
+          - $ref: '#/components/schemas/ToolClass'
+          nullable: true
         requires:
           allOf:
           - $ref: '#/components/schemas/CapabilityRequirement'
           nullable: true
-          description: The account a person must connect to use it (null; none). Service accounts can't call
-            capabilities that require one. In MyGatewayDetail, connected says whether the caller's connection covers
+          description: The account a person must connect to use it (null; none). Service accounts need an explicitly
+            assigned active team connection and a destination origin/scope grant. In MyGatewayDetail, connected says whether the caller's connection covers
             it now
         capabilityId:
           type: string
@@ -8663,6 +10789,47 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GatewayCapability'
+    GatewayToolConstraint:
+      type: object
+      additionalProperties: false
+      description: >-
+        Exactly one of fixed (including null) or allowed. Values must satisfy the original property schema.
+        Recursively, numbers must be finite and exactly value-round-trippable through standard JSON binary64
+        parsing and serialization; integral numbers must be safe integers (absolute value at most 9007199254740991).
+        Ordinary 0.1 and 1e-1 are accepted; high-precision fractions, overflow and underflow are rejected, never
+        silently rounded. Numeric spellings are at most 256 bytes. Projection additionally enforces cumulative
+        compilation, validation and exact-arithmetic work budgets; expensive unsupported schemas or policies
+        are refused as a whole. These authoring limits do not globally restrict unconstrained runtime arguments.
+      properties:
+        fixed:
+          nullable: true
+          x-go-type: json.RawMessage
+          x-go-type-skip-optional-pointer: true
+        allowed:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: {}
+    GatewayToolCuration:
+      type: object
+      additionalProperties: false
+      properties:
+        nameOverride:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 128
+          pattern: '^[A-Za-z0-9_.-]+$'
+          description: Complete model-facing exposed tool name; null restores the default.
+        descriptionOverride:
+          type: string
+          nullable: true
+          maxLength: 2000
+        constraints:
+          type: object
+          maxProperties: 50
+          additionalProperties:
+            $ref: '#/components/schemas/GatewayToolConstraint'
     GatewayCapabilitySelection:
       type: object
       required:
@@ -8673,6 +10840,16 @@ components:
           format: uuid
         minRole:
           $ref: '#/components/schemas/TeamRole'
+        expectedFingerprint:
+          type: string
+          description: Current capability fingerprint, required for any explicit curation edit including clearing.
+        curation:
+          allOf:
+          - $ref: '#/components/schemas/GatewayToolCuration'
+          nullable: true
+          description: Omit to preserve existing policy; null clears; object replaces. Session only. Mismatch is 409 changed_since_review; exposed-name collision is 409 name_taken.
+          x-go-type: json.RawMessage
+          x-go-type-skip-optional-pointer: true
     GatewayCapabilitiesUpdate:
       type: object
       required:
@@ -8719,6 +10896,10 @@ components:
           type: string
         teamName:
           type: string
+        toolClass:
+          allOf:
+          - $ref: '#/components/schemas/ToolClass'
+          nullable: true
         source:
           type: string
           enum:
@@ -8752,19 +10933,136 @@ components:
         nextCursor:
           type: string
           nullable: true
+    RequestableGateway:
+      type: object
+      required: [id, name, description]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+    RequestableGatewayPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/RequestableGateway'}
+        nextCursor: {type: string, nullable: true}
+    GatewayAccessSettingsUpdate:
+      type: object
+      additionalProperties: false
+      required: [enabled, stewardIds]
+      properties:
+        enabled: {type: boolean}
+        stewardIds:
+          type: array
+          maxItems: 50
+          uniqueItems: true
+          items: {type: string, format: uuid}
+    GatewayAccessSettings:
+      type: object
+      additionalProperties: false
+      required: [enabled, stewardIds, revision]
+      properties:
+        enabled: {type: boolean}
+        stewardIds:
+          type: array
+          maxItems: 50
+          uniqueItems: true
+          items: {type: string, format: uuid}
+        revision: {type: integer, format: int64}
+    AccessRequestCreate:
+      type: object
+      additionalProperties: false
+      required: [gatewayId, reason]
+      properties:
+        gatewayId: {type: string, format: uuid}
+        teamId:
+          type: string
+          format: uuid
+          description: Omitted means oneself; otherwise requires current owner/admin authority in this active team.
+        reason: {type: string, minLength: 1, maxLength: 1000}
+    AccessRequestDecision:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [approve, deny]
+          x-enum-varnames: [AccessApprove, AccessDeny]
+        note: {type: string, maxLength: 1000}
+        expiresInDays:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 365
+          description: Approval only; omitted means a permanent grant.
+    AccessRequest:
+      type: object
+      required: [id, gatewayId, gatewayName, requesterId, requesterName, subjectKind, reason, status, createdAt, decidedAt, decisionNote, grantId, grantExpiresAt, canDecide]
+      properties:
+        id: {type: string, format: uuid}
+        gatewayId: {type: string, format: uuid}
+        gatewayName: {type: string}
+        requesterId: {type: string, format: uuid}
+        requesterName: {type: string}
+        subjectKind: {type: string, enum: [user, team]}
+        teamId: {type: string, format: uuid}
+        teamName: {type: string}
+        reason: {type: string}
+        status: {type: string, enum: [pending, approved, denied, withdrawn]}
+        createdAt: {type: string, format: date-time}
+        decidedAt: {type: string, format: date-time, nullable: true}
+        decisionNote: {type: string}
+        grantId: {type: string, format: uuid, nullable: true}
+        grantExpiresAt: {type: string, format: date-time, nullable: true}
+        canDecide: {type: boolean}
+    AccessRequestPage:
+      type: object
+      required: [items, pendingReviewCount]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/AccessRequest'}
+        nextCursor: {type: string, nullable: true}
+        pendingReviewCount: {type: integer, format: int64}
     GatewayGrantSubjectKind:
       type: string
       enum:
       - team
       - user
       - group
+    ToolScope:
+      type: object
+      nullable: true
+      additionalProperties: false
+      description: Optional tool ceiling. Null is unrestricted; an empty object denies all tools. Classes OR exact exposed names match within a scope; independent layers intersect. Prompts and resources are unchanged.
+      properties:
+        classes:
+          type: array
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/ToolClass'
+        tools:
+          type: array
+          maxItems: 500
+          items:
+            type: string
+            minLength: 1
+            maxLength: 1100
+            pattern: '^[^\u0000-\u001F\u007F-\u009F*?\[\]{}\\]+$'
+            description: Exact case-sensitive exposed name, including future aliases. At most 1100 UTF-8 bytes (the byte bound is checked by the API); no control characters or glob operators (* ? [ ] { } backslash). No server__ prefix is required.
     GatewayGrant:
       type: object
+      description: A platform-gateway grant. Null expiry is permanent; an elapsed expiry never contributes access or tool scope, even before cleanup.
       required:
       - id
       - subjectKind
       - createdAt
       properties:
+        toolScope:
+          $ref: '#/components/schemas/ToolScope'
         id:
           type: string
           format: uuid
@@ -8782,6 +11080,10 @@ components:
           format: date-time
         addedByName:
           type: string
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
           nullable: true
     GrantTeam:
       type: object
@@ -8801,8 +11103,16 @@ components:
       type: object
       required:
       - subjectKind
-      description: Exactly one of team, userEmail or group, matching subjectKind
+      description: Exactly one of team, userEmail or group, matching subjectKind. Expiry is optional and permanent by default. Drain older serving binaries before creating expiring grants.
       properties:
+        expiresInDays:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 365
+          description: Elapsed UTC days from creation; omitted means permanent.
+        toolScope:
+          $ref: '#/components/schemas/ToolScope'
         subjectKind:
           $ref: '#/components/schemas/GatewayGrantSubjectKind'
         team:
@@ -8873,9 +11183,9 @@ components:
         needsPersonCount:
           type: integer
           format: int64
-          description: Service-account views (listServiceAccountGateways) only. Capabilities it would offer that require
-            a person's account (a provider requirement); service accounts are refused them, so capabilityCount leaves
-            them out
+          description: Service-account views (listServiceAccountGateways) only. Capabilities currently refused because
+            the service account lacks an active, explicitly assigned and allowed shared OAuth connection, or because
+            they require a person-only secret. capabilityCount leaves these out
     MyGatewayDetail:
       type: object
       required:
@@ -8900,6 +11210,8 @@ components:
       - status
       - gateways
       properties:
+        toolScope:
+          $ref: '#/components/schemas/ToolScope'
         id:
           type: string
           format: uuid
@@ -8958,6 +11270,8 @@ components:
       required:
       - name
       properties:
+        toolScope:
+          $ref: '#/components/schemas/ToolScope'
         name:
           type: string
           minLength: 1
@@ -9000,6 +11314,7 @@ components:
       - too_large
       - bad_request
       - needs_authorization
+      - needs_approval
       - rate_limited
       description: 'ok: answered. tool_error: the tool reported an error. denied: refused by policy (logged; the
         client saw not found, or for a service account calling a capability that requires an account, a clear
@@ -9007,6 +11322,8 @@ components:
         endpoint failed). bad_request: the client''s request was invalid. needs_authorization: not forwarded because
         the person must connect or reconnect an account; the client got a consent link (JSON-RPC -32042), or, for a
         call from an agent, a tool error without a link (errorClass needs_connection).
+        needs_approval: not forwarded because a sensitive tool call needs human approval; the client receives
+        an approval link (modern URL-capable input_required, modern tool error, or legacy JSON-RPC -32042).
         rate_limited: not forwarded because a rate limit was exceeded (HTTP 429, JSON-RPC -32029; errorClass names
         the limit: person_per_minute, credential_per_minute, service_account_per_minute or gateway_per_minute).'
     McpCall:
@@ -9031,8 +11348,8 @@ components:
           format: date-time
         method:
           type: string
-          description: tools/list, tools/call, prompts/list, prompts/get, resources/list, resources/templates/list
-            or resources/read
+          description: tools/list, tools/call, prompts/list, prompts/get, resources/list, resources/templates/list,
+            resources/read, tasks/get, tasks/update or tasks/cancel. Task operations retain the original exposed tool identity, never the actual task ID.
           example: tools/call
         exposedName:
           type: string
@@ -9051,21 +11368,20 @@ components:
         errorClass:
           type: string
           description: 'Why a call was denied or failed, for example no_access, role, unknown, key_scope (the API
-            key is limited to other gateways), gateway_disabled or an unavailability reason. For capabilities that
+            key is limited to other gateways), tool_scope (a credential, account or matching gateway-grant ceiling excludes the tool), gateway_disabled or an unavailability reason. For capabilities that
             require an account; needs_authorization with not_connected, missing_scopes, needs_reconsent or
             server_not_allowed (connected, but the person hasn''t allowed this server, at its current address, to use
             the account); denied with
             service_account, provider_disabled, provider_not_allowed (the provider is restricted and its access list
-            excludes the server), person_not_present (an agent''s call whose server or capability requires
-            a present person) or, for an agent''s call for a person, person_no_account or person_suspended; needs_authorization
-            with needs_connection for an agent''s call (the person must connect an account; the answer was a tool error
-            with no link); upstream_error with provider_unavailable. For a server where each person enters their own
-            key (decision 72): needs_authorization with secret_missing or secret_rejected (the answer carried the
-            link, or for an agent''s call a tool error with none) or agents_not_allowed (an agent''s call, the person
-            has a key but hasn''t allowed agents); denied with service_account or person_suspended.'
+            excludes the server); upstream_error with provider_unavailable. For person-secret mode,
+            needs_authorization with secret_missing or secret_rejected; denied with service_account or
+            person_suspended. Historical rows may retain retired external-platform error classes such as
+            person_not_present, person_no_account, needs_connection and agents_not_allowed.'
         providerSlug:
           type: string
           description: The auth provider the capability required at the time of the call (absent when none)
+        toolClass:
+          $ref: '#/components/schemas/ToolClass'
         identitySent:
           type: boolean
           nullable: true
@@ -9100,7 +11416,7 @@ components:
           allOf:
           - $ref: '#/components/schemas/AgentCall'
           nullable: true
-          description: Set when a trusted agent platform relayed the call (docs/agent-platforms.md); the principal is
+          description: Read-only historical attribution from a retired external-platform integration; the principal is
             then the relay service account. Absent from servers before v0.3
     CallRef:
       type: object
@@ -9218,6 +11534,8 @@ components:
       - remembered
       - notice
       properties:
+        requestedToolScope:
+          $ref: '#/components/schemas/ToolScope'
         client:
           $ref: '#/components/schemas/OAuthClientInfo'
         gateway:
@@ -9240,6 +11558,11 @@ components:
       - query
       - decision
       properties:
+        toolScope:
+          allOf:
+          - $ref: '#/components/schemas/ToolScope'
+          nullable: true
+          description: Classes only. Omitted defaults to the requested ceiling; null must not widen a restricted request.
         query:
           type: string
           maxLength: 8000
@@ -9257,6 +11580,8 @@ components:
       - gateway
       - createdAt
       properties:
+        toolScope:
+          $ref: '#/components/schemas/ToolScope'
         id:
           type: string
           format: uuid
@@ -9345,6 +11670,12 @@ components:
       - createdAt
       - updatedAt
       properties:
+        retired:
+          type: boolean
+          readOnly: true
+          description: Legacy external-platform relay; permanently retired. Create a new ordinary account and key instead.
+        toolScope:
+          $ref: '#/components/schemas/ToolScope'
         id:
           type: string
           format: uuid
@@ -9372,12 +11703,6 @@ components:
         createdByName:
           type: string
           nullable: true
-        relayPlatform:
-          allOf:
-          - $ref: '#/components/schemas/ServiceAccountRelayPlatform'
-          nullable: true
-          description: The trusted agent platform this account relays for (set by a platform admin only; null for an
-            ordinary service account). Absent from servers before v0.3
         revision:
           $ref: '#/components/schemas/Revision'
         createdAt:
@@ -9386,17 +11711,6 @@ components:
         updatedAt:
           type: string
           format: date-time
-    ServiceAccountRelayPlatform:
-      type: object
-      required:
-      - id
-      - name
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
     ServiceAccountPage:
       type: object
       required:
@@ -9414,6 +11728,8 @@ components:
       required:
       - name
       properties:
+        toolScope:
+          $ref: '#/components/schemas/ToolScope'
         name:
           type: string
           pattern: ^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$
@@ -9431,6 +11747,11 @@ components:
     ServiceAccountUpdate:
       type: object
       properties:
+        toolScope:
+          allOf:
+          - $ref: '#/components/schemas/ToolScope'
+          nullable: true
+          description: Omitted retains the ceiling; null clears it; an object replaces it. Existing keys intersect this live value on every call.
         name:
           type: string
           pattern: ^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$
@@ -9452,6 +11773,8 @@ components:
       - expiresAt
       - gateways
       properties:
+        toolScope:
+          $ref: '#/components/schemas/ToolScope'
         id:
           type: string
           format: uuid
@@ -9493,6 +11816,8 @@ components:
       required:
       - name
       properties:
+        toolScope:
+          $ref: '#/components/schemas/ToolScope'
         name:
           type: string
           minLength: 1
@@ -10577,7 +12902,6 @@ components:
       - config
       - origin
       - hasSecret
-      - allowAgents
       - reachable
       - canSetup
       - isSetup
@@ -10601,9 +12925,6 @@ components:
           - active
           - rejected
           description: The server answered 401 or 403 to a rejected key; it is not sent again until replaced
-        allowAgents:
-          type: boolean
-          description: An agent that relays a call for the person may use the key (decisions 66 and 68). Off by default
         createdAt:
           type: string
           format: date-time
@@ -10644,11 +12965,7 @@ components:
           writeOnly: true
           minLength: 8
           maxLength: 4096
-          description: The key, on one line (surrounding space is trimmed). Omit to keep the stored key while changing
-            allowAgents or useForSetup. Sealed, never returned, logged or audited
-        allowAgents:
-          type: boolean
-          description: Omit to keep (false for a new entry)
+          description: The key, on one line (surrounding space is trimmed). Omit to keep the stored key while changing useForSetup. Sealed, never returned, logged or audited
         useForSetup:
           type: boolean
           description: Read the server's capabilities with this key from now on (editors of the server's team only, else 403). The capabilities are read once it is saved; a failure is stored as the server's refresh error
@@ -11345,10 +13662,11 @@ components:
       - credential_per_minute
       - service_account_per_minute
       - gateway_per_minute
+      - server_per_minute
       description: 'person_per_minute: every /mcp request by one person, any credential and gateway.
         credential_per_minute: per personal API key or OAuth connection. service_account_per_minute: per service
         account, all its keys (team override). gateway_per_minute: per gateway, all callers together (team override as
-        the default of the team''s gateways; each gateway can set its own).'
+        the default of the team''s gateways; each gateway can set its own). server_per_minute: forwarded attempts to one upstream server across callers/gateways, including retries; team/server overrides respect the ceiling.'
     RateLimitValue:
       type: integer
       format: int64
@@ -11404,6 +13722,10 @@ components:
           type: integer
           format: int64
           description: Gateways whose own value is above the ceiling (the ceiling applies)
+        cappedServers:
+          type: integer
+          format: int64
+          description: Servers whose own override is above the ceiling; absent from older versions.
     LimitSettings:
       type: object
       required:
@@ -12064,10 +14386,11 @@ components:
       type: object
       description: 'Where the web app goes for an item (docs/admin-overview.md, Link targets). server: the server page (team
         page for members, Admin > Servers for platform staff); servers: the team''s server list; review_queue: Admin > Publishing;
-        gateways: Admin > Gateways; service_account / service_accounts: the team''s service accounts; automation_tokens: Admin
+        gateways: Admin > Gateways (the team''s Gateways when teamSlug is set); service_account / service_accounts: the team''s service accounts; automation_tokens: Admin
         > Automation tokens; team_automation_tokens: the team''s Settings > Automation tokens; auth_providers: Admin > Auth
         providers; usage: Admin > Usage; notification_settings: Admin > Notifications; team_notification_settings: the team''s
-        Settings > Notifications; account_connections: Account > Connections; account_api_keys: Account > API keys.'
+        Settings > Notifications; service_connections: the team''s Service accounts > Connections tab;
+        account_connections: Account > Connections; account_api_keys: Account > API keys; approval: the private receipt page.'
       required:
       - type
       properties:
@@ -12086,11 +14409,15 @@ components:
           - usage
           - notification_settings
           - team_notification_settings
+          - service_connections
           - account_connections
           - account_api_keys
+          - approval
+          - access_request
+          - access_requests
         id:
           type: string
-          description: The object's ID for singular types (server, service_account)
+          description: The object's ID for singular types (server, service_account, approval)
         teamSlug:
           type: string
           description: The team's slug, for team pages and for the team's server or service account
@@ -12100,6 +14427,8 @@ components:
       - server_failing
       - upstream_signin_lapsed
       - review_pending
+      - approval_pending
+      - access_requests_pending
       - capabilities_changed
       - personal_keys_expiring
       - service_account_keys_expiring
@@ -12109,7 +14438,19 @@ components:
       - rate_limited
       - notification_failures
       - server_certificate_expiring
-      description: 'server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within
+      - review_due
+      - server_ownerless
+      - server_transfer_pending
+      - server_unlabelled
+      description: 'server_unlabelled: one item per published server whose sensitivity label nobody has confirmed (the label is
+        internal by default until a team owner or admin confirms it; severity info, nothing is blocked or unpublished).
+        review_due: one item per published server whose re-review is overdue (at = the due date; the team
+        asks again with publish, or a platform admin approves in place). server_ownerless: one item per published server nobody
+        is accountable for (no owner named, or the owner left the team, lost their editor role, was suspended or deleted).
+        server_transfer_pending: one item, count = transfers waiting for the team''s owners to accept (team view, owners only).
+        approval_pending: one private receipt per exact call the current human can review; excludes self-approval,
+        stale or expired requests, ineligible service-account admins and automation tokens. Totals count only that human''s
+        eligible receipts. server_certificate_expiring: one item per enabled server whose mTLS client certificate expires within
         14 days or has expired (at = notAfter; critical once expired, warning within 3 days). server_failing: one item per enabled server whose latest health check failed (at = failing since). upstream_signin_lapsed:
         one per oauth-mode server whose setup sign-in needs re-consent (at = since). review_pending: one item, count = servers
         waiting for a platform review, at = the oldest request. capabilities_changed: one per published server with changed
@@ -12154,6 +14495,10 @@ components:
         summary:
           type: string
           description: One line in English, for scripts and logs; the web app builds its own wording from the fields
+        detail:
+          type: string
+          maxLength: 1100
+          description: Optional non-sensitive context; for approval_pending, the exposed tool name, never arguments or previews
         count:
           type: integer
           format: int64
@@ -12312,12 +14657,24 @@ components:
       - connection.needs_reconsent
       - upstream_signin.lapsed
       - key.expiring
-      description: 'server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts.
+      - approval.requested
+      - approval.decided
+      - access.requested
+      - access.decided
+      - server.review_due
+      - server.sunset_soon
+      - server.deprecated
+      description: 'server.review_due: a published server''s re-review is overdue (its team''s owners and admins and its named
+        owner; once per due date). server.sunset_soon: a deprecated server stops being served within 14 days (its team and the
+        owners of gateways that select it; once per sunset date). server.deprecated: a server that a gateway selects was
+        deprecated (that gateway''s owners; once per gateway and deprecation). These three are in-app and email only, never webhooks.
+        server.unhealthy: 3 failed checks in a row, once per incident, a reminder every 24 hours while it lasts.
         server.recovered. capability.changed: a published server''s definition changed or grew and is held back. publish.requested:
         a server entered review (platform admins). publish.decided: approved or rejected (team owners and admins). connection.needs_reconsent:
         a person''s connection to a provider or server lapsed (that person only). upstream_signin.lapsed: an oauth server''s
         setup sign-in lapsed (editors and above). key.expiring: a key or token expires in 7 days. Webhooks can''t subscribe
-        to connection.needs_reconsent or to personal keys.'
+        to connection.needs_reconsent, approval.requested, approval.decided, access.requested, access.decided or to personal keys.
+        Approval notices contain receipt metadata only and resolve current eligible recipients at delivery.'
     NotificationItem:
       type: object
       required:
@@ -12957,7 +15314,12 @@ components:
           - url_changed
           - upstream_auth_changed
           - upstream_tls_changed
+          - endpoints_changed
           - requirement_changed
+          - classification_changed
+          - sensitivity_raised
+          - review_due
+          - transferred
         note:
           type: string
           maxLength: 300
@@ -12972,6 +15334,7 @@ components:
               enum:
               - user
               - automation_token
+              - system
             name:
               type: string
     PublishDecidedData:
@@ -13081,6 +15444,102 @@ components:
           nullable: true
           description: The server, for server_certificate (its mTLS client certificate expires within 14 days; the
             team's owners, admins and editors are told)
+    ApprovalNotificationData:
+      type: object
+      description: Private receipt metadata; never arguments, previews, digests, notes or credentials.
+      required:
+      - approvalId
+      - exposedName
+      - status
+      properties:
+        approvalId:
+          type: string
+          format: uuid
+        exposedName:
+          type: string
+          maxLength: 1100
+        status:
+          $ref: '#/components/schemas/ApprovalStatus'
+    NotificationGatewayRef:
+      type: object
+      description: A gateway, named only to its own owners
+      required:
+      - id
+      - slug
+      - name
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+    ServerReviewDueData:
+      type: object
+      required:
+      - server
+      - sensitivity
+      - dueAt
+      - returnedToReview
+      properties:
+        server:
+          $ref: '#/components/schemas/NotificationServerRef'
+        sensitivity:
+          $ref: '#/components/schemas/Sensitivity'
+        dueAt:
+          type: string
+          format: date-time
+        returnedToReview:
+          type: boolean
+          description: The governance loop also sent the server back to review (the platform setting is on)
+    ServerSunsetSoonData:
+      type: object
+      required:
+      - server
+      - sunsetAt
+      - daysLeft
+      properties:
+        server:
+          $ref: '#/components/schemas/NotificationServerRef'
+        sunsetAt:
+          type: string
+          format: date-time
+        daysLeft:
+          type: integer
+          format: int32
+        replacement:
+          allOf:
+          - $ref: '#/components/schemas/NotificationServerRef'
+          nullable: true
+        gateway:
+          allOf:
+          - $ref: '#/components/schemas/NotificationGatewayRef'
+          nullable: true
+          description: >-
+            The gateway whose owners are told (null: the server's own team)
+    ServerDeprecatedData:
+      type: object
+      required:
+      - server
+      - deprecatedAt
+      - gateway
+      properties:
+        server:
+          $ref: '#/components/schemas/NotificationServerRef'
+        deprecatedAt:
+          type: string
+          format: date-time
+        sunsetAt:
+          type: string
+          format: date-time
+          nullable: true
+        replacement:
+          allOf:
+          - $ref: '#/components/schemas/NotificationServerRef'
+          nullable: true
+        gateway:
+          $ref: '#/components/schemas/NotificationGatewayRef'
     NotificationTestData:
       type: object
       required:
@@ -13118,6 +15577,13 @@ components:
           - connection.needs_reconsent
           - upstream_signin.lapsed
           - key.expiring
+          - approval.requested
+          - approval.decided
+          - access.requested
+          - access.decided
+          - server.review_due
+          - server.sunset_soon
+          - server.deprecated
           - test
         version:
           type: integer
@@ -13154,6 +15620,10 @@ components:
           - $ref: '#/components/schemas/ConnectionNeedsReconsentData'
           - $ref: '#/components/schemas/UpstreamSigninLapsedData'
           - $ref: '#/components/schemas/KeyExpiringData'
+          - $ref: '#/components/schemas/ApprovalNotificationData'
+          - $ref: '#/components/schemas/ServerReviewDueData'
+          - $ref: '#/components/schemas/ServerSunsetSoonData'
+          - $ref: '#/components/schemas/ServerDeprecatedData'
           - $ref: '#/components/schemas/NotificationTestData'
           description: The shape follows type
     AutomationTokenKind:
@@ -13236,6 +15706,322 @@ components:
           - creator_not_platform_admin
           nullable: true
           description: A platform token is refused while its creator isn't an active platform admin
+    ProvisioningEnrollment:
+      type: string
+      enum:
+      - optional
+      - required
+      description: optional keeps unmanaged sign-in for new identities without a resource; required refuses them
+    DirectoryStanding:
+      type: string
+      enum:
+      - none
+      - active
+      - inactive
+      - deleted
+      description: none is not directory managed; inactive is a reversible directory deactivation; deleted ends that
+        directory life until an admin re-enrolls the person after clean-up
+    ProvisioningSettings:
+      type: object
+      required:
+      - enabled
+      - enrollment
+      properties:
+        enabled:
+          type: boolean
+        enrollment:
+          $ref: '#/components/schemas/ProvisioningEnrollment'
+    ProvisioningDirectory:
+      type: object
+      required:
+      - id
+      - issuer
+      - issuerMatches
+      - enabled
+      - enrollment
+      - scimBaseUrl
+      - revision
+      - createdAt
+      - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        issuer:
+          type: string
+          description: The verified OIDC issuer it is bound to; never changes
+        issuerMatches:
+          type: boolean
+        enabled:
+          type: boolean
+        enrollment:
+          $ref: '#/components/schemas/ProvisioningEnrollment'
+        scimBaseUrl:
+          type: string
+          description: The SCIM 2.0 base URL to give the identity provider
+        revision:
+          $ref: '#/components/schemas/Revision'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ProvisioningToken:
+      type: object
+      required:
+      - id
+      - name
+      - prefix
+      - status
+      - createdAt
+      - expiresAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        prefix:
+          type: string
+          example: ompscim_AbCdEfGh
+        status:
+          type: string
+          enum:
+          - active
+          - expired
+          - revoked
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdByName:
+          type: string
+          nullable: true
+    ProvisioningTokenCreate:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        expiresInDays:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 365
+    ProvisioningTokenCreated:
+      allOf:
+      - $ref: '#/components/schemas/ProvisioningToken'
+      - type: object
+        required:
+        - secret
+        properties:
+          secret:
+            type: string
+            description: The token, shown once
+    ProvisionedPersonRef:
+      type: object
+      required:
+      - id
+      - email
+      - displayName
+      - status
+      - directoryStanding
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        displayName:
+          type: string
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        directoryStanding:
+          $ref: '#/components/schemas/DirectoryStanding'
+    ProvisionedUser:
+      type: object
+      required:
+      - id
+      - userName
+      - active
+      - displayName
+      - email
+      properties:
+        id:
+          type: string
+          format: uuid
+        userName:
+          type: string
+        externalId:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+        displayName:
+          type: string
+        email:
+          type: string
+        linked:
+          $ref: '#/components/schemas/ProvisionedPersonRef'
+        candidate:
+          type: object
+          required:
+          - id
+          - email
+          - adoptable
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+            adoptable:
+              type: boolean
+            reason:
+              type: string
+              enum:
+              - protected_principal
+              - cleanup_pending
+              - already_managed
+    ManagedPerson:
+      type: object
+      required:
+      - id
+      - email
+      - displayName
+      - status
+      - manualStatus
+      - directoryStanding
+      - cleanupPending
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        displayName:
+          type: string
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        manualStatus:
+          $ref: '#/components/schemas/UserStatus'
+        directoryStanding:
+          $ref: '#/components/schemas/DirectoryStanding'
+        scimUserId:
+          type: string
+          format: uuid
+          nullable: true
+        cleanupPending:
+          type: boolean
+    ProvisionedUsers:
+      type: object
+      required:
+      - resources
+      - people
+      - truncated
+      properties:
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProvisionedUser'
+        people:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagedPerson'
+        truncated:
+          type: boolean
+          description: More than 500 resources exist; the identity provider is the source of the full list
+    ProvisionedGroup:
+      type: object
+      required:
+      - id
+      - displayName
+      - memberCount
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        externalId:
+          type: string
+          nullable: true
+        memberCount:
+          type: integer
+          format: int64
+    ProvisioningMapping:
+      type: object
+      required:
+      - id
+      - groupId
+      - groupName
+      - teamId
+      - teamSlug
+      - teamName
+      - role
+      - memberCount
+      - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        groupId:
+          type: string
+          format: uuid
+        groupName:
+          type: string
+        teamId:
+          type: string
+          format: uuid
+        teamSlug:
+          type: string
+        teamName:
+          type: string
+        role:
+          type: string
+          enum:
+          - admin
+          - editor
+          - member
+        memberCount:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+    ProvisioningMappingCreate:
+      type: object
+      required:
+      - groupId
+      - teamId
+      - role
+      properties:
+        groupId:
+          type: string
+          format: uuid
+        teamId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum:
+          - admin
+          - editor
+          - member
     AutomationTokenCreate:
       type: object
       required:

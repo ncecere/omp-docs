@@ -1,0 +1,64 @@
+---
+title: v0.8.0
+description: "Open MCP Portal v0.8.0 (2026-10-29): up to two additional endpoints per server for failover, each with its own credential. Migration 00047."
+---
+
+**Released 2026-10-29.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.8.0) · image `ghcr.io/ncecere/open-mcp-portal:v0.8.0` · migration `00047` (expand-only).
+
+The first release of the v0.8 line, after [v0.7.0](/docs/releases/v0-7-0), and the second stage of upstream protection (#33, decision 85, now closed): a server can name replicas the portal falls back to when the primary can't be reached. **No server gets additional endpoints until its team adds them.** Read [Upgrading](#upgrading) first.
+
+## What changed
+
+- **Additional endpoints.** On a server's Settings › **Additional endpoints**, the team's owners and admins can add up to two more URLs, in order, each enabled or disabled on its own. The primary URL stays the server's canonical address. Changing the list is audited, needs a browser session (not an automation token) and sends a published server back to review (`endpoints_changed`). See [Protection and failover](/docs/teams/protection-and-failover).
+- **Each endpoint has its own credential.** Additional endpoints work with no authentication or with a static credential (headers, bearer, Basic or a query key), and every value is entered again for each endpoint: nothing is copied from the primary. A server that uses per-person OAuth, each person's own key, a provider connection, the portal's own OAuth client, a client certificate or a private CA can't have additional endpoints. Moving an endpoint to another origin needs every value again.
+- **One call, one budget.** The primary is tried first, then enabled endpoints in order: at most three attempts in all, within the original timeout, and each counted against the server's quota. Reads keep the retry rules of v0.7.0. A write, destructive or unclassified tool moves to the next endpoint only when the connection failed before anything was sent; never after a `503` or an ambiguous failure.
+- **Calls that need approval use the primary only.** An approval is bound to the primary's origin and never moves to another endpoint.
+- **The same tools, the right identity.** Before a call goes to another endpoint, that endpoint must advertise the same tool definition the catalog approved. The identity token's audience is the URL actually called. See [The identity token](/docs/server-authors/identity-token).
+- **Visible in review and health.** Reviewers see each endpoint's destination and where its credential goes, never the values. The server's Health page checks every endpoint and flags one that offers different capabilities.
+
+## Upgrading
+
+1. **Back up** the database together with its keys, then pin the new image (verify its signature first, see [The image](#the-image)). The init container applies `00047`. **Do not use `goose down` for a rollback.**
+2. **Finish the rollout and drain every older serving and background-worker replica before you add additional endpoints.** An older image uses the primary only, doesn't check the endpoints in review or health, and doesn't re-encrypt their credentials in `rotate-keys`.
+3. Add only real replicas that serve the same tools, and check the origins before you approve the server for the catalog.
+4. Before going back to an older image, disable or remove additional endpoints. Earlier rules still apply: [v0.6.0](/docs/releases/v0-6-0#upgrading) for expiring grants and [v0.5.0](/docs/releases/v0-5-0#upgrading) for approvals. There are no new settings.
+
+[Upgrading from v0.7.0](/docs/operate/migrations-and-upgrades#upgrading-from-v070) has the same points with the details.
+
+## Verification
+
+The release was tested in both database-role modes and its published image signed and verified; the [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.8.0) and the [release notes](https://github.com/ncecere/open-mcp-portal/blob/v0.8.0/docs/releases/v0.8.0.md) record how.
+
+## Known limitations
+
+Carried over from [v0.7.0](/docs/releases/v0-7-0#known-limitations) unless marked new:
+
+- **Failover, not load balancing (new).** Endpoints are tried in order; there is no spreading of load and no lease shared between replicas.
+- **Most authentication modes can't fail over (new).** Only servers with no authentication or a static credential can have additional endpoints.
+- **Calls that need approval don't fail over (new),** by design.
+- **Replicas briefly disagree.** The concurrency cap and the breaker are kept in each replica's memory.
+- **A read retry trusts the class.** A tool wrongly classified read can still have side effects.
+- **Not run against real clients and providers,** and not load-tested over long periods. A pilot with a real team is still open.
+- Remote servers only (no stdio); development software that has not run in production.
+
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.8.0` is signed with cosign keyless signing by the repository's `image.yml` workflow. Its digest is:
+
+```text
+sha256:f73129a94cfdc8cc2badc6b2f1e21b74bd0bbc1fd6144afbb50f1986c592c960
+```
+
+Check the signature with **cosign v3.0 or newer**, then pin the image by that digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:f73129a94cfdc8cc2badc6b2f1e21b74bd0bbc1fd6144afbb50f1986c592c960 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.8.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/open-mcp-portal/issues](https://github.com/ncecere/open-mcp-portal/issues) (there is a form for each kind) or ask in [Discussions](https://github.com/ncecere/open-mcp-portal/discussions). Report security problems privately, as [`SECURITY.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.8.0/SECURITY.md) describes.

@@ -1,0 +1,67 @@
+---
+title: "Approval rules"
+description: "Require a person to approve exact tool calls to your team's servers and gateways in Open MCP Portal: targets, class and capability selectors, deadlines, reviewers and precedence."
+---
+
+An **approval rule** makes Open MCP Portal stop a matching tool call before it reaches the server and wait until a person approves **that exact call**: the same tool, the same arguments, the same caller and the same destination. Use it for tools that send, delete, pay or change things people care about. A rule never grants access: a caller still needs the gateway, the role and the tool scope to make the call at all.
+
+Team owners and admins manage the team's rules under Team › **Approval rules**. Platform admins and auditors can read them; nobody else sees the page. Rules for platform gateways are a platform admin's job: see [Platform approval rules](/docs/administer/approval-rules).
+
+<Screenshot slot="team-approval-rules" />
+
+## What a caller sees
+
+The call isn't forwarded. The client gets a link to the request's receipt at `<portal URL>/approvals/<id>`, in the shape its protocol allows: an `input_required` result for a modern client with URL elicitation, a tool error with the link for another modern client, or JSON-RPC `-32042` with the link for a legacy one. The call is recorded with the outcome **Needs approval**, and the eligible reviewers get an `approval.requested` notification and an attention item. Once someone approves, the caller **retries the identical call** within the approved validity, and it goes through once. How people follow and decide requests is in [Approving sensitive tool calls](/docs/use/approvals).
+
+## Create a rule
+
+**Create approval rule** opens the editor:
+
+| Field | Meaning |
+|---|---|
+| **Rule name** | Up to 200 characters, such as "Ticket creation needs a lead" |
+| **Target kind** | **Server** or **Gateway**. Fixed once the rule exists |
+| **Find target** and **Target** | One of this team's servers or gateways. Fixed once the rule exists |
+| **Enabled** | A disabled rule matches nothing |
+| **Match by** | **Tool classes** (tick **Read**, **Write** and/or **Destructive**; a new rule starts with Destructive) or **Specific tool capability** (a **Tool capability ID**: the UUID of one tool of that server, or one the gateway selects; prompts and resources aren't eligible) |
+| **Pending lifetime (minutes)** | How long a request waits for a decision: 5 to 1,440 (24 hours, the default) |
+| **Approved validity (minutes)** | How long an approval may be used: 1 to 60 (15 by default), never beyond the request's pending expiry |
+| **Approver user IDs** | Optional: active users' UUIDs, one per line |
+| **Approver SSO groups** | Optional: exact group names, one per line; case matters |
+| **Allow requesting service account's owners/admins to review** | Off by default. See [Service accounts](#calls-from-service-accounts) |
+
+**Create rule** saves it. **Edit &lt;rule&gt;** and **Delete &lt;rule&gt;** are on each rule's card; both use the revision you loaded, so a rule someone else changed in the meantime asks you to reload first.
+
+Classes come from the server team's [classification](/docs/teams/capabilities#classifying-tools). **Unclassified tools match destructive rules, for approval only**: their class and tool scopes don't change. So a rule for **Destructive** also catches every tool nobody has classified yet.
+
+## Who reviews
+
+- **Named reviewers**: the users and SSO groups you list. Eligibility is checked again when a request is shown, when it's decided and when the approval is used, so someone who left the group can't approve.
+- **Nobody named**: the server team's active owners and admins.
+- **Fallback**: a platform admin who isn't the requester, only when there is no eligible reviewer above.
+- **No eligible reviewer at all**: the call is refused. It is never approved by default.
+
+Nobody approves their own request, and owning a gateway gives no right to approve calls through it.
+
+### Calls from service accounts
+
+A service account can trigger an approval request like a person. Its team's owners and admins follow the request under Workspace › **Approvals** › **Requested**, and get `approval.decided` when it's decided. By default they are **excluded from reviewing it**, including as fallback, so the people who control an account can't approve its calls. Tick **Allow requesting service account's owners/admins to review** to lift that for one rule.
+
+## Which rule applies
+
+At most one rule decides each call:
+
+1. A **server** rule wins over a **gateway** rule.
+2. Within each, a rule for a **specific capability** wins over a **class** rule.
+3. Two rules with the same priority that could match the same call are refused when you save (`409`).
+
+Saving, changing or deleting a rule invalidates approvals that were given but not used yet: their callers ask again. It doesn't undo a call that was already let through. A rule is also part of what a request binds to, so a change and its reversal don't bring an old approval back.
+
+## Things to know
+
+- Approval-governed calls always go to the server's primary URL, are never retried automatically and never fail over to an [additional endpoint](/docs/teams/protection-and-failover). They aren't relayed as [tasks](/docs/server-authors/tasks), and the server is told the client can't answer questions (no elicitation).
+- An approved call that the server answers with an error, or whose answer is lost, still used its approval. The receipt then says **Authorization spent — execution is not confirmed**: check the server before repeating it.
+- When a server is [transferred](/docs/teams/server-governance#transfers) to another team, its rules move with it to the receiving team.
+- A request's arguments are kept as a redacted preview for reviewers, separately from [recorded call contents](/docs/teams/payload-capture). Previews disappear when the request ends and are cleared within 24 hours; the receipt's metadata is kept for 90 days.
+- Rules are managed in a browser session only. [Publisher tokens](/docs/teams/publisher-tokens) can't read or change them, and can't approve anything.
+- Rule changes are in the team's [audit log](/docs/teams/team-settings#audit-log).

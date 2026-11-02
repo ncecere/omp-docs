@@ -1,6 +1,6 @@
 ---
 title: For teams
-description: "For team owners, admins and editors in Open MCP Portal: registering MCP servers, publishing them to the catalog, building gateways and running service accounts."
+description: "For team owners, admins and editors in Open MCP Portal: registering MCP servers, governing and publishing them, building gateways, requiring approval for sensitive calls and running service accounts."
 ---
 
 In Open MCP Portal, teams own the MCP servers they run and the gateways their members use. A platform admin creates each team and names its first owner; owners and admins then manage its members under **Team settings**.
@@ -14,7 +14,11 @@ What each role can do in a team:
 | Register, edit, test and refresh servers; set user authorization | | ✓ | ✓ | ✓ |
 | See the team's usage and audit log | | ✓ | ✓ | ✓ |
 | Publish, unpublish and delete servers; record call contents | | | ✓ | ✓ |
-| Create and edit team gateways and service accounts | | | ✓ | ✓ |
+| Classify tools; edit a server's governance and confirm its sensitivity; set upstream protection limits and additional endpoints | | | ✓ | ✓ |
+| Offer a server to another team; decline an incoming transfer | | | ✓ | ✓ |
+| Accept a server another team offers | | | | ✓ |
+| Create and edit team gateways and service accounts; curate gateway tools and set a gateway's sensitivity ceiling | | | ✓ | ✓ |
+| Manage the team's approval rules and shared service connections | | | ✓ | ✓ |
 | See key and token expiries and notification problems on the attention card; manage the team's webhooks and publisher tokens | | | ✓ | ✓ |
 | Read call records | | | ✓ | ✓ |
 | Manage members and invites | | | ✓ | ✓ |
@@ -34,14 +38,21 @@ Enter its URL, detect how it signs people in, and save. The portal reads its too
 
 ### Check what it offers
 
-Read the capabilities on the server's **Capabilities** tab: descriptions and schemas are text a model will read. See [Capabilities and change detection](/docs/teams/capabilities).
+Read the capabilities on the server's **Capabilities** tab: descriptions and schemas are text a model will read. Owners and admins then classify each tool as read, write or destructive, which tool scopes, approval rules and retries rely on. See [Capabilities and change detection](/docs/teams/capabilities).
+
+</Step>
+<Step>
+
+### Say who owns it and how sensitive it is
+
+The **Governance** card on the server's Overview names its owner and on-call contact and labels its sensitivity; confirm the label. See [Server governance](/docs/teams/server-governance). For a busy or replicated server, set a quota, a concurrency cap or failover endpoints: [Upstream protection and failover](/docs/teams/protection-and-failover).
 
 </Step>
 <Step>
 
 ### Build a gateway
 
-Your team can use its own server straight away in a team gateway, without publishing it. See [Building gateways](/docs/teams/gateways).
+Your team can use its own server straight away in a team gateway, without publishing it. See [Building gateways](/docs/teams/gateways). You can rename and constrain tools for that gateway ([Curating gateway tools](/docs/teams/curating-gateway-tools)), and require a person to approve sensitive calls ([Approval rules](/docs/teams/approval-rules)). Service accounts that need a GitHub or Google account use a [shared connection](/docs/teams/service-connections).
 
 </Step>
 <Step>
@@ -55,7 +66,7 @@ Publishing puts the server in the company catalog, after a platform admin's revi
 
 ### Keep an eye on it
 
-The **attention card** on your team's page shows what needs someone, and notifications and webhooks tell the right people when it happens. See [Team attention and notifications](/docs/teams/attention-and-notifications). To publish from CI, use a [publisher token](/docs/teams/publisher-tokens).
+The **attention card** on your team's page shows what needs someone, and notifications and webhooks tell the right people when it happens. See [Team attention and notifications](/docs/teams/attention-and-notifications). To register, refresh and publish from CI, use a [publisher token](/docs/teams/publisher-tokens) with the [`omp` CLI](/docs/api/cli) or the [GitHub Action](/docs/api/github-action).
 
 </Step>
 </Steps>

@@ -1,14 +1,18 @@
 {
   "title": "Use",
-  "description": "Gateways, connected accounts, API keys and connected apps",
+  "description": "Gateways, access requests, approvals, connected accounts, API keys, tool scopes, connected apps and sessions",
   "root": true,
   "pages": [
     "index",
     "my-gateways",
+    "access-requests",
+    "approvals",
     "connecting-accounts",
     "keys-for-servers",
     "api-keys",
+    "tool-scopes",
     "connected-apps",
+    "sessions",
     "client-compatibility",
     "notification-preferences",
     "troubleshooting"

@@ -27,7 +27,7 @@ The 2026-07-28 revision is stateless: no `initialize` handshake, no session, met
 
 A request is **modern** when its `params._meta` has a `protocolVersion` that isn't a legacy version (so `2026-07-28`, or a version the portal doesn't have, which is then refused), or, with no such `_meta`, when its `MCP-Protocol-Version` header is a date of 2026-07-28 or later. Everything else is **legacy**: `initialize` (whatever it carries), notifications, responses, and requests without those signs. A bare `server/discover` (no `_meta` and no header) is "method not found", as it always was.
 
-In both eras: `GET` and `DELETE` are `405`; `Mcp-Session-Id` and `Last-Event-ID` are ignored; JSON-RPC batches are `400`; a foreign `Origin` is `403`; the body is at most 1 MiB; and authentication is the same (API key, OAuth token or service account key).
+In both eras: `GET` and `DELETE` are `405`; `Mcp-Session-Id` and `Last-Event-ID` are ignored; JSON-RPC batches are `400`; a foreign `Origin` is `403`; the body is at most 1 MiB; and authentication is the same (API key, OAuth token or service account key). A request that carries an `MCP-Gateway-Identity` header is refused with `403` before authentication: "Inbound external identity is retired. Remove the identity header and use an ordinary MCP credential." When one portal registers another portal's gateway as a server, turn **Send identity token** off for that server, or the other portal refuses its calls.
 
 ## What the portal sends to a client
 
@@ -46,7 +46,7 @@ Modern requests are checked, in this order, before anything else. Each refusal i
 | A tool with `x-mcp-header` arguments: a present argument without its `Mcp-Param-<Name>` header, a different value, or a header for an absent or null argument | 400 | `-32020` |
 | A method the portal doesn't implement, including `ping`, `logging/setLevel`, `subscriptions/listen`, `resources/subscribe`, and `resources/*` on a gateway with no resources | 404 | `-32601` |
 
-`Mcp-Name` is the **exposed** name (`server__tool`, or the `omp://…` URI of a resource). Calls to your server use the original name. The supported versions, newest first, are `2026-07-28, 2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05`. See [Parameter headers](/docs/server-authors/parameter-headers) for `Mcp-Param-*`.
+`Mcp-Name` is the **exposed** name (`server__tool`, a name a gateway [curated](/docs/teams/curating-gateway-tools), or the `omp://…` URI of a resource). Calls to your server use the original name. The supported versions, newest first, are `2026-07-28, 2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05`. See [Parameter headers](/docs/server-authors/parameter-headers) for `Mcp-Param-*`.
 
 ### `server/discover`
 
@@ -67,7 +67,7 @@ Modern requests only, with the same authentication as everything else:
 }
 ```
 
-`resources` appears only when the gateway selects a resource or template the caller can see. There are no subscriptions, no list-changed notifications and no `instructions`.
+`resources` appears only when the gateway selects a resource or template the caller can see. When the portal can relay [tasks](/docs/server-authors/tasks), `capabilities` also has `"extensions": {"io.modelcontextprotocol/tasks": {}}`. There are no subscriptions, no list-changed notifications and no `instructions`.
 
 ### Results, caching and order
 
@@ -80,7 +80,9 @@ Every modern result has `resultType: "complete"` and the portal's identity in `_
 
 **Schemas.** The modern era allows any JSON Schema as `outputSchema` and any JSON value as `structuredContent`, and the portal passes them through untouched. For legacy clients it still drops an `outputSchema` that isn't `"type": "object"` (strict clients reject the whole list otherwise) and a `structuredContent` that isn't an object; the same data is in the text content.
 
-**Errors.** A resource that isn't found is `-32602` in the modern era (`-32002` in the legacy one). A rate limit answers HTTP `429` and, for modern requests, code `429` in the JSON-RPC error instead of `-32029` (see [Deviations](#deviations-from-the-specification)).
+**Errors.** A resource that isn't found is `-32602` in the modern era (`-32002` in the legacy one). A rate limit answers HTTP `429` and, for modern requests, code `429` in the JSON-RPC error instead of `-32029` (see [Deviations](#deviations-from-the-specification)). That includes a server's own quota and concurrency cap, set by its team; while a server's circuit is open after repeated failures, calls get `-32010` with `data.reason: circuit_open`. Neither reaches your server ([Upstream protection and failover](/docs/teams/protection-and-failover)).
+
+**Curated tools.** A gateway may list your tool under another name, with another description, without arguments it fixes and with others narrowed to an `enum`. A call that sends a different fixed value or a value outside the list is refused with `-32602` before anything is forwarded. See [Curating gateway tools](/docs/teams/curating-gateway-tools).
 
 ### "Connect your account" as a question
 
@@ -130,7 +132,9 @@ The person opens the link, then the client **retries the original request** with
 
 ### Authorization
 
-The gateway's OAuth endpoints follow the 2026-07-28 authorization pages: protected resource metadata (RFC 9728) with `WWW-Authenticate: resource_metadata` on `401`, authorization server metadata (RFC 8414), Client ID Metadata Documents (preferred), `iss` in authorization responses (RFC 9207), resource indicators (RFC 8707), and PKCE S256 for public clients. Dynamic Client Registration is kept for compatibility and is deprecated by the revision: it now accepts and echoes `application_type` (`web` or `native`). See [OAuth endpoints](/docs/api/oauth-endpoints). Gateway tokens carry no scopes: access is decided per call from the person's grants.
+The gateway's OAuth endpoints follow the 2026-07-28 authorization pages: protected resource metadata (RFC 9728) with `WWW-Authenticate: resource_metadata` on `401`, authorization server metadata (RFC 8414), Client ID Metadata Documents (preferred), `iss` in authorization responses (RFC 9207), resource indicators (RFC 8707), and PKCE S256 for public clients. Dynamic Client Registration is kept for compatibility and is deprecated by the revision: it now accepts and echoes `application_type` (`web` or `native`). See [OAuth endpoints](/docs/api/oauth-endpoints).
+
+**Tool scopes.** Both metadata documents advertise the scopes `omp:read`, `omp:write` and `omp:destructive`, which limit a token to tools of those [classes](/docs/teams/capabilities#classifying-tools). A request with no `scope` is unrestricted; the person can narrow the requested classes on the consent page, never widen them. A restricted token response carries `scope` (an empty string means no tools); an unrestricted one omits it. A tool outside a token's scope is treated as unknown: there is no `insufficient_scope` challenge and no step-up. Prompts and resources are unaffected. Access is still decided per call from the person's grants. See [Tool scopes](/docs/use/tool-scopes).
 
 ## How the portal talks to your servers
 
@@ -152,7 +156,9 @@ The portal prefers the newest version both sides support. A legacy server is ope
 
 **The fallback rule.** The portal falls back to `initialize` only in the cases above, by the specification's rule. A server that returns an error for any other reason isn't treated as legacy, so a down or rate-limited modern server isn't misread as an old one.
 
-**Cache.** The learned era is kept in memory per replica, keyed by your server's ID and URL, for **5 minutes**, so a call doesn't probe again; a changed URL is a different key. If a call made on a remembered era gets an answer its era doesn't give (a `400`, `404`, `405`, `406` or `415` without a modern error, or a modern error to `initialize`), the portal forgets the entry, learns the era again and goes on, **once**, and only when the call can't have run. A call is never repeated for anything else.
+**Cache.** The learned era is kept in memory per replica, keyed by your server's ID and URL, for **5 minutes**, so a call doesn't probe again; a changed URL is a different key. If a call made on a remembered era gets an answer its era doesn't give (a `400`, `404`, `405`, `406` or `415` without a modern error, or a modern error to `initialize`), the portal forgets the entry, learns the era again and goes on, **once**, and only when the call can't have run.
+
+**Other repeats.** A tool your team classified as read, a prompt or a resource read may be retried up to twice within your timeout after a `502`, `503` or `504`, a `429` with a short `Retry-After`, or a connection or TLS failure before anything was sent, and may move to one of your server's additional endpoints (at most three attempts in total). Write, destructive and unclassified tools move to another endpoint only after a proven failure before anything was sent, and are never retried otherwise. Calls a person had to approve are never repeated and always go to the primary URL. See [Retries and failover](/docs/server-authors/what-servers-receive#retries-and-failover).
 
 **You can see it.** A refresh, a test or a health check that reads your server stores the era, the version and the time, and your server's Overview tab shows, for example, "Protocol 2026-07-28 (modern), negotiated 5 minutes ago". A failed check leaves what was stored, and a new URL clears it. A scheduled check of a server in OAuth mode (a probe that only looks for the sign-in challenge) records nothing.
 
@@ -167,7 +173,8 @@ A modern server **must implement `server/discover` to be read**: the portal need
 
 A modern server may answer `tools/call`, `prompts/get` or `resources/read` with `resultType: "input_required"`. What the portal does depends on the **client**:
 
-- **A modern client that declared elicitation:** the portal declares to your server **exactly the modes the client declared, per request** (no other capability, ever) and returns `input_required` to the client, with your elicitation requests as `inputRequests` and a `requestState` of the portal's own.
+- **A modern client that declared elicitation:** the portal declares to your server **exactly the modes the client declared, per request** (no other capability, ever, apart from the [Tasks extension](/docs/server-authors/tasks)) and returns `input_required` to the client, with your elicitation requests as `inputRequests` and a `requestState` of the portal's own.
+- **A call that needed a person's [approval](/docs/teams/approval-rules):** your server is told the client can't ask, whatever the client declared. An `input_required` answer to an approved call ends it: the approval is spent and the call isn't continued.
 - **A legacy client, or a modern one that declared none:** your server is told it can't ask. If it asks anyway, the call fails with a tool error ("this server asked for input, which your client can't give…"; for prompts and reads, `-32010` with `data.reason: input_required`).
 - **Sampling and roots** requests (deprecated) are never relayed, alone or beside an elicitation: the call fails with a tool error.
 
@@ -210,7 +217,7 @@ For servers in Sign-in with OAuth mode ([OAuth-protected servers](/docs/server-a
 - The deprecated HTTP+SSE transport (a server that answers `404` or `405` to `POST` is an error), and stdio. The portal doesn't run servers: bridge a stdio server and register the bridge.
 - Sampling and roots (deprecated), in either era, and server-to-client requests from a legacy server. Logging notifications. `subscriptions/listen` and list-changed notifications (the portal re-reads on refresh).
 - A modern server that doesn't implement `server/discover` can't be discovered (calls to it work).
-- Tasks and completion.
+- Completion. Tasks are supported for ordinary, non-streamed tool calls: see [Long-running tools (MCP Tasks)](/docs/server-authors/tasks).
 
 ## What this means for a server author
 
@@ -219,12 +226,14 @@ For servers in Sign-in with OAuth mode ([OAuth-protected servers](/docs/server-a
 - Implement `server/discover` on a modern server, so it can be read.
 - To ask the person something mid-call, return `input_required` with URL or form elicitation requests (`https` URLs only); the portal relays it to clients that can answer, and refuses it to those that can't.
 - To report progress, send `notifications/progress` for the `progressToken` you were given.
+- For work that takes longer than a call should, advertise the Tasks extension and return a task when the request declares it ([Long-running tools](/docs/server-authors/tasks)).
+- Make tools your team classifies as read safe to repeat: the portal may retry them.
 - Pass `traceparent`, `tracestate` and `baggage` from `_meta` into your own tracing, if you want to.
 - Verify the [identity token](/docs/server-authors/identity-token) in either era: it is sent in both.
 
 ## Limits and what isn't done
 
-- A response is one JSON object of at most 1 MiB, except a `tools/call` with a progress token from a client that accepts `text/event-stream`, which is streamed. There is no `subscriptions/listen`, no tasks extension and no relay of `notifications/message`.
+- A response is one JSON object of at most 1 MiB, except a `tools/call` with a progress token from a client that accepts `text/event-stream`, which is streamed. There is no `subscriptions/listen` and no relay of `notifications/message`. The Tasks extension is relayed only for ungoverned, non-streamed tool calls, with no `tasks/list`, `tasks/result` or task notifications.
 - The gateway originates input requests for consent and relays your server's elicitation; never sampling or roots.
 - No `completion/complete`, logging, sampling or roots, and `ping` answers only for legacy clients.
 - Claude Code 2.1.280 has been run against a gateway on the 2026-07-28 revision, with an API key and with its OAuth sign-in (a metadata-document client) on a real deployment: discovery, the lists, tool calls and the consent link all worked. It declares form-mode elicitation only, so it gets the consent link as a tool error. Not tried: a client that declares URL elicitation (the `input_required` result), VS Code and Cursor. The rest was exercised by the conformance suite, curl and the Go SDK.

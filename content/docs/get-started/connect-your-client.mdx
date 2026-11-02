@@ -22,19 +22,21 @@ All three see only what the caller may use on that gateway, checked again on eve
 Add the gateway's URL to your client **without any header**. The first time the client talks to the gateway, the portal answers `401` with a pointer to its sign-in metadata. The client then opens your browser:
 
 1. You sign in with your company account, if you aren't signed in to the portal already.
-2. The consent page names the app, the host that vouches for it, the gateway it wants and where your browser goes back to. Choose **Allow** (or **Deny**).
+2. The consent page names the app, the host that vouches for it, the gateway it wants and where your browser goes back to. Under **Requested tool scope** it shows which tool classes the app asked for (**Everything** when it asked for none). You may narrow them, for example to **Read only**, but never add to them. Choose **Allow** (or **Deny**).
 3. The browser returns to the app, which now has tokens and refreshes them by itself.
 
-Consent is remembered **per app and gateway**: connecting the same app to another gateway asks again. Apps your platform admins trust (Claude, Claude Code and VS Code out of the box) skip the consent page, but you still sign in. One exception: the first time you sign a trusted app in to a gateway from your own computer (the browser returns to `localhost`, as Claude Code's does), a short notice names the app and where it receives the result, with **Continue** or **Cancel**. It is asked once per app and gateway, not for apps with an `https` return address, and not for apps you already connected ([Trusted clients](/docs/administer/trusted-clients#the-first-sign-in-from-this-computer)).
+Consent is remembered **per app and gateway**: connecting the same app to another gateway asks again, and so does an app that later asks for a wider tool scope than you allowed. Apps your platform admins trust (Claude, Claude Code and VS Code out of the box) skip the consent page, unless they ask for a wider tool scope than before, but you still sign in. One exception: the first time you sign a trusted app in to a gateway from your own computer (the browser returns to `localhost`, as Claude Code's does), a short notice names the app and where it receives the result, with **Continue** or **Cancel**. It is asked once per app and gateway, not for apps with an `https` return address, and not for apps you already connected ([Trusted clients](/docs/administer/trusted-clients#the-first-sign-in-from-this-computer)).
 
 <Screenshot slot="oauth-consent" />
 
+<Screenshot slot="oauth-consent-scope" />
+
 What a connected app can do:
 
-- It acts as **you**, on **that gateway only**. Its token is refused by every other gateway and by the management API.
+- It acts as **you**, on **that gateway only**, within the tool scope you allowed. Its token is refused by every other gateway and by the management API. To change its tool scope, connect it again: the new consent replaces the old connection and its tokens. See [Tool scopes](/docs/use/tool-scopes).
 - Every request checks your account (suspended people are refused), your current access to the gateway (removing you from the team or the grant stops it at the next request) and that the connection still exists.
 - Access tokens last an hour. The app refreshes them; each refresh token lasts 30 days from its last use and is replaced on every use. **An app signs in again about every 180 days** from the last time you signed it in, however often it is used (your administrator can change that or turn it off); API keys and service-account keys have no such limit, so use one for a script or agent that runs without a person. If a refresh token is used again later than 30 seconds after it was replaced (a sign of theft), the connection is revoked and you sign in again.
-- You can disconnect it at any time under Account › [Connected apps](/docs/use/connected-apps).
+- You can disconnect it at any time under Account › [Connected apps](/docs/use/connected-apps). Signing out of the portal in your browser, even everywhere under Account › [Sessions](/docs/use/sessions), doesn't disconnect it.
 
 ## Claude Code
 
@@ -177,8 +179,10 @@ Add a custom connector with the gateway's URL. claude.ai connects from the inter
 
 Any client that supports MCP over Streamable HTTP works:
 
-- **With OAuth**: give it the URL with no header. The portal follows the MCP authorization specification: protected-resource metadata at `/.well-known/oauth-protected-resource/mcp/<slug>`, authorization server metadata at `/.well-known/oauth-authorization-server`, authorization code with PKCE (S256 only), and the gateway's URL as the `resource`. Clients identify themselves with a Client ID Metadata Document (preferred) or by registering (Dynamic Client Registration). Redirect URIs must be https, or http on a loopback address. See [OAuth endpoints](/docs/api/oauth-endpoints).
+- **With OAuth**: give it the URL with no header. The portal follows the MCP authorization specification: protected-resource metadata at `/.well-known/oauth-protected-resource/mcp/<slug>`, authorization server metadata at `/.well-known/oauth-authorization-server`, authorization code with PKCE (S256 only), and the gateway's URL as the `resource`. Clients identify themselves with a Client ID Metadata Document (preferred) or by registering (Dynamic Client Registration). Redirect URIs must be https, or http on a loopback address. An authorization request may carry `scope` with any of `omp:read`, `omp:write` and `omp:destructive` (both metadata documents advertise them) to ask for a [tool scope](/docs/use/tool-scopes); without `scope` the app asks for no restriction. A restricted token response carries the granted `scope` (an empty string means no tools). See [OAuth endpoints](/docs/api/oauth-endpoints).
 - **With a key**: send `Authorization: Bearer <key>` on every request.
+
+The [`omp` CLI](/docs/api/cli) prints the same snippets as the **Connect** card: `omp connect <gateway> --client claude|vscode|cursor|curl`.
 
 To check a URL and key from a terminal:
 

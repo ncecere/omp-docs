@@ -3,7 +3,7 @@ title: Connected apps
 description: The AI clients you signed in to Open MCP Portal's gateways with OAuth, one per gateway, and how to disconnect them.
 ---
 
-When an AI client signs you in with OAuth, Open MCP Portal records a **connected app**: that client, on that gateway, acting as you. Account › **Connected apps** lists them.
+When an AI client signs you in with OAuth, Open MCP Portal records a **connected app**: that client, on that gateway, acting as you. Account › **Connected apps** lists them. Each one reaches only the gateway you connected it to, within its tool scope and your access.
 
 <Screenshot slot="connected-apps" />
 
@@ -11,6 +11,7 @@ Each row is one client on one gateway. Connecting the same client to three gatew
 
 - the client's name and the host that vouches for it, or **Unverified** for a client that registered itself;
 - the gateway (marked **Deleted** if the gateway no longer exists);
+- its **Tool scope**: **Everything**, or the classes you allowed on the consent page (tool scopes don't restrict prompts or resources; see [Tool scopes](/docs/use/tool-scopes));
 - when it was connected and last used;
 - **Sign-in expires**: when the app will have to sign in again ([below](#how-long-a-connection-lasts)). It is empty when your administrator set no limit, and reads **Expired** for an app past its date that hasn't refreshed since.
 
@@ -18,7 +19,9 @@ Each row is one client on one gateway. Connecting the same client to three gatew
 
 **Disconnect…** stops the app at once: its access and refresh tokens no longer work and the consent is forgotten. To use the app again, connect it again and allow it.
 
-Disconnecting is the right step if you lose a laptop or stop using a client. You don't need to disconnect an app when your access changes: every request checks your account and your access to the gateway again, so removing you from the team, removing a grant or suspending you stops the app at its next request.
+To change an app's tool scope, connect it again and choose the scope on the consent page: the new consent replaces the old connection and its tokens.
+
+Disconnecting is the right step if you lose a laptop or stop using a client. Signing out of the portal in your browser, even under Account › [Sessions](/docs/use/sessions) › **Sign out everywhere**, doesn't disconnect apps. You don't need to disconnect an app when your access changes: every request checks your account and your access to the gateway again, so removing you from the team, removing a grant or suspending you stops the app at its next request.
 
 ## How long a connection lasts
 

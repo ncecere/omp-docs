@@ -32,9 +32,11 @@ Teams' servers must be at public https addresses unless you allow internal netwo
 ### Check the defaults
 
 - **Admin › [Publishing](/docs/administer/publishing-policy)**: Approval required, out of the box.
+- **Admin › [Publishing](/docs/administer/governance#re-review-intervals)** › **Server reviews**: confidential servers are reviewed again every 180 days, restricted ones every 90, public and internal ones never. **Send overdue servers back to review** is off.
 - **Admin › [Trusted clients](/docs/administer/trusted-clients)**: Claude, Claude Code and VS Code skip the consent screen.
-- **Admin › [Limits](/docs/administer/limits)**: 600 requests per minute per person, 300 per key or app, 1,200 per service account, none per gateway.
+- **Admin › [Limits](/docs/administer/limits)**: 600 requests per minute per person, 300 per key or app, 1,200 per service account, none per gateway and none per upstream server.
 - **Admin › [Retention](/docs/administer/retention)**: call records 90 days, recorded contents 14, audit log and usage 400.
+- **Admin › [Approval rules](/docs/administer/approval-rules)**: none. No tool call needs a person's approval until a team or a platform admin adds a rule.
 
 </Step>
 <Step>
@@ -49,6 +51,15 @@ If teams' tools need people's GitHub, Google or other accounts, add those servic
 ### Set up notifications, if you want email and webhooks
 
 The inbox works without any setting. For email, the operator sets `SMTP_HOST` and `SMTP_FROM`; for webhooks, see [Notifications](/docs/administer/notifications). Then **Admin › [Overview](/docs/administer/overview)**, where you land, shows what needs attention from the first day.
+
+</Step>
+<Step>
+
+### Optional: provisioning, and decisions for the operator
+
+- **Provisioning.** If your identity provider should create, deactivate and delete people, set it up in **Admin › [Provisioning](/docs/administer/provisioning)** once single sign-on works. Keep at least one platform admin who isn't managed by the directory, for break-glass access.
+- **Split database roles.** Running the portal with a separate owner and runtime database login is easiest to set up at installation. See [Database roles](/docs/operate/database-roles).
+- **Idle sign-out.** Browser sessions last `SESSION_TTL`. To also end sessions nobody has used for a while, the operator sets `SESSION_IDLE_TIMEOUT` (off by default; the example configuration suggests `8h`). See [Configuration](/docs/operate/configuration#sign-in).
 
 </Step>
 </Steps>

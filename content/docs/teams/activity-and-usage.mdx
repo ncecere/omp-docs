@@ -13,19 +13,24 @@ A gateway's **Activity** tab lists its calls, newest first, for the team's **own
 |---|---|
 | OK | Answered |
 | Tool error | The tool ran and reported an error |
-| Denied | Refused by policy (no access, a role too low, the capability unavailable, a key limited to other gateways). The client was told it wasn't found |
+| Denied | Refused by policy (no access, a role too low, the capability unavailable, a key limited to other gateways, a tool outside the credential's tool scope, a service account without an allowed shared connection). The client was told it wasn't found, or why for a missing shared connection |
 | Upstream error | The server was unreachable, refused or answered something malformed |
 | Timed out | The server didn't answer in time |
 | Too large | The request or response was over 1 MiB |
 | Bad request | The client's request was invalid |
 | Needed a connection | Not sent: the person had to connect or reconnect an account first, and their client got a link |
-| Rate limited | Not sent: a rate limit was exceeded |
+| Needs approval | Not sent: this exact tool call requires a person's approval under an [approval rule](/docs/teams/approval-rules). Open Approvals to review the request. A spent authorization does not confirm execution |
+| Rate limited | Not sent: a rate limit was exceeded, including the server's own [quota or concurrency cap](/docs/teams/protection-and-failover#upstream-protection) |
 
-Each row names the caller: a person with an API key ("API key: Laptop"), a person through a connected app ("via Claude Code", or "via &lt;name&gt; (unverified)" for an app that registered itself), or a service account with the key used ("Service account · platform-tools · Key: GitHub Actions"). A call an [agent platform](/docs/administer/agent-platforms) relayed for a person is recorded under the relay service account and reads like "Mail assistant via Pi Durable Platform · for Ada Lovelace" (with "(not present)" when the platform says so), or "no person named". The call's page lists the agent, the person, whether they were present, and the outcome. The person filter includes the calls their agents made for them.
+A call that the portal retried or sent to an [additional endpoint](/docs/teams/protection-and-failover) is still one record.
+
+Each row names the caller: a person with an API key ("API key: Laptop"), a person through a connected app ("via Claude Code", or "via &lt;name&gt; (unverified)" for an app that registered itself), or a service account with the key used ("Service account · platform-tools · Key: GitHub Actions"). Calls recorded before v0.4.0 that an external agent platform relayed for a person may still read like "&lt;agent&gt; via &lt;platform&gt; · for &lt;person&gt;"; new calls never do.
 
 ## A call's page
 
-Opening a call shows when it happened, who made it, the method, the exposed name called, the gateway, the server, the outcome with its error class, the account it needed (if any), its duration and sizes, the client's name when it was known, whether the **Identity token** was sent to the server, and its **Request ID** (also in the portal's logs). It shows whether the token was attached to the request or the server's **Send identity token** switch was off; it is empty for a call that wasn't forwarded (refused, rate limited, or a list the portal answered itself) and for calls recorded before v0.2.2. When a server rejects calls only when a tool runs, look here first: see [Send identity token](/docs/teams/register-a-server#send-identity-token). The call lists also accept `?identitySent=true` or `false` through the API. If the call's contents were recorded, **View contents** shows them; see [Recording call contents](/docs/teams/payload-capture).
+Opening a call shows when it happened, who made it, the method, the exposed name called, the gateway, the server, the outcome with its error class, the account it needed (if any), the **Tool class at call time** for a classified tool, its duration and sizes, the client's name when it was known, whether the **Identity token** was sent to the server, and its **Request ID** (also in the portal's logs). It shows whether the token was attached to the request or the server's **Send identity token** switch was off; it is empty for a call that wasn't forwarded (refused, rate limited, or a list the portal answered itself) and for calls recorded before v0.2.2. When a server rejects calls only when a tool runs, look here first: see [Send identity token](/docs/teams/register-a-server#send-identity-token). The call lists also accept `?identitySent=true` or `false` through the API. If the call's contents were recorded, **View contents** shows them; see [Recording call contents](/docs/teams/payload-capture).
+
+The error class says why a call failed or wasn't sent. Among the newer ones: `tool_scope` ("Outside tool scope"), `service_connection_missing` and the other `service_connection_*` classes ([shared connections](/docs/teams/service-connections)), `argument_constraint` and `curation_changed` ([curation](/docs/teams/curating-gateway-tools)), `server_per_minute`, `server_busy` and `circuit_open` ([upstream protection](/docs/teams/protection-and-failover)). [MCP task](/docs/server-authors/tasks) polls appear as calls with the method `tasks/get`, `tasks/update` or `tasks/cancel`, the original tool, and classes such as `task_created`, `task_working` or `task_not_found`.
 
 <Screenshot slot="call-detail-payload" />
 

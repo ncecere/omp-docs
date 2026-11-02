@@ -18,7 +18,9 @@ A forwarded call is recorded if its gateway's switch **or** its server's switch 
 
 - For `tools/call` and `prompts/get`: the call's arguments, and the result the client received (or the server's error). For `resources/read`: the URI read, and the contents.
 - When there's no result (timeout, unreachable server, an answer too large), only the arguments.
-- **Never**: HTTP headers, the identity token, provider tokens, the caller's own key or token, or the server's static credential. Lists and anything refused before forwarding (denied, rate limited, needed a connection) are never recorded.
+- **Never**: HTTP headers, the identity token, provider tokens, the caller's own key or token, or the server's static credential. Lists and anything refused before forwarding (denied, rate limited, needed a connection, needs approval) are never recorded. For an [MCP task](/docs/server-authors/tasks), the call that creates it is recorded, but the task's result and its `tasks/*` operations never are.
+
+A call waiting for [approval](/docs/teams/approval-rules) keeps its own redacted argument preview for the reviewers, whether or not recording is on. It is a separate store: previews are never shown to platform auditors unless they may approve the call, disappear when the request ends and are cleared within 24 hours.
 
 ## Redaction, then truncation
 

@@ -3,13 +3,13 @@ title: Notification preferences
 description: "Open MCP Portal's bell and inbox, and how to choose per event whether you get a notification in the portal, by email, or both."
 ---
 
-Open MCP Portal tells you when something that concerns you happens: a server your team runs is down, a review you asked for was decided, a key of yours is about to expire. You see these in the portal, and by email if your organisation has set that up. You choose which ones.
+Open MCP Portal tells you when something that concerns you happens: a server your team runs is down, a review you asked for was decided, a tool call waits for your approval, a key of yours is about to expire. You see these in the portal, and by email if your organisation has set that up. You choose which ones.
 
 ## The bell and the inbox
 
 The **bell** in the top bar shows how many notifications you haven't read. Open it to see the latest eight, **Mark all read**, or **View all**.
 
-**Inbox** (`/notifications`) lists them all, with **All** and **Unread** tabs. Each row has a short title and a line of detail, and opening it takes you to the screen it is about (a server, the review queue, your connections) and marks it read. Read marks are yours alone. Notifications stay in your inbox for 90 days, read or not.
+**Inbox** (`/notifications`) lists them all, newest first. The **Unread only** switch hides the ones you've read, and **Mark all read** marks every one read. Each row has a short title and a line of detail, and opening it takes you to the screen it is about (a server, the review queue, your connections) and marks it read. Read marks are yours alone. Notifications stay in your inbox for 90 days, read or not.
 
 <Screenshot slot="notifications-inbox" />
 
@@ -17,7 +17,7 @@ The **bell** in the top bar shows how many notifications you haven't read. Open 
 
 Account › **Notifications** (`/settings/notifications`, in the menu under your name) lists the events you can receive, with two switches for each:
 
-- **In-app**: whether it appears in your bell and inbox.
+- **In the portal**: whether it appears in your bell and inbox.
 - **Email**: whether it is also sent to you by email.
 
 <Screenshot slot="notification-preferences" />
@@ -32,11 +32,18 @@ Both are **on** by default. A switch applies to notifications from then on: turn
 | A server was approved or rejected (`publish.decided`) | Owners and admins of the team |
 | A server is waiting for review (`publish.requested`) | Platform admins |
 | A key or token is about to expire (`key.expiring`) | You, for your own personal API keys. Owners and admins of the team, for its service account keys and publisher tokens. Owners, admins and editors of the team, for a server's mTLS client certificate. Platform admins, for platform tokens |
-| One of your connections needs you to connect again (`connection.needs_reconsent`) | You, about your own connections |
+| A connected account needs reconnecting (`connection.needs_reconsent`) | You, about your own connections. The owning team's owners and admins, about a team's [shared connection](/docs/teams/service-connections) |
+| A tool call is waiting for approval (`approval.requested`) | The people who may review it now, never the requester ([Approvals](/docs/use/approvals)) |
+| A tool-call approval was decided (`approval.decided`) | The person who made the call, or the owners and admins of the requesting service account's team |
+| Gateway access is waiting for review (`access.requested`) | Platform admins and the gateway's named stewards, never the requester ([Access requests](/docs/use/access-requests)) |
+| A gateway access request was decided (`access.decided`) | The requester only |
+| A server's review is overdue (`server.review_due`) | Owners and admins of the server's team, and the server's named owner |
+| A server stops being served soon (`server.sunset_soon`) | Owners and admins of the server's team, its named owner, and the owners of gateways that select it |
+| A server one of your gateways selects was deprecated (`server.deprecated`) | Owners and admins of each gateway that selects it |
 
-A key or token notice is sent once, when a key that lasted more than 7 days is within 7 days of expiring. A server certificate notice is sent once per certificate, 14 days ahead; a renewed certificate warns again when its turn comes.
+A key or token notice is sent once, when a key that lasted more than 7 days is within 7 days of expiring. A server certificate notice is sent once per certificate, 14 days ahead; a renewed certificate warns again when its turn comes. A sunset notice is sent 14 days before the server stops being served, once per date; an overdue-review notice once per due date. Approval and access notices name the request and link to it; they never include its arguments, reason or notes.
 
-Preferences are only about **you**. Team and platform **webhooks**, which send events to a chat channel or another tool, are set up by the team's owners and admins or by platform admins, and aren't affected by your switches. Events about your own connections never go to webhooks.
+Preferences are only about **you**. Team and platform **webhooks**, which send events to a chat channel or another tool, are set up by the team's owners and admins or by platform admins, and aren't affected by your switches. Events about connections, approvals, access requests, overdue reviews, sunsets and deprecations never go to webhooks.
 
 ## Email
 

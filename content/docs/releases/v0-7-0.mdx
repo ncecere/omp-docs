@@ -1,0 +1,62 @@
+---
+title: v0.7.0
+description: "Open MCP Portal v0.7.0 (2026-10-29): a per-server quota and concurrency cap, bounded retries for read tools, and a circuit breaker. Migration 00046."
+---
+
+**Released 2026-10-29.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.7.0) · image `ghcr.io/ncecere/open-mcp-portal:v0.7.0` · migration `00046` (expand-only).
+
+The first release of the v0.7 line, after [v0.6.0](/docs/releases/v0-6-0), and the first stage of upstream protection (#33, decision 84): limits that keep one busy MCP server from being overrun, and retries only where a repeat is safe. Failover to other endpoints followed in [v0.8.0](/docs/releases/v0-8-0). **Quotas and caps start unlimited; the circuit breaker applies as soon as a replica runs v0.7.0.** Read [Upgrading](#upgrading) first.
+
+## What changed
+
+- **A quota per server.** **Forwarded attempts per minute** limits the calls the portal sends to one server, across every gateway, caller and replica; each automatic retry counts again. A server's own value overrides its team's, then the platform default, and the platform ceiling always caps it. Admin › **Limits** gains **Per upstream server** (default and ceiling, both unlimited to start) and lists servers the ceiling caps. A call over the quota gets `429` with `Retry-After`. See [Protection and failover](/docs/teams/protection-and-failover) and [Limits](/docs/administer/limits).
+- **A concurrency cap per server.** **Concurrent forwarded operations** (1 to 10,000) limits calls in progress to a server **on each replica**. There is no queue: a call over the cap fails at once. Across the fleet the cap grows with the number of replicas.
+- **Retries only for reads.** Only tools the team classified **read**, `prompts/get` and `resources/read` are retried, at most twice and within the original timeout, after a `502`, `503`, `504`, a short `Retry-After` on `429`, or a connection failure before anything was sent. Write, destructive and unclassified tools, calls that need approval, streamed or partial results and anything ambiguous after sending are never retried. A server's own annotations don't count.
+- **A circuit breaker per server.** After five failed calls in a row, a replica stops calling that server for 30 seconds, then lets one call through to test it. Refusals the portal makes itself and cancelled calls don't count as failures. An open circuit answers `-32010` with `circuit_open` without contacting the server. The state is per replica and reported by the metric `omp_server_circuit_state`. See [Metrics](/docs/operate/metrics).
+- **Who sets them.** Only the server team's owners and admins, on the server's Settings › **Upstream protection**. Editors and automation tokens can't; changing a limit is audited and doesn't send the server back to review. Refusals happen before an approval is spent, so a refused call keeps its approval.
+
+## Upgrading
+
+1. **Back up** the database together with its keys, then pin the new image (verify its signature first, see [The image](#the-image)). The init container applies `00046`, which adds two empty columns. **Do not use `goose down` for a rollback.**
+2. **Finish the rollout and drain every older serving and background-worker replica before you rely on quotas, caps, retries or the breaker.** v0.6.0 runs against the new schema but enforces none of them. The breaker itself starts working on each replica as soon as it runs v0.7.0.
+3. Choose server, team and platform values deliberately, with your replica count in mind.
+4. Going back to an older image removes these protections; don't rely on settings an older image ignores. Earlier rules still apply: [v0.6.0](/docs/releases/v0-6-0#upgrading) for expiring grants and [v0.5.0](/docs/releases/v0-5-0#upgrading) for approvals.
+
+[Upgrading from v0.6.0](/docs/operate/migrations-and-upgrades#upgrading-from-v060) has the same points with the details.
+
+## Verification
+
+The release was tested in both database-role modes and its published image signed and verified; the [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.7.0) and the [release notes](https://github.com/ncecere/open-mcp-portal/blob/v0.7.0/docs/releases/v0.7.0.md) record how.
+
+## Known limitations
+
+Carried over from [v0.6.0](/docs/releases/v0-6-0#known-limitations) unless marked new:
+
+- **No failover yet (new).** Additional endpoints came in [v0.8.0](/docs/releases/v0-8-0).
+- **Replicas briefly disagree (new).** The concurrency cap and the breaker are kept in each replica's memory; this is not load balancing.
+- **Quota windows are fixed minutes (new),** with the bursts at a window edge that brings.
+- **A read retry trusts the class (new).** A `503` doesn't prove nothing ran; a tool wrongly classified read can still have side effects.
+- **Not run against real clients and providers,** and not load-tested over long periods. A pilot with a real team is still open.
+- Remote servers only (no stdio); development software that has not run in production.
+
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.7.0` is signed with cosign keyless signing by the repository's `image.yml` workflow. Its digest is:
+
+```text
+sha256:a377ef8d7b8303780eb1ffbd1b11a0358954532c771705dc3e56d94650cc3ed6
+```
+
+Check the signature with **cosign v3.0 or newer**, then pin the image by that digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:a377ef8d7b8303780eb1ffbd1b11a0358954532c771705dc3e56d94650cc3ed6 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.7.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/open-mcp-portal/issues](https://github.com/ncecere/open-mcp-portal/issues) (there is a form for each kind) or ask in [Discussions](https://github.com/ncecere/open-mcp-portal/discussions). Report security problems privately, as [`SECURITY.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.7.0/SECURITY.md) describes.

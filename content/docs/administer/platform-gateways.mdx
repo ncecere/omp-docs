@@ -12,6 +12,8 @@ description: Build platform gateways in Open MCP Portal from approved catalog ca
 - only **approved capabilities of published servers** can be selected;
 - there are **no minimum roles**: the grants decide who may use it.
 
+Platform admins can also curate the selected tools of a platform gateway (rename a tool, rewrite its description, fix argument values), as teams do for theirs; see [Curating gateway tools](/docs/teams/curating-gateway-tools).
+
 ## Access
 
 A platform gateway's **Access** tab lists its **Grants**. Nobody can use it until it's granted. **Grant access** to:
@@ -22,11 +24,19 @@ A platform gateway's **Access** tab lists its **Grants**. Nobody can use it unti
 | **Person** | Someone who has signed in at least once, by email |
 | **SSO group** | Everyone whose identity provider reported the group at their last sign-in. Enter the name exactly as it appears in the groups claim, such as `engineering` or `cn=engineering,ou=groups` (compared case-sensitively) |
 
+**Grant lifetime (days)** is optional: 1 to 365 days, or empty for a permanent grant. "Expiry ends access without waiting for cleanup."
+
 <Screenshot slot="gateway-access" />
+
+The grants list shows each grant's **Tool scope** and **Expires** ("Permanent", the date, or "Expired · …" until the clean-up removes it). A grant's tool scope limits which tools its holders can call through the gateway, by class or by name; it is set through the API (`toolScope` when the grant is created) or an `omp/v1` file, not in this dialog. A tool scope only narrows: it never gives access a grant doesn't.
 
 Grants take effect on the next request; people it covers see the gateway under My gateways. Removing a grant cuts access on the next call, unless another grant covers them. Service accounts are covered only by team grants: a grant to a person or group never covers a service account, and there are no grants to individual service accounts.
 
-Group grants use `users.groups`, the groups the identity provider sent at the person's last sign-in through `OIDC_GROUPS_CLAIM` (`groups` by default). People see their groups on their Profile.
+Group grants use `users.groups`, the groups the identity provider sent at the person's last sign-in through `OIDC_GROUPS_CLAIM` (`groups` by default). People see their groups on their Profile. [Provisioning](/docs/administer/provisioning) doesn't change this: SCIM groups map to team roles, not to gateway grants.
+
+## Requests
+
+The **Requests** tab lets people discover a platform gateway and ask for access, decided by you or the gateway's named stewards. It is off for every gateway until you switch it on. See [Access requests](/docs/administer/access-requests).
 
 ## Team gateways in Admin
 
@@ -34,4 +44,4 @@ Platform admins can see every team gateway and turn it **off and on** (for examp
 
 ## Settings and records
 
-Platform gateways have the same **Settings** as team gateways: a [rate limit](/docs/administer/limits) of their own, **Record call contents** (readable by platform admins and auditors), and **Delete**. Their **Activity** tab lists their calls. Changes are audited (`gateway.create`, `gateway.capabilities_set`, `gateway.grant_add`, `gateway.grant_remove`, …).
+Platform gateways have the same **Settings** as team gateways: a [rate limit](/docs/administer/limits) of their own, **Record call contents** (readable by platform admins and auditors), a **Sensitivity ceiling** (the highest server label the gateway serves; see [Gateway ceilings](/docs/administer/governance#gateway-ceilings)), and **Delete**. [Approval rules](/docs/administer/approval-rules) for a platform gateway are managed in **Admin › Approval rules**. A server that has reached its sunset date is unavailable through every gateway. Their **Activity** tab lists their calls. Changes are audited (`gateway.create`, `gateway.capabilities_set`, `gateway.grant_add`, `gateway.grant_remove`, `gateway.access_settings_update`, `gateway.grant_expire`, …).

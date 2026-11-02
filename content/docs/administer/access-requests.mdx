@@ -1,0 +1,61 @@
+---
+title: Access requests
+description: "Let people discover a platform gateway in Open MCP Portal and request access, name stewards who decide, and grant access that expires."
+---
+
+By default, people learn about a [platform gateway](/docs/administer/platform-gateways) only when someone grants it to them. With **access requests** switched on for a gateway, every signed-in person can find it and ask for access, for themselves or for a team they own or administer. A platform admin or one of the gateway's **stewards** approves or denies each request, and approval creates an ordinary grant, optionally with an expiry.
+
+Only platform gateways can take requests, and only platform admins switch it on. How people ask is described in [Access requests](/docs/use/access-requests).
+
+<Callout type="warn" title="Drain older replicas first">
+Replicas older than v0.6.0 don't enforce grant expiry or send access-request notifications. Finish the rollout to every serving **and** background-worker replica before you switch requests on or create a grant that expires. See [Migrations and upgrades](/docs/operate/migrations-and-upgrades).
+</Callout>
+
+## Switch it on for a gateway
+
+Open the gateway in **Admin › Gateways** and its **Requests** tab (shown for platform gateways only). The **Access requests** card has:
+
+- **Allow people to discover this gateway and request access**: off by default. "Opting in exposes this gateway's name and description to every active signed-in person. Its capabilities, upstreams and MCP endpoint remain protected by normal access checks."
+- **Gateway steward user IDs**: optional, the UUIDs of up to 50 active people, one per line.
+
+**Save request settings** applies both. If someone else changed the gateway in the meantime, reload and review again. Platform auditors read the tab. The change is audited as `gateway.access_settings_update`.
+
+<Screenshot slot="gateway-access-requests" />
+
+A disabled gateway is never discoverable, and a gateway that is discoverable still needs a grant before anyone can use it.
+
+## Stewards
+
+A steward decides the requests for **that gateway only**. Being a steward gives no access to the gateway's tools, no right to edit it or its grants directly, no right to change stewards, and no platform role. Platform admins can always decide. **Nobody can decide their own request**, including a platform admin or a steward.
+
+Stewards and platform admins review under **Access requests** › **Review requests** (`/access-requests`) in the workspace, outside the admin pages. The [overview](/docs/administer/overview) shows how many requests you may decide.
+
+## Requests and decisions
+
+A request names the gateway, who it is for (the requester, or an active team they own or administer) and a **Reason**, 1 to 1,000 characters.
+
+- At most 10 pending requests per person, and one pending request per gateway and subject.
+- After a denial, the same request can't be made for 24 hours.
+- Someone who already has access can't request it. The requester can withdraw a pending request.
+
+The reviewer opens the request, reads the private reason and chooses **Approve gateway access** or **Deny access**, with an optional **Decision note** (up to 1,000 characters) and, for an approval, a **Grant lifetime (days)**: 1 to 365, or empty for permanent. Approval creates a normal grant, recorded in the same step as the decision:
+
+- a **person** grant, when the request was for the requester;
+- a **team** grant, when it was for a team. A team grant covers everyone on the team, including people who join later, and the team's service accounts.
+
+An existing grant is never widened or extended by an approval. Access to the gateway doesn't bypass anything else: tool scopes, credentials and [approval rules](/docs/administer/approval-rules) still apply.
+
+## Grants that expire
+
+A grant can expire whether it came from a request or from **Grant access** on the gateway's Access tab (**Grant lifetime (days)**, 1 to 365; empty means permanent). Grants made before v0.6.0 stay permanent.
+
+Expiry ends access at the deadline, without waiting for any clean-up: it is checked on every request and again just before a call is forwarded. The Access tab shows **Expires** ("Permanent", the date, or "Expired · …"). A clean-up job later removes expired grants and audits each as `gateway.grant_expire`.
+
+## Privacy and records
+
+- Reasons and decision notes are visible only to the requester and the people who may decide. They never appear in the audit log, notifications or webhooks.
+- Notifications: `access.requested` goes to platform admins and the gateway's stewards, never the requester; `access.decided` goes to the requester. Both are inbox and email only, never webhooks. See [Notifications](/docs/administer/notifications).
+- Audit: `access_request.create`, `.approve`, `.deny` and `.withdraw`, with the gateway, the subject, the decision and the expiry. The grant an approval creates is audited as `gateway.grant_add`.
+- Requests keep their reasons and notes until the requester, the gateway or the team is deleted. They don't follow the [retention](/docs/administer/retention) settings.
+
+Every part of this needs a browser session: automation tokens can't discover, request, decide or withdraw, or change stewards. Over the API: `GET` and `PUT /v1/admin/gateways/{gatewayId}/access-settings` ([reference](/docs/api/reference/admin/adminGetGatewayAccessSettings)).

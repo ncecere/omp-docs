@@ -3,7 +3,7 @@ title: Team settings
 description: Members, invites and roles, the team's audit log, the limits and retention that apply, and the team's general settings in Open MCP Portal.
 ---
 
-**Team settings** has six tabs: **Members**, **Audit log**, **Limits & retention**, **General**, **Notifications** and **Automation tokens**. The last two are for the team's owners and admins (platform staff can read them): see [Team attention and notifications](/docs/teams/attention-and-notifications#team-webhooks) and [Publisher tokens](/docs/teams/publisher-tokens).
+**Team settings** has six tabs: **Members**, **Audit log**, **Limits & retention**, **Notifications**, **Automation tokens** and **General**. **Notifications** and **Automation tokens** are for the team's owners and admins (platform staff can read them): see [Team attention and notifications](/docs/teams/attention-and-notifications#team-webhooks) and [Publisher tokens](/docs/teams/publisher-tokens).
 
 ## Members
 
@@ -18,6 +18,8 @@ Use the email address people sign in with. Changing someone's role or removing t
 
 A team always has at least one owner: the only owner can't leave or step down until they make someone else an owner.
 
+Where the platform is connected to a company directory, a platform admin can map directory groups to team roles (admin, editor or member, never owner). Memberships the directory created follow the groups: removing the person from a group removes the memberships only that group gave. Changing such a membership by hand takes it over, and the directory stops managing it. A membership added by hand is never changed by the directory. See [Provisioning](/docs/administer/provisioning).
+
 <Screenshot slot="team-settings-members" />
 
 ## Audit log
@@ -26,7 +28,7 @@ Owners, admins and editors see the team's own audit log: changes to its members,
 
 ## Limits & retention
 
-Read-only for the team: the **rate limits** that apply to the team's service accounts and gateways, and how long the team's **call records** and **recorded call contents** are kept. Platform admins set these, including team overrides; ask one if your team needs other values. A gateway can also have its own rate limit on its **Settings** tab, up to the platform's ceiling.
+Read-only for the team: the **rate limits** that apply to the team's service accounts, gateways and servers (**Per upstream server**, the default quota for each of the team's MCP servers), and how long the team's **call records** and **recorded call contents** are kept. Platform admins set these, including team overrides; ask one if your team needs other values. A gateway can also have its own rate limit on its **Settings** tab, and a server its own quota under Settings › **Upstream protection** ([Upstream protection and failover](/docs/teams/protection-and-failover)), both up to the platform's ceiling.
 
 ## General
 

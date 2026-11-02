@@ -1,0 +1,75 @@
+---
+title: "Upstream protection and failover"
+description: "Protect a team's MCP server in Open MCP Portal with a request quota and a concurrency cap, how read retries and the circuit breaker work, and how to add up to two failover endpoints."
+---
+
+Open MCP Portal can keep a busy or failing server from being overwhelmed, retry safe calls that fail for a moment, and send calls to a replica when the primary URL can't be reached. Two sections of a server's **Settings** tab control this: **Upstream protection** and **Additional endpoints**. Read retries and the circuit breaker need no setting.
+
+Only the server team's **owners and admins** change these settings, in a browser session. Editors, members and platform staff see them read-only, and automation tokens can't change them.
+
+## Upstream protection
+
+<Screenshot slot="server-protection" />
+
+| Field | Meaning |
+|---|---|
+| **Forwarded attempts per minute** | How many calls the portal forwards to this server in a minute, from every gateway, caller and replica together: 1 to 1,000,000. Blank inherits the team's or platform's default, **Per upstream server** on [Limits & retention](/docs/teams/team-settings#limits--retention). The platform's ceiling always caps it. Automatic retries count again; other servers have their own counters |
+| **Concurrent forwarded operations** | How many calls may be in flight to this server at once, **per replica of the portal**: 1 to 10,000. Blank is unlimited. The cap across the fleet grows with the number of replicas. There is no queue: a call over the cap is refused at once |
+
+Both are off until someone sets them (the platform's default starts unlimited). They don't grant access, change any credential's scope, or send a published server to review. Changes are audited.
+
+**What a caller sees.** A call over either limit isn't forwarded: the client gets HTTP `429` with `Retry-After` and the usual rate-limit error, and the call is recorded as **Rate limited**, with the error class `server_per_minute` (the quota) or `server_busy` (the concurrency cap). Callers aren't told other callers' counts. The person, key, service account and gateway limits still apply as before, and count the call once.
+
+## Automatic read retries
+
+When a call fails in a way that is usually brief, the portal may try it again, without the caller asking:
+
+- **What may be retried:** tools the team [classified](/docs/teams/capabilities#classifying-tools) as **Read**, `prompts/get` and `resources/read`. Never write, destructive or unclassified tools: annotations such as `readOnlyHint` don't count.
+- **When:** after a `502`, `503` or `504`, a `429` with a short `Retry-After` (up to 2 seconds), or a connection or TLS handshake failure before anything was sent.
+- **How often:** at most twice, with a short random delay, within the server's original timeout. A retry never extends the timeout.
+- **Never:** for approval-governed calls, a reply to a server's question, a call that started streaming progress or returned a partial or malformed result, a `401` or `403`, a tool error, or a failure after the request may have been sent.
+
+The caller sees one call, and the portal records one call. A server that fails a read with `503` may still have done something, so make sure tools you classify as Read really are safe to repeat.
+
+## Circuit breaker
+
+After **5 failed forwarded calls in a row** to a server, a replica stops sending to it for **30 seconds**, then lets **one** call through to test it. A good answer closes the circuit; another failure opens it again. Each replica of the portal keeps its own circuit per server. Refusals the portal makes itself (limits, access, credentials) and callers cancelling don't count as failures.
+
+While the circuit is open, calls get JSON-RPC `-32010` with `data.reason` `circuit_open`, are recorded as **Upstream error** (class `circuit_open`, "Server circuit open while it recovers"), and never reach the server.
+
+## Additional endpoints
+
+A server can have up to **two additional endpoints**: replicas of the same server at other URLs, tried in order when the primary can't serve a call. The primary URL under **Connection** stays the server's canonical address: discovery, the catalog and the protocol shown on the Overview come from it.
+
+<Screenshot slot="server-endpoints" />
+
+**Add endpoint** adds one. For each, enter the **Additional endpoint N URL**, and switch **Enable additional endpoint N** on or off. **Up** and **Down** change the order, **Remove** deletes one and **Remove all endpoints** deletes them all. Every URL must differ from the primary and from the other ("Every additional URL must differ from the primary and the other replicas.") and pass the same [address rules](/docs/teams/register-a-server#internal-servers) as the primary.
+
+**Credentials.** For a server with a [static credential](/docs/teams/register-a-server#static-credential), each additional endpoint needs **its own credential parts, entered for it**: the primary's values are never copied. Changing an endpoint's origin needs every value entered again. A disabled endpoint keeps its credential.
+
+**Only some servers can have them.** Additional endpoints work for servers in **None** or **Static credential** mode, with no [user authorization requirement](/docs/teams/user-authorization) and no [TLS settings](/docs/teams/register-a-server#tls-to-the-server). Otherwise the section says "This configuration cannot use extra endpoints", and saving extras is refused (`422 failover_not_supported`). Remove all additional endpoints before switching to OAuth, each person's own key, the portal's own OAuth client or TLS.
+
+<Callout type="info" title="A fallback is not another approval">
+Calls that need [approval](/docs/teams/approval-rules) always use the primary, even when it can't be reached: an approval names the primary's address.
+</Callout>
+
+### When a call moves to another endpoint
+
+Each call tries the primary first, then the enabled extras in order, **at most three attempts in total**, all within the server's original timeout. Read retries don't multiply per endpoint.
+
+- **Write, destructive and unclassified tools** move on only after a connection or TLS handshake failure that proves nothing was sent. Never after a `5xx`, a `429`, a timeout or a failure partway through.
+- **Read tools, prompts and resources** may also move on after the transient answers that allow a read retry.
+
+Before a call is sent to an additional endpoint, the portal checks that the endpoint offers the same tool with the same definition the portal approved; if it doesn't, the call isn't sent there. Each attempt is checked against the caller's current access and the server's quota, and counts against it. The server's concurrency cap and circuit breaker cover all endpoints together.
+
+### What the server at each endpoint receives
+
+Each endpoint gets only its own credential parts, and an [identity token](/docs/server-authors/identity-token) whose `aud` is **that endpoint's URL**, so each replica checks its own address. See [Retries and failover](/docs/server-authors/what-servers-receive#retries-and-failover) for the author's side.
+
+### Health
+
+**Test connection** and the scheduled checks also check each enabled additional endpoint, with its own credential, and verify that it lists the same capabilities. The **Health** tab's **Endpoint** column says which was checked: **Primary** or **Additional endpoint N**. The server's status and the catalog use the primary's checks.
+
+### Review
+
+Additional endpoints are new destinations for the server's credential and callers' data, so under **Approval required**, adding, removing, reordering or enabling an endpoint, or changing its URL or credential shape, sends a published server back to review (reason `endpoints_changed`). The reviewer sees each destination and where its credential goes, never the values. Upstream protection limits never need a review.

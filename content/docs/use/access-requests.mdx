@@ -1,0 +1,64 @@
+---
+title: "Requesting gateway access"
+description: "Find Open MCP Portal platform gateways that accept access requests, ask for access for yourself or your team, follow your requests, and review them as a steward."
+---
+
+Some platform gateways in Open MCP Portal accept **access requests**: instead of asking a platform admin by email or chat, you ask in the portal, and a platform admin or one of the gateway's named **stewards** approves or denies the request. Team gateways never accept requests: you use those by joining the team.
+
+Go to **Access requests** in the sidebar's Workspace section (`/access-requests`), or choose **Request gateway access** on [My gateways](/docs/use/my-gateways). The page, **Gateway access requests**, has three tabs: **Request access**, **My requests** and **Review requests**.
+
+## Find a gateway and ask
+
+**Request access** lists the platform gateways whose administrators opted in to requests, with their names and descriptions. Listing a gateway doesn't grant access to it, and gateways that don't accept requests aren't shown.
+
+<Screenshot slot="access-requests-discover" />
+
+Choose **Request access** on a gateway. The dialog **Request access to &lt;gateway&gt;** asks for:
+
+| Field | Means |
+|---|---|
+| **Request for** | **Myself**, or one of your teams as "&lt;team&gt; (whole team)". Only teams you own or administer are offered. A team grant covers all its current and future members and its service accounts, not just you |
+| **Reason** | Required, up to 1,000 characters. Your reason is private to you and the current reviewers. Don't enter passwords, API keys or other secrets |
+
+Choose **Submit access request**. Then follow it under **My requests**.
+
+You can't request:
+
+- more than **10** requests pending at once;
+- the same access again within **24 hours** of a denial;
+- access you already have, or a second request while one for the same gateway and subject is pending.
+
+## Follow your requests
+
+**My requests** lists what you asked for, with each request's status. Open one to see its details, your reason and the decision note, if any. While it's pending you can **Withdraw request**.
+
+<Screenshot slot="access-requests-mine" />
+
+When the request is decided you get **A gateway access request was decided** (`access.decided`). If it was approved, the gateway appears under My gateways, and the request shows when the grant expires (**Permanent** if it doesn't). The request is a record of the decision, not proof of current access: a grant can expire or be revoked later. [Tool scopes](/docs/use/tool-scopes) and [approval rules](/docs/use/approvals) still apply to every call.
+
+## Review requests
+
+Platform admins, and the people a platform admin named as **stewards** of a gateway, review its requests. **Review requests** lists the pending requests you can decide now, with their count. Stewardship is only this: it gives no access to the gateway itself, and no right to edit it, change its grants or name other stewards.
+
+Open a request to see who asked, whether it's for **The requester only** or a whole team ("all current/future members and service accounts"), and the **Private reason**. Then:
+
+| Field | Means |
+|---|---|
+| **Grant lifetime (days)** | Optional, 1 to 365 days. Leave it empty for permanent access. The grant ends on that date without anyone removing it |
+| **Decision note** | Optional, up to 1,000 characters, private to the requester and reviewers. Never enter secrets |
+
+Choose **Approve gateway access** or **Deny access**. Approving creates the grant at once.
+
+<Screenshot slot="access-request-review" />
+
+- You are deciding access to the gateway, not an exact tool call.
+- You can never decide your own request, even as a platform admin or steward.
+- Both your authority and the requester's are checked again when you decide. If someone else decided first, or the request changed, reload it and review again.
+
+New requests notify the gateway's current reviewers with **Gateway access is waiting for review** (`access.requested`), never the requester. Platform admins also see the number of requests waiting on the admin overview.
+
+## Privacy
+
+Reasons and decision notes are visible only to the requester and the current reviewers. They never appear in notifications, webhooks or the audit log; the audit log records the gateway, the subject, the decision and the expiry. Requests work only in the browser: no key or automation token can make, withdraw or decide one.
+
+Platform admins choose which gateways accept requests and who their stewards are: see [Access requests](/docs/administer/access-requests).

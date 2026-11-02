@@ -11,6 +11,7 @@
     "---Run---",
     "secrets-and-key-rotation",
     "migrations-and-upgrades",
+    "database-roles",
     "scaling",
     "health-and-doctor",
     "metrics",

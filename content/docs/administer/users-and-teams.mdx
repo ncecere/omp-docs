@@ -11,8 +11,9 @@ description: Platform roles, suspending and reactivating people, creating, archi
 
 A person's page shows:
 
-- **Profile and access**: email, first and last sign-in, and the **Platform role**: none, **auditor** (**Make auditor**) or **admin** (**Make platform admin**), or **Remove platform role**. Neither role gives access to a team's recorded call contents through the team's pages. The last platform admin can't be removed.
+- **Profile and access**: email, first and last sign-in, and the **Platform role**: none, **auditor** (**Make auditor**) or **admin** (**Make platform admin**), or **Remove platform role**. Neither role gives access to a team's recorded call contents through the team's pages. The last platform admin can't be removed. A person [managed by your directory](/docs/administer/provisioning) can't be made a platform admin (`409 protected_principal`): unlink them on Admin › Provisioning first.
 - **Teams**: their memberships. Team owners and admins manage members; a platform admin assigns owners on the team's page.
+- **Sessions** (platform admins only): their browser sign-ins, with the browser, address, when they signed in, were last active and expire. See [Sessions](#sessions).
 - **Connected apps**: the MCP clients they signed in with OAuth, per gateway. Platform admins can disconnect them; auditors read.
 - **Connections**: their connected accounts on other services (metadata only, never tokens). Platform admins can disconnect them; auditors read.
 - **Keys for servers**: which servers they have entered [their own key](/docs/use/keys-for-servers) for, never the keys. Platform admins can remove a key (it is audited); auditors read.
@@ -22,7 +23,20 @@ A person's page shows:
 
 ### Suspend and reactivate
 
-**Suspend…** signs the person out of the web app immediately and refuses every later request at authentication: their connected apps, API keys and access to teams and gateways stop working. Nothing is deleted: their connected apps, keys, provider connections, keys for servers and memberships are kept, so **Reactivate** restores them (an app may ask them to sign in again). You can't suspend yourself.
+**Suspend…** signs the person out of the web app immediately and refuses every later request at authentication: their connected apps, API keys and access to teams and gateways stop working. Requests of theirs that were already in progress can't create a key either (`409 request_authority_changed`). Nothing is deleted: their connected apps, keys, provider connections, keys for servers and memberships are kept, so **Reactivate** restores them for new requests (an app may ask them to sign in again). Their earlier browser sessions don't come back: they sign in to the web app again. You can't suspend yourself.
+
+When [provisioning](/docs/administer/provisioning) is on, a person can also be deactivated by your identity provider. The two are separate: **Reactivate** here lifts only your suspension, and a person the directory deactivated stays suspended until the directory reactivates them. Admin › Provisioning shows both standings for each directory-managed person.
+
+### Sessions
+
+The **Sessions** card on a person's page lists their browser sign-ins: "Browser sign-ins. Revoking them does not disconnect apps or other credentials." **Revoke all sessions** signs them out of every browser and cancels any account connection they had started but not finished. Their connected apps, API keys and provider connections keep working; to stop those, disconnect them on the same page or suspend the person.
+
+- Only platform admins see the card. Auditors and automation tokens can't list or revoke sessions.
+- Admins revoke all of a person's sessions at once. Ending a single session is for the person themselves, under **Account › Sessions** (see [Sessions](/docs/use/sessions)).
+- The browser and device names are what the browser reports, and last activity is recorded at most once a minute.
+- It is audited as `session.admin_revoke`, with a count. Over the API: `GET` and `DELETE /v1/admin/users/{userId}/sessions` ([reference](/docs/api/reference/admin/adminRevokeUserSessions)), browser session only.
+
+How long a session lasts is set by the operator: `SESSION_TTL`, and optionally `SESSION_IDLE_TIMEOUT` for sessions nobody uses ([Configuration](/docs/operate/configuration#sign-in)).
 
 ## Teams
 
@@ -31,9 +45,13 @@ A person's page shows:
 A team's admin page has:
 
 - **Overview** and **Members**: members and owners. A platform admin can make someone an owner (promoting a member, adding a person or inviting an email).
-- **Limits & retention**: overrides of the platform's rate limits (per service account and per gateway) and retention periods (call records and recorded contents) for this team. See [Limits](/docs/administer/limits) and [Retention](/docs/administer/retention).
+- **Limits & retention**: overrides of the platform's rate limits (per service account, per gateway and per upstream server) and retention periods (call records and recorded contents) for this team. See [Limits](/docs/administer/limits) and [Retention](/docs/administer/retention).
 - **Settings**: the name and description, the team's [publishing policy](/docs/administer/publishing-policy) override, and **Archive team…** / **Unarchive team**.
 
 ### Archiving
 
-Archiving makes a team read-only for everyone: members keep read access but can't change anything. While a team is archived its servers leave the catalog, gateway pickers and health checks, its team gateways answer "not found", other gateways show its capabilities as "Team archived", and its service accounts' keys are refused. Archiving changes no data, so **Unarchive team** restores everything.
+Archiving makes a team read-only for everyone: members keep read access but can't change anything. While a team is archived its servers leave the catalog, gateway pickers and health checks, its team gateways answer "not found", other gateways show its capabilities as "Team archived", and its service accounts' keys are refused. Archiving changes no data, so **Unarchive team** restores everything. An archived team gets no new memberships from directory group mappings.
+
+### Members from your directory
+
+With [provisioning](/docs/administer/provisioning#group-mappings), a directory group can be mapped to a team with the role admin, editor or member, never owner. The directory manages only the memberships it created: a membership someone added by hand is never changed or removed by it, and editing a directory-created membership by hand turns it into a manual one. Team owners are never directory managed.

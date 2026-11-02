@@ -1,0 +1,170 @@
+---
+title: The omp command line
+description: "Install and use omp, Open MCP Portal's command line for CI and scripts: automation-token sign-in, connect snippets, server deployment, declarative export and import, exit codes and the public Go client."
+---
+
+`omp` is Open MCP Portal's command line for pipelines and scripts. It prints the snippet that connects an MCP client to a gateway, registers, tests, refreshes and publishes a team's servers from CI, and keeps platform configuration in a file you can review (`omp export`, `omp import --plan`). It is new in v0.10.0 and calls the [management API](/docs/api) with an [automation token](/docs/api#automation-tokens) only.
+
+It is a separate binary from the portal's own `open-mcp-portal`, which runs the server ([Running Open MCP Portal](/docs/operate)).
+
+## Install
+
+Each release attaches six binaries, `omp-<tag>-<os>-<arch>` (`.exe` on Windows), for linux, darwin and windows on amd64 and arm64. Each has a cosign bundle (`.sigstore.json`, keyless, signed by the same `image.yml` workflow as the image) and is listed in the release's `checksums.txt`. Verify both before you run it (cosign v3.0 or newer):
+
+```sh
+cosign verify-blob omp-v0.13.1-linux-amd64 \
+  --bundle omp-v0.13.1-linux-amd64.sigstore.json \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.13.1 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+sha256sum --ignore-missing -c checksums.txt
+chmod +x omp-v0.13.1-linux-amd64 && mv omp-v0.13.1-linux-amd64 /usr/local/bin/omp
+```
+
+Release verification runs the Linux binary; the macOS and Windows binaries are signed, checksummed and reproduced byte for byte, but their execution isn't tested.
+
+From a checkout of the repository: `make build-omp` writes `bin/omp`, and `make docker-omp` builds a distroless container image, `omp-cli:<version>`, whose entrypoint is `/omp`:
+
+```sh
+docker run --rm -e OMP_URL -e OMP_TOKEN omp-cli:v0.13.1 servers list --json
+```
+
+## Sign in with a token
+
+`omp` authenticates only with an automation token: a **platform token** (`ompadm_`, from Admin › **Automation tokens**, [Automation tokens](/docs/administer/automation-tokens)) or a **team publisher token** (`omppub_`, [Publisher tokens](/docs/teams/publisher-tokens)). A personal API key or an OAuth token is refused before any request. There is no browser sign-in and no `omp keys`: tokens are created in the web app.
+
+| Setting | Where it comes from |
+|---|---|
+| Portal URL | `--portal URL`, else `OMP_URL`, else `url:` in the config file |
+| Token | `OMP_TOKEN`, else `token:` in the config file. There is no `--token` flag, so a token never lands in shell history or `ps` |
+
+The config file is `~/.config/omp/config.yaml` (`$XDG_CONFIG_HOME/omp/config.yaml` when set; `OMP_CONFIG` names another file). `omp configure` writes it with mode `0600` in a directory of mode `0700`:
+
+```sh
+omp configure --portal https://mcp.example.com --token-stdin < token.txt
+omp configure --portal https://mcp.example.com --token-env OMP_TOKEN
+```
+
+Rules with no switch to turn them off:
+
+- **A config file that group or others can read is refused**, with a hint to `chmod 600` (not checked on Windows).
+- **`https://` only.** Plain `http://` is accepted for `localhost` and loopback addresses.
+- **TLS certificates are always verified.** There is no `--insecure`; add a private CA to the system's trust store or `SSL_CERT_FILE`.
+- **Redirects are never followed**, so a token can't be carried to another host.
+- **No command prints a token or a secret it read**: output passes a filter that replaces them with `[redacted]`.
+
+In a shell that also runs the portal, set `OMP_URL` and `OMP_TOKEN` for the `omp` process only: the portal's own settings share the `OMP_` prefix.
+
+## Commands
+
+Global flags, before or after the command: `--json` (JSON output, and JSON errors on stderr), `--portal URL`, `--timeout 60s` (for the whole command). `omp <command> --help` lists a command's flags.
+
+| Command | Does |
+|---|---|
+| `omp whoami` | Shows the token in use: kind, name, scopes, team, expiry and status. Start here when something answers `401` or `403` |
+| `omp connect <gateway> --client claude\|vscode\|cursor\|curl` | Prints the snippet that connects a client to a gateway, without any request. `--auth oauth` (default) prints the sign-in variant; `--auth key` the API-key variant with a `<YOUR_API_KEY>` placeholder (curl always uses a key). `--name` sets the name the client shows |
+| `omp servers list\|get\|register\|test\|refresh\|publish\|unpublish` | Manages a team's servers with a team publisher token |
+| `omp export` | Writes the portal's configuration as an `omp/v1` file |
+| `omp import -f FILE` | Applies an `omp/v1` file; `--plan` shows what would change |
+| `omp configure` | Stores the portal URL and token in the config file |
+| `omp version` | Prints the version |
+
+### Connect a client
+
+`<gateway>` is a gateway's slug (the endpoint is `<portal URL>/mcp/<slug>`) or its full `https://…/mcp/<slug>` URL. The output is byte for byte what the gateway's **Connect** card in the web app shows ([Connect your client](/docs/get-started/connect-your-client)):
+
+```sh
+$ omp connect support --client claude
+claude mcp add --transport http support https://mcp.example.com/mcp/support
+```
+
+It never writes a key into a snippet, and an automation token never works on `/mcp`.
+
+### Deploy a team's servers
+
+A team publisher token (scopes `servers:read` and `servers:write`) works on its own team's servers; `--team` names the team, which defaults to the token's. `<server>` is a server's slug or ID. A platform token can't use these commands (`403 token_not_allowed`).
+
+```sh
+export OMP_URL=https://mcp.example.com OMP_TOKEN=omppub_…
+omp servers register --slug status --name "Status" --url https://status.corp.example.com/mcp \
+  --auth static_header --auth-header X-API-Key --auth-value-env STATUS_API_KEY
+omp servers test status
+omp servers refresh status --fail-on-changes
+omp servers publish status --note "Deployed by CI"
+```
+
+- **`register`** creates the server and reads its capabilities at once. If discovery fails, the server is still created and the command exits `11`. Authentication is `--auth none` (default) or `static_header`, with the value read from the environment variable named by `--auth-value-env`, never from a flag. Other modes, credential lists, TLS settings, failover endpoints, quotas and governance need a browser session. Also `--description`, `--timeout-seconds` and `--disabled`.
+- **`test`** connects and lists capabilities without saving them; it exits `11` when the check fails.
+- **`refresh`** reads the capabilities again. A changed definition on a published server stays out of the catalog until someone approves it, so `--fail-on-changes` exits `10` to make a deploy that changed a tool fail loudly. A token can never approve.
+- **`publish`** requests publication: published at once under self-publish, pending review under approval required. `--expected-digest` refuses with `409 changed_since_review` if the server changed since you looked; `--note` is for the reviewer. **`unpublish`** withdraws it.
+- **`list`** takes `--search`. Deleting a server isn't possible with a token.
+
+## Declarative files
+
+`omp export` writes configuration as an `omp/v1` document (YAML; JSON is valid YAML), with a JSON Schema in the product repository at `api/omp-v1.schema.json`. `omp import -f FILE` applies one, and `omp import -f FILE --plan` prints what would change and **exits `10` when anything would** (`0` when the portal already matches), which makes a pull-request check.
+
+```yaml
+schema: omp/v1
+servers:                          # needs a team publisher token for that team
+  - team: support-tools
+    slug: status                  # the natural key: unique on the portal, immutable
+    name: Status
+    url: https://status.corp.example.com/mcp
+    authMode: static_header       # none or static_header
+    authHeaderName: X-API-Key
+    authValueEnv: STATUS_API_KEY  # the NAME of an environment variable, never the secret
+    publish: request              # none withdraws; absent leaves publication alone
+gateways:                         # platform gateways: needs a platform token
+  - slug: company-tools
+    name: Company tools
+    capabilities:                 # the whole selection; absent means "leave alone"
+      - { server: status, kind: tool, name: check_outage }
+    grants:                       # the whole list; absent means "leave alone"
+      - { team: support-tools }
+limits:                           # platform rate limits
+  person_per_minute: { default: 600, ceiling: null }
+```
+
+**What a file can hold:** servers (with a publisher token); and teams, team limit overrides, platform gateways with their settings, selection and grants, and platform rate limits (with a platform token). Not team gateways, members, service accounts, auth providers, approvals or anything that widens trust. A server that uses another authentication mode, credential parts, TLS, endpoints or quotas is skipped by export (with a warning) and refused by import.
+
+How import behaves:
+
+- **It never deletes.** Objects are matched by slug; missing ones are created, differing ones updated, and objects the file doesn't mention are left alone. An absent field means "leave it alone"; a list that is present is the whole list (`[]` means none).
+- **One token kind per file part.** A file with servers needs a publisher token; one with teams, gateways or limits needs a platform token. A file with both fails with exit `2`: split it, or choose a part with `--only servers|platform`. Export takes `--only` too, and `-o FILE` writes the file with mode `0600`.
+- **Secrets come only from the environment**, through `authValueEnv`, when a server is created, switched to `static_header` or its header name changes, or with `--replace-secrets`. They are never exported, printed or compared, so a changed variable is not drift. A missing variable fails the import before the first change.
+- **Some things can only be compared.** A tool's curation, a server's governance, a gateway's sensitivity ceiling and a grant's expiry need a browser session to change. Declared in the file, they are compared with the portal's; any difference, or a curated tool that isn't selected yet, is refused **before the first write**, with exit `2` and the code `refused` ("Nothing was changed."). Removing a curated tool from the selection deletes its curation, and the plan says so.
+- **Edits are conditional.** Every gateway write carries the revision the plan read; a concurrent change answers `412 revision_conflict`, and you run the command again.
+- **Replacing a permanent grant's scope isn't atomic**: there is no grant update, so `omp` removes the grant and creates the new one. If the creation fails, nothing restores the old grant; check the gateway's grants before retrying.
+- **`--refresh`** (apply only) refreshes every declared server afterwards, and with `--fail-on-changes` exits `10` when a refresh found changed capabilities.
+
+```sh
+omp export --only servers -o omp.yaml       # a publisher token: its team's servers
+omp import -f omp.yaml --plan               # exit 10 when the portal differs
+STATUS_API_KEY=… omp import -f omp.yaml --refresh --fail-on-changes
+```
+
+An export can contain on-call contacts and fixed curation values; review it before you commit it.
+
+## Output and exit codes
+
+Without `--json`, output is text. With `--json`, success is one JSON document on stdout. **Errors always go to stderr**: `omp: error: <code>: <message>`, or with `--json` an object `{"error": {"code", "message", "exitCode", "status", "details"}}`. `code` is the API's error code (`token_not_allowed`, `slug_taken`, `changed_since_review`, …) or the command line's own (`usage`, `config`, `network`, `test_failed`, `changes_found`, `refused`, …). A `403` names the missing scope.
+
+| Exit | Meaning |
+|---|---|
+| `0` | Success |
+| `1` | Unexpected internal error |
+| `2` | Usage: bad flags or arguments, a file that isn't valid `omp/v1`, a token that can't do what the file says, or a change `omp` refuses (`refused`) |
+| `3` | Configuration: no URL or token, a non-loopback `http://` URL, an unsafe config file, a token of the wrong shape |
+| `4` | Authentication: `401` (the token is unknown, expired or revoked) |
+| `5` | Forbidden: `403` (`token_not_allowed`, `session_required`) |
+| `6` | Not found: `404` |
+| `7` | Conflict: `409`, `412`, `428` (`slug_taken`, `already_published`, `revision_conflict`, …) |
+| `8` | Rejected: `400`, `422` and other `4xx` (`url_not_allowed`, `auth_value_required`, …) |
+| `9` | Unavailable: `5xx`, `429`, or the portal couldn't be reached (including an untrusted certificate) |
+| `10` | Changes found: `import --plan` found drift, or `--fail-on-changes` saw changed capabilities |
+| `11` | A check failed: `servers test` failed, or discovery failed in `register` or `refresh` |
+
+The numbers don't change within a release line.
+
+## The Go client
+
+`omp` is built on `pkg/ompclient` in the product repository, a public Go client generated from the OpenAPI document. It covers only the operations an automation token can call. It is versioned `v0`: it follows the API, which may still change before 1.0. In CI, the [GitHub Action](/docs/api/github-action) wraps `omp` for one server.

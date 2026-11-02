@@ -1,0 +1,42 @@
+---
+title: "Browser sessions"
+description: "See where you're signed in to Open MCP Portal, sign out a lost device, or sign out everywhere."
+---
+
+Every browser where you signed in to Open MCP Portal has a **session**. Account › **Sessions** (`/settings/sessions`, in the menu under your name) lists them, so you can sign out a lost device or end every browser sign-in.
+
+<Screenshot slot="sessions" />
+
+## The list
+
+| Column | Shows |
+|---|---|
+| **Browser** | The browser and system, such as "Chrome on macOS", with **This session** on the one you're using, and the address it signed in from (or "Address unavailable") |
+| **Signed in** | When you signed in |
+| **Last active** | When the session was last used, recorded at most once a minute |
+| **Expires** | The session's absolute limit. Inactivity may end it sooner |
+
+Browser and system names are what the browser reports about itself: a convenience, not proof of a device.
+
+## Sign out one session
+
+Choose **Sign out…** on a row and confirm. That session's next request is refused, and anything it was in the middle of connecting (a [connect link](/docs/use/connecting-accounts) you opened in it) is cancelled. Signing out the session you're using takes you back to the sign-in page.
+
+## Sign out everywhere
+
+**Sign out everywhere** ends every browser sign-in and cancels their unfinished connect flows. Tick **Keep this session signed in** to stay signed in where you are.
+
+It doesn't touch anything outside the browser: [connected apps](/docs/use/connected-apps), [API keys](/docs/use/api-keys) and [your connections](/docs/use/connecting-accounts) keep working. Disconnect or revoke those on their own pages if a device with them was lost.
+
+## How long a session lasts
+
+- A session lasts at most `SESSION_TTL` from sign-in (12 hours unless your installation changed it).
+- If your installation sets `SESSION_IDLE_TIMEOUT` (off by default; 5 minutes up to `SESSION_TTL`), a session that isn't used for that long ends early.
+- **Sign out** in the account menu ends the session you're using.
+- Suspension ends all of your sessions for good: if you're reactivated, you sign in again; old sessions don't come back.
+
+## Who else can see them
+
+Platform admins see a person's sessions on their page in **Admin › Users** and can end them all with **Revoke all sessions**. Auditors can't, and neither can any key or token: sessions can be listed and ended only from a signed-in browser. Signing out a session is recorded in the audit log.
+
+If you were signed out and don't know why, see [Troubleshooting](/docs/use/troubleshooting).

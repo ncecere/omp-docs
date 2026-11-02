@@ -1,0 +1,78 @@
+---
+title: "Shared connections for service accounts"
+description: "Give a team's service accounts a shared GitHub, Google or other OAuth account in Open MCP Portal, so they can use tools that need an account: connect it, assign service accounts and allow destination servers."
+---
+
+Some tools need an account on another service: a [user authorization requirement](/docs/teams/user-authorization) (GitHub, Google…) or a server's own [OAuth sign-in](/docs/teams/register-a-server#sign-in-with-oauth-per-person). People use their own connected accounts. A [service account](/docs/teams/service-accounts) has none, so Open MCP Portal lets a team connect a **shared account** for its service accounts: a **service connection**.
+
+A service connection is the team's, not a person's. It is used only by the service accounts it is **assigned** to, and only at the servers it is **allowed** for. People never use it, and a service account never uses anyone's personal connection.
+
+<Screenshot slot="service-connections" />
+
+## Where it is
+
+Team › **Service accounts** › **Connections** lists the team's shared connections; each service account's page has a **Connections** tab with the same list, showing whether each is assigned to that account. Every member can read them. Only the team's **owners and admins** connect accounts or change access, in a browser session; automation tokens can't.
+
+<Callout type="warn" title="Calls act as the shared account">
+Only explicitly assigned service accounts and allowed servers can use these connections. Calls act as the shared upstream account, which may be an administrator's own account. Prefer a dedicated account at the provider, and name it so everyone can tell it's shared. The connecting person must remain an active owner or admin of this team.
+</Callout>
+
+## Connect a shared account
+
+In the **Connect a shared account** card:
+
+1. **Connection name**: up to 100 characters, such as "Service desk mailbox".
+2. **Auth provider or OAuth server**: a platform [auth provider](/docs/administer/auth-providers) your team may use, or the sign-in of a server in OAuth mode, marked **(server sign-in)**.
+3. **Scopes**: space-separated, in the provider's own names. Leave it empty for the provider's defaults.
+4. **Connect shared account** takes you to the provider. Sign in with the account to share and allow it.
+
+Back in the portal, the result page says "Team-shared connection to &lt;provider&gt; connected". The connection can't be used yet: assign it first.
+
+## Manage access
+
+**Manage access to &lt;name&gt;** opens **Access to &lt;name&gt;**:
+
+- **Allowed service accounts**: tick the service accounts that may use it. A service account has at most one connection per provider, so assigning one that already uses another connection for the provider is refused.
+- **Allowed destination servers**: tick the servers whose tools may receive it. Each shows its exact origin (scheme, host and port) and the scopes its tools need. Only that origin and those scopes are granted. A server another team published needs this allowance too. **Reconnect required** means the connection lacks some of those scopes: save, then reconnect.
+
+**Save access** replaces both lists at once and cancels any consent still pending. A team can have at most 200 connections, and each list at most 500 entries.
+
+## Statuses
+
+| Status | Means | What to do |
+|---|---|---|
+| **active** | Usable by its assigned service accounts at its allowed servers | Nothing |
+| **needs reconsent** | Not connected yet, or the provider refused its token (revoked, expired) | **Reconnect &lt;name&gt;** |
+| **lapsed** | The person who connected it is no longer an active owner or admin of the team (left, demoted, suspended or deleted) | Reconnect as a current owner or admin, or revoke it |
+
+When a shared connection needs reconnecting, the team's owners and admins get `connection.needs_reconsent`, with a link to this tab.
+
+**Reconnect &lt;name&gt;** signs in at the provider again, for example after adding a destination that needs more scopes. **Revoke &lt;name&gt;** "erases its tokens, assignments, destination grants and pending consent. No service account can use it afterwards." The portal also revokes the tokens at the provider where it can, after the local deletion (best effort).
+
+## What a service account's call needs
+
+A call from a service account to a tool that needs an account goes through only when all of these hold; otherwise it's refused with JSON-RPC `-32010` and never reaches the server:
+
+| `data.reason` | Means |
+|---|---|
+| `service_connection_missing` | No connection for that provider is assigned to the service account |
+| `service_connection_not_allowed` | The connection isn't allowed for this server, its origin or its scopes |
+| `service_connection_needs_reconsent` | The connection needs reconnecting |
+| `service_connection_lapsed` | The person who connected it is no longer an eligible owner or admin |
+
+The message is "&lt;tool&gt; requires an allowed, active shared &lt;Provider&gt; connection. Ask your team's owner or admin to review Service accounts > Connections." It carries no link: a service account can't open one.
+
+Team views mark such capabilities "Service accounts need an active team service connection assigned to them and explicitly allowed for this server and its scopes."
+
+## What changes the access
+
+- A server that moves to another **origin** loses its allowance; a change to its path keeps it.
+- The provider's [access list](/docs/administer/auth-providers#who-may-use-a-provider) applies to the **destination server's** team, not the connection's.
+- Servers that want [each person's own key](/docs/use/keys-for-servers) can't be shared: their calls from service accounts are refused with `-32010` (`service_account`).
+- A server in [the portal's own OAuth client](/docs/teams/register-a-server#the-portals-own-oauth-client) mode needs no connection: its credential is the server's.
+
+## What the server receives
+
+For a provider requirement, `MCP-Gateway-Provider-Token` carries the shared account's token, and the identity token says `principal_type: service_account`, with the `provider` claim and no email. For a server in OAuth mode, `Authorization: Bearer` carries the shared account's token for that server. A `401` from the server is retried once with the same connection; a `403` asking for more scopes is refused, with no automatic sign-in. See [Provider tokens](/docs/server-authors/provider-tokens) and [OAuth-protected servers](/docs/server-authors/oauth-servers#service-accounts).
+
+Connecting, assigning, allowing, reconnecting and revoking are in the team's [audit log](/docs/teams/team-settings#audit-log), never with a token.

@@ -1,6 +1,6 @@
 ---
 title: Concepts
-description: MCP servers and capabilities, teams and roles, the catalog, gateways, callers and their credentials, connections, and the records Open MCP Portal keeps.
+description: MCP servers and capabilities, tool classes, teams and roles, the catalog, gateways, callers and their credentials, tool scopes, approvals, connections, and the records Open MCP Portal keeps.
 ---
 
 Open MCP Portal sits between MCP clients (Claude Code, VS Code, Cursor, your own agents) and the MCP servers your teams run. This page explains the words the rest of the docs use.
@@ -21,6 +21,8 @@ An **MCP server** is a remote server a team runs and registers in the portal: a 
 
 When a server is registered or refreshed, the portal reads what it offers. Each item is a **capability** of one of four kinds: **tool**, **prompt**, **resource** or **resource template**. The portal stores each capability's definition and a fingerprint of it, so it notices when a definition changes. See [Capabilities and change detection](/docs/teams/capabilities).
 
+The server's team owners and admins can give each tool a **class**: **read** (only observes), **write** (changes data) or **destructive** (deletes data or has irreversible effects). A tool without one is **unclassified**, which is never treated as read. The hints a server declares about its own tools only suggest a class; the owner's class is what tool scopes, approval rules and automatic retries rely on.
+
 A server authenticates the portal in one of five ways (its **auth mode**):
 
 - **None**: no credential of its own; calls carry the portal's signed identity token, unless the team turns that off (it starts off for a public server, on for an internal one).
@@ -30,6 +32,11 @@ A server authenticates the portal in one of five ways (its **auth mode**):
 - **Sign-in with OAuth, per person**: the server is an OAuth resource server itself, such as GitHub's hosted MCP server. Each person signs in to it once, and their own token goes with each of their calls.
 
 In any mode a server can also have a private CA and a client certificate (mTLS). See [Register a server](/docs/teams/register-a-server#authentication-modes).
+
+### Governance
+
+Every server has an accountable **owner** (at first the person who registered it), an optional on-call contact, a **sensitivity** label (**public**, **internal**, **confidential** or **restricted**; it starts as internal and unconfirmed) and a **lifecycle**: **active**, **deprecated** (still served, with a date it stops) or **sunset** (served nowhere). See [Server governance](/docs/teams/server-governance).
+
 ## The catalog
 
 The **catalog** lists the servers teams have published, with the capabilities that were approved. Anyone signed in can browse it. Publishing follows a platform **publishing policy**: under **Approval required** (the default) a platform admin reviews each server and each changed capability; under **Self-publish** a team's owners and admins publish directly. A platform admin can set a different policy for one team. See [Publishing and review](/docs/teams/publishing).
@@ -38,13 +45,15 @@ The **catalog** lists the servers teams have published, with the capabilities th
 
 A **gateway** is a curated set of capabilities served at one endpoint, `<portal URL>/mcp/{slug}`. MCP clients connect to a gateway, not to servers. A gateway can mix capabilities of several servers. Clients see:
 
-- tools and prompts as `{server-slug}__{name}`, for example `status__check_outage`;
+- tools and prompts as `{server-slug}__{name}`, for example `status__check_outage`, unless the gateway gave a tool another name;
 - resources and resource templates as `omp://{server-slug}/{uri}`, for example `omp://status/status://services`.
 
 There are two kinds:
 
 - **Team gateways** belong to a team. The team's owners and admins build them from the team's own servers (published or not) and from approved capabilities of catalog servers. Every member of the team can use them; a capability can require a **minimum team role** (editor, admin or owner).
 - **Platform gateways** belong to the platform. Platform admins build them from approved catalog capabilities and **grant** them to teams, people or SSO groups.
+
+A gateway's owners can **curate** a tool for that gateway: rename it, rewrite its description, and fix or limit the values of its arguments ([Curating gateway tools](/docs/teams/curating-gateway-tools)). A gateway also has a **sensitivity ceiling**: it never serves a server labelled above it. Platform gateways can accept **access requests**: people ask for access, and a platform admin or a named steward decides ([Requesting gateway access](/docs/use/access-requests)).
 
 See [Building gateways](/docs/teams/gateways) and [Platform gateways](/docs/administer/platform-gateways).
 
@@ -60,7 +69,13 @@ Every request to a gateway comes from a **person** or a **service account**, wit
 
 A **service account** is a team-owned identity with a team role of member or editor. It can use the team's own gateways and platform gateways granted to its team. See [Service accounts](/docs/teams/service-accounts).
 
-Whatever the credential, every request is checked again: the credential is valid, the person is active, the gateway is on, the caller may use it, the capability is still selected and available, the caller's role is high enough, and the rate limits allow it. Something the caller may not use looks the same as something that doesn't exist.
+Platform gateway grants can **expire**. Keys, service accounts, OAuth connections and grants can each carry a **tool scope**: a limit to some tool classes or exact tool names. A scope only ever narrows access; it never adds any, and prompts and resources aren't affected. See [Tool scopes](/docs/use/tool-scopes).
+
+Whatever the credential, every request is checked again: the credential is valid, the person is active, the gateway is on, the caller may use it, the capability is still selected and available, the caller's role is high enough, the tool is inside every tool scope that applies, the server's sensitivity is within the gateway's ceiling and it isn't sunset, the gateway's tool policy is still valid, and the rate limits allow it. Something the caller may not use looks the same as something that doesn't exist.
+
+## Approvals
+
+A server's or gateway's team (or platform admins, for platform gateways) can require a person's **approval** for some calls, for example every destructive tool on a server. Such a call isn't forwarded: the caller gets a link, an eligible reviewer approves or denies **that exact call** (the same tool and the same arguments), and the caller then retries it. A request waits 24 hours by default; an approval is valid for one attempt within 15 minutes by default. An approval never grants access to a tool. See [Approving sensitive tool calls](/docs/use/approvals).
 
 ## What a server receives
 
@@ -70,17 +85,19 @@ The portal never forwards the caller's own credential. Instead, each forwarded c
 
 Some tools need to act **as the person** on another service: create a GitHub issue as them, read their Google Drive. A platform admin configures that service as an **auth provider**; the server's team sets a **user authorization** requirement (a provider and scopes). The first call asks the person to connect their account in the browser and to **allow that server** (each person allows each server once, on a page that names the server and its team); after that, the portal sends their token to that server with each call that needs it and refreshes it. The resulting **connection** is listed under **My connections**. Servers in OAuth mode use the same connections, bound to that one server. See [Connecting accounts](/docs/use/connecting-accounts).
 
+Service accounts never use a person's connections. A team's owners and admins can instead connect a **shared** account for the team, assign it to service accounts and allow it for specific servers ([Service connections](/docs/teams/service-connections)).
+
 ## Roles
 
 Platform roles and team roles are separate. Signing in creates an account with no platform role and no team.
 
 | Role | Can |
 |---|---|
-| Platform admin | Everything administrative: users, teams, catalog review, platform gateways, internal networks, trusted clients, auth providers, limits, retention, capture settings |
-| Platform auditor | Read every admin page, the audit log and call records; change nothing |
-| Team owner | Everything a team admin can, plus add, change and remove owners |
-| Team admin | Members, publishing, team gateways, service accounts, call records, recording call contents |
-| Team editor | Register, edit, test and refresh the team's servers and set their user authorization |
+| Platform admin | Everything administrative: users, teams, provisioning, catalog review and re-review intervals, platform gateways with their access requests and stewards, platform approval rules, internal networks, trusted clients, auth providers, limits, retention, capture settings |
+| Platform auditor | Read every admin page, the audit log and call records; change nothing. Sees approval requests' metadata, never their argument previews |
+| Team owner | Everything a team admin can, plus add, change and remove owners, and accept a server another team offers |
+| Team admin | Members, publishing, team gateways and their curation and sensitivity ceilings, service accounts and their shared connections, approval rules, tool classes, server governance and transfers, server limits and additional endpoints, call records, recording call contents |
+| Team editor | Register, edit, test and refresh the team's servers and set their user authorization (not their classes, governance, limits or endpoints) |
 | Team member | Use the team's gateways; read its servers, gateways and service accounts |
 
 Platform roles don't give access to a team's gateways: a platform admin uses a team gateway only as a member of the team, and a platform gateway only when granted. Platform staff read a team's recorded call contents only through the admin pages, and every view is in the audit log.
@@ -91,5 +108,7 @@ Platform roles don't give access to a team's gateways: a platform admin uses a t
 - **Recorded call contents**: off by default. When a gateway's or server's team turns it on, arguments and results are kept too, with secret-looking values redacted, for a limited time. See [Recording call contents](/docs/teams/payload-capture).
 - **Usage**: hourly rollups of calls for dashboards.
 - **Audit log**: every administrative change and sign-in.
+- **Approval receipts**: each approval request's metadata, kept 90 days. Its redacted argument preview disappears once the request is denied, cancelled, expired or used, and is erased within 24 hours.
+- **Browser sessions**: where each person is signed in, under Account › [Sessions](/docs/use/sessions).
 
-How long each is kept is set in [Retention](/docs/administer/retention).
+How long call records, recorded contents, usage and the audit log are kept is set in [Retention](/docs/administer/retention).

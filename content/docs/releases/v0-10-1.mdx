@@ -1,0 +1,49 @@
+---
+title: v0.10.1
+description: "Open MCP Portal v0.10.1 (2026-10-30): fixes a deadlock between accepting a team invite at sign-in and revoking it. No migrations."
+---
+
+**Released 2026-10-30.** [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.10.1) · image `ghcr.io/ncecere/open-mcp-portal:v0.10.1` · no migrations (the schema stays at `00050`).
+
+A patch for [v0.10.0](/docs/releases/v0-10-0). **No API, setting or schema change.** Upgrading from v0.10.0 is an image swap.
+
+## What changed
+
+- **Invite acceptance can't deadlock with revocation.** When a person signed in with open team invites while someone revoked one of those invites, the two database transactions could wait on each other and one failed. Sign-in now locks the invited teams in a fixed order before it reads and accepts their invites, the same order revocation uses. After waiting it checks again that each invite is still open, unexpired and for the same role. Existing memberships keep their roles. See [Users and teams](/docs/administer/users-and-teams).
+
+## Upgrading
+
+1. Pin the new image (verify its signature first, see [The image](#the-image)). No migration runs.
+2. Drain older replicas to get the fix on every sign-in: an older replica keeps the old lock order. It doesn't change memberships granted before.
+
+[Upgrading from v0.10.0](/docs/operate/migrations-and-upgrades#upgrading-from-v0100) has the same points with the details.
+
+## Verification
+
+The release, its image and the six command-line binaries were tested and independently verified; the [GitHub release](https://github.com/ncecere/open-mcp-portal/releases/tag/v0.10.1) and the [release notes](https://github.com/ncecere/open-mcp-portal/blob/v0.10.1/docs/releases/v0.10.1.md) record how.
+
+## Known limitations
+
+The same as [v0.10.0](/docs/releases/v0-10-0#known-limitations). An invite sent for a new team while a person is signing in waits for their next sign-in.
+
+## The image
+
+`ghcr.io/ncecere/open-mcp-portal:v0.10.1` is signed with cosign keyless signing by the repository's `image.yml` workflow. Its digest is:
+
+```text
+sha256:d330d4ce750d10d6a3fe67de7fd5393fc3e907e5b9b148f0eb2c1961cb0fb362
+```
+
+Check the signature with **cosign v3.0 or newer**, then pin the image by that digest:
+
+```sh
+cosign verify ghcr.io/ncecere/open-mcp-portal@sha256:d330d4ce750d10d6a3fe67de7fd5393fc3e907e5b9b148f0eb2c1961cb0fb362 \
+  --certificate-identity https://github.com/ncecere/open-mcp-portal/.github/workflows/image.yml@refs/tags/v0.10.1 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+The `omp` binaries are signed by the same workflow; [The omp command line](/docs/api/cli) shows how to check one with `cosign verify-blob`. See [Install with Docker Compose](/docs/operate/compose) and [Install on Kubernetes](/docs/operate/kubernetes).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/open-mcp-portal/issues](https://github.com/ncecere/open-mcp-portal/issues) (there is a form for each kind) or ask in [Discussions](https://github.com/ncecere/open-mcp-portal/discussions). Report security problems privately, as [`SECURITY.md`](https://github.com/ncecere/open-mcp-portal/blob/v0.10.1/SECURITY.md) describes.

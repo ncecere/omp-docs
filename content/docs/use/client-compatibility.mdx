@@ -22,6 +22,9 @@ Open MCP Portal's gateways speak the MCP revisions 2024-11-05 through 2025-11-25
 - A client that **declares URL elicitation** from a real product (only the Go SDK client has been used for the `input_required` consent result).
 - **Reconnecting after the access token expires** (one hour; the refresh token lasts 30 days from its last use and at most 180 days from the last sign-in): the portal's side is tested, no real client has been watched doing it.
 - **The one-time notice** that a trusted client such as Claude Code shows the first time it signs in from a computer (v0.2.2): covered by an integration test of the whole flow, not yet run with the real Claude Code client.
+- **Tool scopes over OAuth** (`omp:read`, `omp:write`, `omp:destructive`): no real client has been run asking for them.
+- **Approval answers**: the `-32042` link, the `input_required` result and the tool error a call that [needs approval](/docs/use/approvals) returns have not been shown by a real client.
+- **The Tasks extension**: relaying task handles between a real client and a real server has not been exercised.
 
 If you try one of these, a report is welcome: see [Report a result](#report-a-result).
 
@@ -37,7 +40,7 @@ You need a gateway you can use (any team gateway of a team you're on will do) an
    3. **It calls a tool** and shows the result.
    4. **A tool that needs your account** shows you a link (or a clear message with the link) when you haven't connected it. Open it, approve, and run the tool again ([Connecting accounts](/docs/use/connecting-accounts)).
    5. **It keeps working after an hour**, without asking you to sign in again, which exercises the refresh token.
-4. If your administrator lets you see calls, **Team › Calls** shows each call with the client name the portal recorded; it confirms the call reached the portal.
+4. If you are an owner or admin of the gateway's team, the gateway's **Activity** tab shows each call with the client name the portal recorded; it confirms the call reached the portal. Otherwise, ask them.
 
 ## Behaviour worth knowing
 

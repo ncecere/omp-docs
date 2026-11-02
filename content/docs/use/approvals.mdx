@@ -1,0 +1,112 @@
+---
+title: "Approving sensitive tool calls"
+description: "What happens when an Open MCP Portal tool call needs a person's approval, how to follow your requests, and how to review one as an approver."
+---
+
+A team can require a person's approval for some tool calls in Open MCP Portal, for example every destructive tool on a server, or one particular tool on a gateway. Such a call isn't sent to the server. Instead, the caller gets a link to an **approval request**, an eligible reviewer approves or denies **that exact call**, and the caller then sends the identical call again.
+
+An approval never grants access to a tool: the caller must still be allowed to use it, within every [tool scope](/docs/use/tool-scopes) that applies. The rules themselves are set by the team's owners and admins under Team › [Approval rules](/docs/teams/approval-rules), and for platform gateways by platform admins.
+
+## When your call needs approval
+
+The call answers with a link to `<portal URL>/approvals/<id>` and the message "&lt;tool&gt; needs human approval. Open &lt;link&gt; to review this exact call, then retry." What your client shows depends on its MCP version, the same way as a [consent link](/docs/use/connecting-accounts#the-first-call-a-link-instead-of-a-result):
+
+- most clients get JSON-RPC error `-32042` with the link;
+- a 2026-07-28 client that supports URL elicitation gets an `input_required` result with the link;
+- any other 2026-07-28 client gets a tool error with the link in its text.
+
+Nothing reached the server, and the call is recorded with the outcome **Needs approval**. Then:
+
+1. Open the link, or send it to someone who can review the call. You can't approve your own request.
+2. Once it's approved, **send the identical call again**: the same tool through the same gateway, with the same arguments. A call with different arguments is a different request.
+3. The approval covers **one attempt**. A second call, even an identical one, asks for a new approval.
+
+Sending the identical call again while the request is still pending returns the same link; it doesn't create a second request or notify anyone again.
+
+| What you get on the retry | Means |
+|---|---|
+| The tool's result | The approval was valid and has now been used |
+| The same approval link | The request is still pending |
+| A tool error "Approval was denied. Open … ; only an explicit renewal can request another review." | A reviewer denied it. Retrying never asks again: open the request and choose **Request new attempt** |
+| A tool error "Approval was spent, but the upstream result is not confirmed. Repeating this call may duplicate effects." | The attempt was used, but the portal can't tell whether the server acted (for example, the answer was lost). Check the destination before asking for another attempt |
+| A new link | The earlier request expired, or its approval was already used |
+| `-32010` with `approval_unavailable` | The approval check couldn't run, or the caller already has 20 requests pending. Retry later |
+
+## The Approvals page
+
+**Approvals** in the sidebar's Workspace section (`/approvals`) has two tabs:
+
+- **Actionable**: requests you can decide now. Eligibility is checked again when you decide.
+- **Requested**: requests made by you, or by service accounts whose team you own or administer.
+
+Each request shows the tool's name as the gateway exposes it, its status (pending, approved, denied, expired, cancelled, or **Authorization spent** once used, with **Stale** when it can no longer be approved), the tool's class (or **Unclassified**), when it expires and who asked. The queue never shows arguments: open a request to see its receipt.
+
+<Screenshot slot="approvals-queue" />
+
+<Screenshot slot="approvals-requester" />
+
+## Reviewing a request
+
+A request's page starts with the **Call receipt**: everything the approval is bound to.
+
+| Field | Shows |
+|---|---|
+| **Status** | pending, approved, denied, expired, cancelled, or **Authorization spent (used)** |
+| **Requester**, **Requester team** | The person or service account that made the call, and the service account's team |
+| **Tool**, **Actual class** | The exposed tool name and its class when the call was made. An unclassified tool matches destructive rules for approval only |
+| **Gateway**, **Server**, **Server origin** | Where the call would go |
+| **Rule** | The rule that required approval, and its revision |
+| **Argument digest**, **Capability fingerprint** | Fingerprints of the exact arguments and of the tool's approved definition |
+| **Requested**, **Pending expiry**, **Approved until** | When it was asked, when an undecided request lapses, and how long an approval stays valid |
+| **Decision**, **Spent at**, **Terminal at** | Who decided and when, when the approval was used, and when the request reached a final state |
+
+<Screenshot slot="approval-receipt" />
+
+Below it, the **Redacted argument preview** shows the call's arguments as escaped text, with credential and sensitive values redacted, and a notice when the preview is truncated. It isn't the full call: the argument digest binds the exact arguments that will be sent.
+
+Under **Actions**, an eligible reviewer chooses **Approve exact call** or **Deny**. The buttons are disabled once the displayed deadline has passed or the review is stale.
+
+<Screenshot slot="approval-review" />
+
+- **This review is stale**: the policy, someone's access or the call's binding changed since the request was made. It can no longer authorize a call; reload and review again.
+- **The displayed deadline has passed**: reload to see the current status. No decision can extend a deadline.
+- **Changed since review** or **Reload before another action**: someone else acted, or your action finished. Choose **Reload receipt** and review again; nothing is resubmitted for you.
+
+## Following your own requests
+
+On a request you made, or one made by a service account whose team you own or administer, you can:
+
+- **Cancel request**: withdraw a pending request, or an approval you no longer want used.
+- **Request new attempt**: after the request was denied, expired, cancelled or used, create a new request for the same call. It is a new review, not a replay of the old approval. It's offered on the latest request for that call, until its preview is erased (at most 24 hours after it ended).
+- **Reload receipt**: fetch the current state.
+
+**Authorization spent — execution is not confirmed** means the approval was used to send the call, but the result may be unknown, for example after a lost response. Retrying may repeat the effect, so check the destination before you request another attempt.
+
+## Who can review
+
+- The reviewers a rule names, by person or by SSO group; if it names none, the **owners and admins of the server's team**.
+- If no named or default reviewer is eligible, a platform admin who didn't make the request can review. If nobody is eligible, the call is refused rather than approved.
+- **Nobody reviews their own call.** For a service account's call, the owners and admins of its team can't review it either, unless the rule explicitly allows it.
+- A gateway's owners have no approval authority of their own.
+- Platform admins and auditors can see a request's metadata, never its preview, unless they are eligible reviewers themselves.
+
+Reviewing works only in the browser: no key, token or service account can approve, deny or cancel a request.
+
+## Deadlines and limits
+
+| | Default | Range |
+|---|---|---|
+| A pending request lapses after | 24 hours | 5 minutes to 24 hours, set per rule |
+| An approval is valid for | 15 minutes | 1 to 60 minutes, set per rule, and never past the pending request's expiry |
+| Pending requests per caller | at most 20 | |
+
+Changing or deleting a rule, or a change to someone's access, ends the approvals it covered: the caller needs a new approval. A call already sent isn't recalled.
+
+## Notifications and privacy
+
+- Eligible reviewers get **A tool call is waiting for approval** (`approval.requested`); the requester, or the requesting service account's team owners and admins, get **A tool-call approval was decided** (`approval.decided`). Choose how under [Notification preferences](/docs/use/notification-preferences). These events never go to webhooks.
+- A request you can review also appears on your team's Overview as "&lt;tool&gt; needs your approval", with **Review exact call**.
+- Notifications and the audit log name the request, never its arguments or preview.
+- The preview disappears as soon as a request is denied, cancelled, expired or used, and is erased within 24 hours. The receipt's metadata is kept for 90 days.
+
+If a call keeps asking for approval when you didn't expect it, see [Troubleshooting](/docs/use/troubleshooting).

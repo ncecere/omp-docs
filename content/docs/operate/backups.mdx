@@ -7,15 +7,17 @@ PostgreSQL is Open MCP Portal's only state: teams, servers and their capabilitie
 
 Keep these **separately** from the backups, somewhere safe:
 
-- `ENCRYPTION_KEY` (and any `ENCRYPTION_KEY_PREVIOUS`): without it, a restored database's MCP server header values, signing keys, client secrets, provider tokens and recorded contents can't be decrypted.
-- `API_KEY_PEPPER`: without it, every API key and service account key stops working, and every connected app signs in again.
+- `ENCRYPTION_KEY` (and any `ENCRYPTION_KEY_PREVIOUS`): without it, a restored database's MCP server credentials (including additional endpoints' and TLS client keys), people's own keys for servers, signing keys, client secrets, people's provider tokens and shared service connections' tokens, recorded contents, task state, approval previews and the approval binding key can't be decrypted.
+- `API_KEY_PEPPER`: without it, every API key, service account key, automation token and provisioning token stops working, and every connected app signs in again.
 
 Keep the deployment's configuration (environment, `UPSTREAM_ALLOWED_NETWORKS`, the OIDC client) in version control or your secrets store too.
 
 ## Restoring
 
-1. Restore the database to a PostgreSQL 17 server.
+1. Restore the database to a PostgreSQL 17 server. With [separate database logins](/docs/operate/database-roles), restore into a database owned by the migration owner, then run `migrate` so the runtime login's grants are reconciled.
 2. Start the image of the release the backup came from, or a newer one (migrations only go forward), with the same `ENCRYPTION_KEY` and `API_KEY_PEPPER`.
 3. Run `open-mcp-portal doctor`: `keys encryption` reports any values that can't be decrypted.
 
 What a restore loses: rate-limit counters (they're unlogged and short-lived anyway), and anything written after the backup. Signing keys rotate on their own; MCP servers fetch the JWKS again for an unknown key.
+
+**A restore brings back keys and grants as they were at the backup.** A key, token, session or grant revoked after the backup works again until it is revoked again. After a restore, revoke those again, or rotate `API_KEY_PEPPER` ([Secrets and key rotation](/docs/operate/secrets-and-key-rotation#rotating-api_key_pepper)). The same goes for retirement: restoring a backup from before v0.4.0 restores the agent-platform trust that v0.4.0 removed. The Kubernetes smoke test's `restore` scenario rehearses a `pg_dump` and `pg_restore` round trip ([Smoke test](/docs/operate/kubernetes#smoke-test)).

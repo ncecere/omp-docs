@@ -1,0 +1,59 @@
+---
+title: "Tool scopes"
+description: "Limit an Open MCP Portal API key, connected app, service account or gateway grant to some tool classes or exact tools. A tool scope only ever narrows access."
+---
+
+A **tool scope** limits which tools a credential may call in Open MCP Portal: only read tools, for example, or a few tools by name. It is a ceiling, never a grant: a key with a tool scope can call fewer tools than its owner, never more. Prompts and resources are never affected.
+
+## Where you set one
+
+| Where | Control |
+|---|---|
+| Your [API keys](/docs/use/api-keys) | Account › **API keys** › **Create API key** › **Tool scope** |
+| An app you connect with OAuth | **Requested tool scope** on the consent page ([Connect your AI client](/docs/get-started/connect-your-client#what-happens-when-you-sign-in)) |
+| A service account | **Account tool ceiling** when you create it and in its Settings ([Service accounts](/docs/teams/service-accounts)) |
+| A service account's keys | **Tool scope** in its **Create key** dialog |
+| A platform gateway grant | **Tool scope** when a platform admin adds the grant ([Platform gateways](/docs/administer/platform-gateways)) |
+
+A scope is fixed when the key or grant is created. A service account's ceiling can be changed at any time and applies to all of its keys from their next request.
+
+## The choices
+
+- **Everything**: no restriction at this layer, including unclassified tools. It's the default, and it means no extra limit, not extra access.
+- **Read only**: only tools classified as read; not write, destructive or unclassified tools.
+- **Custom**: tick any of **Read**, **Write** and **Destructive**, and add **Exact tool names** one at a time with **Add tool name**. A tool passes if its class is ticked **or** its exact name is listed.
+
+A tool's class is the one its server's team set: read, write or destructive ([Capabilities](/docs/teams/capabilities)). Classes are independent, not a hierarchy: **Write** doesn't include read tools. Even all three classes exclude **unclassified** tools; only **Everything** or an exact name reaches those. A **Custom** scope with nothing ticked and no names allows **No tools** (prompts and resources still work).
+
+Lists show a scope as badges: **Everything**, **No tools**, or its classes and names followed by "Unclassified tools: exact names only" or "Unclassified tools: excluded".
+
+## Exact tool names
+
+- A name is the tool's name **as the gateway exposes it**, such as `status__check_outage`, matched exactly, including case. If a gateway renames a tool, list the new name: the old one no longer matches.
+- Names may refer to tools that don't exist yet, and need no server prefix.
+- Up to 500 names, each 1 to 1,100 bytes. No control characters and no wildcards (`*`, `?`, `[`, `]`, `{`, `}` or a backslash); commas and spaces are part of a name, not separators.
+
+## How layers combine
+
+Several scopes can apply to one call, and the tool must pass **every** layer that applies:
+
+- a personal API key's scope, or a connected app's;
+- a service account's **Account tool ceiling** and its key's scope (a key set to **Everything** still gets the account's ceiling);
+- the scope of the platform gateway grant that gives access. When several grants give you access (to you, your team, your SSO group), any one of them that allows the tool is enough.
+
+The usual checks still apply too: your access to the gateway, the tool's minimum team role, and any [approval rule](/docs/use/approvals).
+
+## What a caller sees
+
+A tool outside the scope isn't listed in `tools/list`, and calling it answers `Unknown tool` (`-32602`), the same as a tool that doesn't exist. Call records show such a call as denied, **Outside tool scope**. My gateways shows your own access, without any key's scope, so a scoped key sees fewer tools than the page lists.
+
+## OAuth scopes
+
+An MCP client can ask for a tool scope when it signs you in, with the OAuth `scope` values `omp:read`, `omp:write` and `omp:destructive`. Without `scope`, it asks for no restriction.
+
+- On the consent page you may untick classes the app asked for, but never add classes or exact names.
+- An app you already allowed, or a trusted app, shows the consent page again if it asks for more than you allowed.
+- Changing an app's scope replaces its connection: the old tokens stop working.
+- A restricted token response includes the granted `scope`; an empty string means no tools.
+
+Connected apps list each app's **Tool scope** ([Connected apps](/docs/use/connected-apps)).

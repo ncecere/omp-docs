@@ -16,9 +16,11 @@ Every call of a capability that requires the provider carries:
 
 and the [identity token](/docs/server-authors/identity-token) gains `"provider": "github"`.
 
-Calls without a requirement (or with the override **No account**) never get these headers or the claim, and neither do discovery, tests or health checks. Service accounts can't call such capabilities: the portal refuses them before they reach you. The client and the model never see the token.
+Calls without a requirement (or with the override **No account**) never get these headers or the claim, and neither do discovery, tests or health checks. The client and the model never see the token.
 
-The token is sent only to your server's registered URL, only for capabilities whose requirement names that provider, and **only if the person allowed your server** to use their account. Each person allows each server once, on a consent page that names your server and your team, and the permission is for the address (scheme, host and port) your server had then: if you move it to another host or port, or change the provider it requires, everyone is asked again and nothing is sent in the meantime. One provider per call.
+**Service accounts.** A service account's call reaches you only when its team connected a [shared account](/docs/teams/service-connections) for the provider, assigned it to that service account and allowed it for your server. `MCP-Gateway-Provider-Token` then holds the **shared account's** token, which may be an administrator's own account, and the identity token has `principal_type: service_account` and no `email`. Without such a connection the portal refuses the call before it reaches you.
+
+The token is sent only to your server's registered URL, only for capabilities whose requirement names that provider, and **only if the person allowed your server** to use their account (for a shared connection, only if a team owner or admin allowed your server's exact origin and scopes). Each person allows each server once, on a consent page that names your server and your team, and the permission is for the address (scheme, host and port) your server had then: if you move it to another host or port, or change the provider it requires, everyone is asked again and nothing is sent in the meantime. One provider per call.
 
 The token usually holds every scope the person has granted that provider, which can be more than your requirement asks for. Where a platform admin turned on narrowing for the provider and the person's connection supports it, the token is refreshed for only the scopes of the call, but a provider that ignores the request returns its full token, so don't rely on it. Use only what you need.
 
@@ -26,7 +28,8 @@ The token usually holds every scope the person has granted that provider, which 
 
 1. **Verify the identity token first.** See [The identity token](/docs/server-authors/identity-token).
 2. **Check that its `provider` claim equals `MCP-Gateway-Provider`.** A request with the headers but without the claim, or with another value, didn't come from the portal for this provider: reject it.
-3. **Use the token only with that provider's API**, as the person, and never log or store it.
+3. **Check `principal_type`** if your server must act only for people: refuse `service_account`, whose token is a team's shared account.
+4. **Use the token only with that provider's API**, as the person (or the shared account), and never log or store it.
 
 The portal doesn't check that the provider account belongs to the person (for example by email). If that matters, ask the provider whose token it is and compare it with the identity token's `email` or `sub`.
 

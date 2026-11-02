@@ -3,7 +3,7 @@ title: The mail example
 description: A Gmail MCP server that relies on Open MCP Portal's delegated credentials instead of running its own OAuth, with the checks it makes and how to run it.
 ---
 
-The repository's [`examples/mail-mcp`](https://github.com/ncecere/open-mcp-portal/tree/v0.3.2/examples/mail-mcp) is a reference MCP server with three Gmail tools. It shows how to adapt a server that used to run its own Google OAuth so that it relies on Open MCP Portal's [provider tokens](/docs/server-authors/provider-tokens). The portal signs the person in, asks for their consent at Google once, keeps and refreshes their token, and forwards it with each call that needs it. The server stores no tokens, sessions or client secret.
+The repository's [`examples/mail-mcp`](https://github.com/ncecere/open-mcp-portal/tree/v0.13.1/examples/mail-mcp) is a reference MCP server with three Gmail tools. It shows how to adapt a server that used to run its own Google OAuth so that it relies on Open MCP Portal's [provider tokens](/docs/server-authors/provider-tokens). The portal signs the person in, asks for their consent at Google once, keeps and refreshes their token, and forwards it with each call that needs it. The server stores no tokens, sessions or client secret.
 
 | Tool | Annotations | Gmail API | Scope |
 |---|---|---|---|
@@ -40,7 +40,7 @@ token := r.Header.Get("MCP-Gateway-Provider-Token") // bare access token, never 
 2. **No token**: only discovery may proceed (`initialize`, `notifications/initialized`, `ping` and the `*/list` methods); anything else, including `tools/call`, gets `401`, and so do provider headers without an identity token. To lock discovery down too, start it with `-discovery-key <secret>` and register `X-Discovery-Key: <secret>` as a header part of the server's static credential in the portal, which then sends it on every request.
 3. **Verify the JWT**: `ES256`, a `kid` in the portal's JWKS (cached for 5 minutes, refetched for an unknown `kid` at most every 10 seconds, cached keys kept if the JWKS can't be fetched), `iss` = `-issuer` (the portal's `APP_URL`, taken from `-gateway` by default), `aud` = `-audience` (the server's URL exactly as registered), current `exp`, `nbf` and `iat` with 30 seconds of leeway, `exp`, `iat`, `sub` and `principal_type` required, and a lifetime of at most 15 minutes. Any failure gets `401`.
 4. **Provider headers**: if present, `MCP-Gateway-Provider` must equal the token's `provider` claim, else `401`.
-5. **In each tool**: a service account gets a tool error; no provider token gets a tool error saying the requirement isn't set; a token for another provider gets a tool error naming it; Google answering `401` gets a tool error telling the person to reconnect under Account › My connections.
+5. **In each tool**: a service account gets a tool error (the portal lets a service account through when its team assigned it a [shared Google connection](/docs/teams/service-connections), so this check is what keeps the example person-only); no provider token gets a tool error saying the requirement isn't set; a token for another provider gets a tool error naming it; Google answering `401` gets a tool error telling the person to reconnect under Account › My connections.
 
 It logs one line per call (tool, `sub`, `jti`, provider, outcome) and never logs tokens, search queries or message contents.
 

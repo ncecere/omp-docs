@@ -5,7 +5,7 @@ description: Tool arguments marked with x-mcp-header in an input schema, which O
 
 A tool's input schema may mark an argument with `"x-mcp-header": "<Name>"`. A client then also sends that argument's value in an `Mcp-Param-<Name>` HTTP header on `tools/call`, so servers and proxies can route on it without parsing the body (SEP-2243, in the MCP 2026-07-28 revision). GitHub's hosted MCP server requires them, for `owner` and `repo`.
 
-Open MCP Portal opens a new MCP session for each call, so it builds these headers itself from the **approved definition** of the tool, as listed when the server was discovered:
+Open MCP Portal sends each call to your server as a request of its own (a new session for a legacy server), so it builds these headers itself from the **approved definition** of the tool, as listed when the server was discovered:
 
 ```json
 {
@@ -32,3 +32,7 @@ A call with `{"owner": "example", "repo": "tools"}` is forwarded with `Mcp-Param
 - At most 32 such headers per call.
 
 The arguments in the body are unchanged: headers are a copy, not a replacement. Lists, prompts and resource reads never carry them.
+
+## Curated tools
+
+When a gateway [curates](/docs/teams/curating-gateway-tools) your tool, the headers to your server are still built from your **original** definition and the **merged** arguments: an argument the gateway fixes, and so hides from the client's schema, is filled in and gets its header too. A client's own `Mcp-Param-*` headers are checked against the gateway's narrowed definition, and can't get around a fixed or limited argument.

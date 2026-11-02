@@ -3,324 +3,474 @@
     "files": [
       "sign-in"
     ],
-    "alt": "The Open MCP Portal sign-in page for Example Corp MCP Portal: the product mark, the instance name and tagline, a Sign in card with \"Use your Example Corp account to continue.\" and the button \"Sign in with single sign-on\", and a Help signing in link."
+    "alt": "The sign-in page of Example Corp MCP Portal, signed out: the product mark, the instance name and the tagline \"MCP servers and tools for Example Corp teams\", a Sign in card with \"Use your Example Corp account to continue.\" and the button \"Sign in with single sign-on\", and a \"Help signing in\" link."
   },
   "home": {
     "files": [
       "home"
     ],
-    "alt": "Home for Priya Shah: \"Welcome, Priya\", her teams Support Tools (owner) and Data Platform (member), with the sidebar's Workspace section (Home, Catalog, My gateways) and the Support Tools team pages."
+    "alt": "Home for Priya Shah: \"Welcome, Priya\" and Your teams, Data Platform (Member) and Support Tools (Owner), each with Overview and Team settings links. The sidebar shows the Workspace section (Home, Approvals, Access requests, Catalog, My gateways) and the Support Tools pages from Overview to Team settings."
   },
   "my-gateways": {
     "files": [
       "my-gateways"
     ],
-    "alt": "My gateways for Sam Ortiz: Company tools (platform gateway, \"Granted to your team\" and \"Granted to your SSO group engineering\"), Engineering tools (platform gateway, \"Granted to your SSO group engineering\", \"Records what you send\") and Support (team gateway, \"Member of Support Tools\"), with what each offers you."
+    "alt": "My gateways for Sam Ortiz, editor of Support Tools: Company tools (platform gateway, \"Granted to your team\" and \"Granted to your SSO group engineering\", 6 capabilities), Engineering tools (platform gateway, \"Granted to your SSO group engineering\", \"Records what you send\", 4 capabilities) and Support (team gateway, \"Member of Support Tools\", 8 capabilities), with Request gateway access and API keys at the top."
   },
   "my-gateway-connect": {
     "files": [
       "my-gateway-connect"
     ],
-    "alt": "A gateway's page under My gateways, Support: the Connect card with the endpoint URL https://mcp.example.com/mcp/support, the name in your client, \"Use an API key instead\" off, and the Claude Code tab showing \"claude mcp add --transport http support https://mcp.example.com/mcp/support\"; Accounts it needs starts below."
+    "alt": "The Support gateway under My gateways, as Priya Shah: \"Member of Support Tools\", 8 capabilities and Open in your team, then the Connect card with the endpoint URL https://mcp.example.com/mcp/support, the name in your client, \"Use an API key instead\" off, and the Claude Code tab (beside VS Code, Cursor and curl) showing \"claude mcp add --transport http support https://mcp.example.com/mcp/support\"; Accounts it needs starts below."
   },
   "catalog": {
     "files": [
       "catalog"
     ],
-    "alt": "The Catalog: published MCP servers Code search (Data Platform, \"Sign-in per person\"), Mail and Status (Support Tools), each with its description, what it offers and its health."
+    "alt": "The Catalog as Sam Ortiz: the note that access is granted through gateways, a search box, and the published MCP servers Code search (Data Platform, \"Sign-in per person\", 3 tools), Mail (Support Tools, 3 tools) and Status (Support Tools, 3 tools, a resource, a resource template and a prompt), each with its description and Healthy."
   },
   "catalog-server": {
     "files": [
       "catalog-server"
     ],
-    "alt": "The catalog page of the Status server: its health, team and publication date, what it offers (3 tools, a resource, a resource template and a prompt), the untrusted-text note, and its approved tools check_outage, create_ticket (\"Says destructive\") and search_tickets with their definitions."
+    "alt": "The catalog page of the Status server, as Jordan Kim: Healthy, labelled Internal, from Support Tools since Sep 29, 2026, with 3 tools, a resource, a resource template and a prompt, the untrusted-text note, and its approved tools check_outage (\"Class: read\", \"Says read-only\"), create_ticket (\"Class: write\", \"Says destructive\") and search_tickets (\"Class: read\"), each with its definition folded."
   },
   "server-overview": {
     "files": [
       "server-overview"
     ],
-    "alt": "Team › MCP servers › Status › Overview: Published, its capability counts, and the Connection card (URL https://status.corp.example.com/mcp, Streamable HTTP, an Upstream row reading Protocol 2026-07-28 (modern), negotiated a few minutes ago, None authentication, 30 s timeout, Enabled, Healthy, last checked) with Test connection and Refresh capabilities."
+    "alt": "Support Tools › MCP servers › Status › Overview, as owner Priya Shah: Published, the counts (3 tools, 1 resource, 1 resource template, 1 prompt) and the Connection card with Test connection and Refresh capabilities: URL https://status.corp.example.com/mcp, Streamable HTTP, the Upstream row \"Protocol 2026-07-28 (modern), negotiated 2 minutes ago\", authentication None, 30 s timeout, Enabled, Healthy and when it was last checked."
   },
   "server-capabilities": {
     "files": [
       "server-capabilities"
     ],
-    "alt": "The Capabilities tab of the Status server: \"1 capability changed since it was approved\", the untrusted-text notice, the note that a platform admin approves changed capabilities, Kind and State filters, and check_outage marked Changed with its new description."
+    "alt": "The Capabilities tab of the Status server, as Priya Shah: \"1 change waiting\" and the warning \"1 capability changed since it was approved\", the untrusted-text notice, the note that a platform admin approves changed capabilities, Classify tools…, the Kind and State filters (Changed 1, Approved 5), and check_outage marked Changed with its new description \"Now also reports planned work.\""
   },
   "server-sign-in-card": {
     "files": [
       "server-sign-in-card"
     ],
-    "alt": "The Overview of an OAuth-protected server, Code search: the Sign-in card with the authorization server https://sourcehub.example (another host), dynamic client registration, scopes, \"Resource indicator: Sent\", the identity token not sent, \"Capabilities read as Jordan Kim\", 4 people signed in, and Re-authorize as me; the Company catalog card below with the Self-publish policy."
+    "alt": "The Overview of the OAuth-protected Code search server, as Jordan Kim, at the Sign-in card: sign-in with OAuth per person at https://sourcehub.example (\"Another host\"), automatic dynamic client registration, the scopes, \"Resource indicator: Sent\", the identity token not sent, \"Capabilities read as Jordan Kim\", 4 people signed in, and Re-authorize as me. The Governance card below starts with owner Jordan Kim and sensitivity Confidential."
   },
   "add-server-detect": {
     "files": [
       "add-server-detect"
     ],
-    "alt": "Add MCP server after Detect sign-in against SourceHub's hosted MCP server: \"OAuth: each person signs in\", the authorization server on another host, S256 supported, the scopes it supports, automatic registration and the requests made, with \"Sign-in with OAuth, per person\" and \"Automatic: register a client\" selected and the scopes to ask for."
+    "alt": "Add MCP server in Data Platform, as Jordan Kim, after Detect sign-in against SourceHub's hosted MCP server: \"OAuth: each person signs in\", the authorization server on another host, S256 supported, the scopes it supports, automatic registration and the 3 requests made, with \"Sign-in with OAuth, per person\" and \"Automatic: register a client\" selected."
   },
   "server-user-authorization": {
     "files": [
       "server-user-authorization"
     ],
-    "alt": "The Settings tab of the Mail server, User authorization section: Requires a connection on, provider Google, scope https://www.googleapis.com/auth/gmail.readonly; Record call contents (off) below."
+    "alt": "The Settings tab of the Mail server, as Sam Ortiz (editor of Support Tools), at User authorization: \"Requires a connection\" on, provider Google and the scope https://www.googleapis.com/auth/gmail.readonly; Record call contents (off) below."
   },
   "server-health": {
     "files": [
       "server-health"
     ],
-    "alt": "The Health tab of the Code search server: recent checks, the scheduled ones \"Reachable — requires sign-in\" and the manual ones Healthy (run with a signed-in person's token), with latency and trigger."
+    "alt": "The Health tab of the Code search server, as Jordan Kim: Upstream health \"Reachable — requires sign-in\", and six checks of the primary endpoint with latency and trigger: four scheduled ones \"Reachable — requires sign-in\" and two manual ones Healthy."
   },
   "publish-request": {
     "files": [
       "publish-request"
     ],
-    "alt": "The \"Request publishing Status\" dialog: what the server receives (no authentication, the portal's identity token, nothing on behalf of callers), a Note for the reviewer filled in, and Request review."
+    "alt": "The \"Request publishing Status\" dialog, as Priya Shah: a platform admin reviews the server and its 6 capabilities, what the server receives (authentication None, the portal's identity token with the caller's name, email and teams, nothing on behalf of callers), a Note for the reviewer filled in, and Cancel and Request review."
   },
   "gateway-capabilities-picker": {
     "files": [
       "gateway-capabilities-picker"
     ],
-    "alt": "The gateway's Choose capabilities picker: search, server and kind filters and Selected only, with capabilities grouped by server: the catalog's Code search (\"Needs sign-in to Code search\") and the team's own Mail, selected, with \"Needs Google\" scope badges and who may use each, then Status."
+    "alt": "The Support gateway's Choose capabilities picker, as Priya Shah: search, server and kind filters, Selected only and \"8 of at most 200 selected\", a Curate button for each selected tool, then the catalog's Code search (three tools, \"Needs sign-in to Code search\", not selected) and the team's own Mail (\"3 of 3 selected\"), where mail__create_draft shows its Google scope and who may use it, \"Every member\"."
   },
   "gateway-overview": {
     "files": [
       "gateway-overview"
     ],
-    "alt": "A team gateway's Overview tab: 8 capabilities, 0 unavailable now, status Enabled, and the Endpoint card with https://mcp.example.com/mcp/support, kind, team, slug, rate limit 1,500 per minute and call contents not recorded."
+    "alt": "A team gateway's Overview tab, Support, as Priya Shah: 8 capabilities, 0 unavailable now, status Enabled, and the Endpoint card with https://mcp.example.com/mcp/support, Team gateway, team Support Tools, slug support, rate limit 1,500 per minute, call contents \"Not recorded (metadata only)\" and when it was created."
   },
   "gateway-settings": {
     "files": [
       "gateway-settings"
     ],
-    "alt": "A gateway's Settings tab: Rate limit with \"This gateway's own limit\" set to 1,500 per minute (the platform default 2,000, at most 5,000) and the value that applies, Record call contents off, and the Danger zone."
+    "alt": "The Support gateway's Settings tab, as Priya Shah: Rate limit with \"This gateway's own limit\" at 1,500 per minute (the platform default 2,000, at most 5,000) and \"Applies now: 1,500 per minute\", Sensitivity ceiling set to \"Restricted (no ceiling)\", Record call contents off, and the Danger zone heading."
   },
   "gateway-access": {
     "files": [
       "gateway-access"
     ],
-    "alt": "A platform gateway's Access tab, Company tools: grants to the team Support Tools, the person Jordan Kim (jordan.kim@example.com) and the SSO group engineering, with Add grant."
+    "alt": "The Access tab of the platform gateway Company tools, as platform admin Morgan Lee: grants to the team Support Tools, the person Jordan Kim (jordan.kim@example.com) and the SSO group engineering, each with tool scope Everything, added last month by Morgan Lee and permanent, with Add grant."
   },
   "service-account-overview": {
     "files": [
       "service-account-overview"
     ],
-    "alt": "A service account's Overview, ci-release-bot: Member, 1 of 2 active keys, used yesterday; the Role card; and the Access card listing the gateways its keys reach (Company tools, granted to the team, and Support) with what they reach and what needs a person's account."
+    "alt": "The service account ci-release-bot in Support Tools, as Priya Shah: Member, 1 of 2 active, used yesterday; the Role card (Member, who is responsible, created by Priya Shah); and the Access card with the gateways its keys reach: Company tools (granted to Support Tools, 2 capabilities, 4 more need credentials) and Support (4 capabilities, 3 more need credentials)."
   },
   "service-account-key-created": {
     "files": [
       "service-account-key-created"
     ],
-    "alt": "The \"Key created\" dialog for ci-release-bot, with the secret shown once (a fake value omp_sa_0000…) and \"Next: finish the rotation\"."
+    "alt": "The \"Key created\" dialog for ci-release-bot, as Priya Shah: \"Copy this key now\", the secret shown once (a fake value omp_sa_0000…), \"Starts with omp_sa_00000001\" and \"Next: finish the rotation\", over the Keys tab listing the new key and the older one."
   },
   "api-key-create": {
     "files": [
       "api-key-create"
     ],
-    "alt": "The Create API key dialog: name \"Claude Code on my laptop\", expires after 90 days, and Limit to gateways with Support chosen."
+    "alt": "The Create API key dialog, as Sam Ortiz: name \"Claude Code on my laptop\", expires after 90 days, Limit to gateways with Support chosen, and Tool scope with Everything selected (Read only and Custom are the others), with Cancel and Create key."
   },
   "connected-apps": {
     "files": [
       "connected-apps"
     ],
-    "alt": "Account › Connected apps: pi on Company tools (Unverified, \"It registered itself and says it's from pi.dev\") and Claude Code on Support (claude.ai), with when each was connected and last used."
+    "alt": "Account › Connected apps for Sam Ortiz: pi on Company tools (Unverified, \"It registered itself and says it's from pi.dev\") and Claude Code on Support (claude.ai), each with tool scope Everything, connected last month, last used seconds ago, and when its sign-in expires."
   },
   "oauth-consent": {
     "files": [
       "oauth-consent"
     ],
-    "alt": "The consent page: \"pi wants to use Support as you\", marked Unverified with \"It registered itself and says it's from pi.dev\", where the answer goes (localhost:47821, the app's own redirect), the gateway's name, owner and what it offers, what it will be able to do, and Deny and Allow."
+    "alt": "The consent page, as Sam Ortiz: \"pi wants to use Support as you\", Unverified with \"It registered itself and says it's from pi.dev\", the warning that the answer goes to localhost:47821 (the app's own redirect), the gateway (Support, owner Support Tools, 8 capabilities), what it will be able to do, and the requested tool scope Everything, which he may narrow to Read only or Custom."
   },
   "connect-confirm": {
     "files": [
       "connect-confirm"
     ],
-    "alt": "The connect confirm page \"Connect your Google account\": signed in as sam.ortiz@example.com, asked by mail__search_messages, gateway Support, server Mail (Support Tools), provider Google, connected now: no account, and the scope gmail.readonly marked New, a note that the portal sends the token only to servers the person allows (starting with Mail) and only while they stay at their current address, with Cancel and Continue to Google."
+    "alt": "The connect page \"Connect your Google account\", as Sam Ortiz: signed in as sam.ortiz@example.com, asked by mail__search_messages, gateway Support, server Mail (Support Tools), provider Google, no account connected yet, the scope gmail.readonly marked New, a note that the portal sends the token only to servers the person allows (starting with Mail) and only while they stay at their current address, with Cancel and Continue to Google."
   },
   "connect-done": {
     "files": [
       "connect-done"
     ],
-    "alt": "The connect result page: \"Connected to Google\", \"Go back to your AI client and run the tool again. You can close this page.\", and a link to Account › My connections."
+    "alt": "The connect result page, as Sam Ortiz: \"Connected to Google\", \"Go back to your AI client and run the tool again. You can close this page.\" and \"See or disconnect it in Account › My connections\"."
   },
   "my-connections": {
     "files": [
       "my-connections"
     ],
-    "alt": "Account › My connections: the MCP server Code search (\"MCP server\" badge, team data-platform, scopes code:read, repo:read and user:read) and Google (account sam.ortiz@example.com, scopes gmail.readonly and gmail.compose), both Active, with an Allowed servers column (Code search: that server only; Google: Mail (Support Tools)) and when each was connected and last used."
+    "alt": "Account › My connections for Sam Ortiz: the MCP server Code search (team data-platform, scopes code:read, repo:read and user:read, allowed for that server only) and Google (account sam.ortiz@example.com, scopes gmail.readonly and gmail.compose, allowed for Mail (Support Tools), \"All granted scopes\" sent), both Active, with Connect account at the top and the Keys for servers card starting below."
   },
   "team-usage": {
     "files": [
       "team-usage"
     ],
-    "alt": "Team › Usage for Support Tools over the last 7 days: totals (calls, error rate, p50 and p95 latency, bytes sent and received), calls per day by outcome (OK, tool error, denied, needed a connection, rate limited) and latency."
+    "alt": "Team › Usage for Support Tools, as Priya Shah, over the last 7 days grouped by gateway: 353 calls (98 not OK), a 27.8% error rate, p50 63 ms and p95 614 ms, bytes sent and received, calls per day by outcome (OK, tool error, denied, needed a connection, rate limited, with a rate-limited spike) and latency."
   },
   "call-detail-payload": {
     "files": [
       "call-detail-payload"
     ],
-    "alt": "A call's recorded contents (status__search_tickets by Sam Ortiz): recorded by the gateway, when, when they're deleted, 2 values redacted, the arguments, and the result, where an employee number and a pasted bearer token show as [REDACTED]."
+    "alt": "The recorded contents of call 1089 in Support Tools, as Priya Shah, scrolled to the arguments of a ticket search (\"SSO login loop\", pending) and the result, marked \"2 values redacted\": the employee who escalated the ticket and the Authorization header the customer pasted both show as [REDACTED]."
   },
   "team-settings-members": {
     "files": [
       "team-settings-members"
     ],
-    "alt": "Team settings › Members for Support Tools: Priya Shah (owner), Alex Rivera (admin), Sam Ortiz (editor), Quinn Foster and Riley Chen (members), Add member, and Open invites with new.hire@example.com."
+    "alt": "Team settings › Members for Support Tools, as owner Priya Shah: Priya Shah (owner, \"The only owner\"), Alex Rivera (admin), Sam Ortiz (editor), Quinn Foster and Riley Chen (members), Add member, and Open invites with new.hire@example.com (member, expires in 4 weeks)."
   },
   "admin-users": {
     "files": [
       "admin-users"
     ],
-    "alt": "Admin › Users: Example Corp people with their platform role (Platform admin, Platform auditor or none), status (Casey Moore Suspended), number of teams and last sign-in, with filters."
+    "alt": "Admin › Users, as platform admin Morgan Lee: search, Platform role and Status filters, and Example Corp's people with their platform role (Morgan Lee Platform admin, Taylor Brooks Platform auditor, the rest none), status (Casey Moore Suspended), number of teams and last sign-in."
   },
   "admin-user-detail": {
     "files": [
       "admin-user-detail"
     ],
-    "alt": "A person's admin page for Sam Ortiz: Profile and access with the platform role, email, first and last sign-in, Teams (Support Tools, editor), and the start of Connected apps."
+    "alt": "Sam Ortiz's admin page, as Morgan Lee: Active, Profile and access with the platform role None, email, first and last sign-in, Teams (Support Tools, Editor), and the Sessions card with Revoke all sessions."
   },
   "admin-servers-review": {
     "files": [
       "admin-servers-review"
     ],
-    "alt": "Admin › MCP servers: \"2 servers waiting for review\" with Show them, the filters, and every team's servers with team, host, health, catalog state (Published, Waiting for review, \"1 change waiting\" on Status) and what they offer."
+    "alt": "Admin › MCP servers, as Morgan Lee: \"2 servers waiting for review\" with Show them, the catalog, changes, team, auth provider and authentication filters, and every team's servers with team, host, health, catalog state and what they offer: Code search, Mail and Status Published (Status with \"1 change waiting\"), On-call Waiting for review."
   },
   "admin-server-review-dialog": {
     "files": [
       "admin-server-review-dialog"
     ],
-    "alt": "The \"Approve Wiki search for the catalog?\" dialog: what the server receives, the team's note, a note for the team, and Approve and publish."
+    "alt": "The \"Approve Wiki search for the catalog?\" dialog, as Morgan Lee: what the server receives, the team's note (\"Wiki search for everyone: read-only, …\"), an empty Note for the team, and Cancel and Approve and publish."
   },
   "admin-publishing": {
     "files": [
       "admin-publishing"
     ],
-    "alt": "Admin › Publishing: the Default policy set to Approval required, with Self-publish as the other choice."
+    "alt": "Admin › Publishing, as Morgan Lee: the Default policy set to Approval required, with Self-publish as the other choice, and Server reviews with the days between reviews per sensitivity (public 0, internal 0, confidential 180, restricted 90) and \"Send overdue servers back to review\" off."
   },
   "admin-internal-networks": {
     "files": [
       "admin-internal-networks"
     ],
-    "alt": "Admin › Internal networks: allowed networks and hosts (10.20.0.0/16, https only, and *.corp.example.com with plain http allowed, each with a note), the read-only *.svc.cluster.local From deployment config, and Check a URL with https://wiki.corp.example.com/mcp allowed."
+    "alt": "Admin › Internal networks, as Morgan Lee: allowed networks and hosts (10.20.0.0/16, https only, and *.corp.example.com with plain http Allowed, each with a note), the read-only *.svc.cluster.local from deployment config, and Check a URL with https://wiki.corp.example.com/mcp, \"Allowed: the host matches *.corp.example.com.\""
   },
   "admin-trusted-clients": {
     "files": [
       "admin-trusted-clients"
     ],
-    "alt": "Admin › Trusted clients, viewed as auditor (read-only): Claude, Claude Code and VS Code with their metadata document URLs and the hosts that vouch for them."
+    "alt": "Admin › Trusted clients, viewed as platform auditor Taylor Brooks (Read-only): which clients can be trusted, Claude, Claude Code and VS Code with their metadata document URLs and the hosts that vouch for them, and Client registration with open registration allowed."
   },
   "admin-auth-providers": {
     "files": [
       "admin-auth-providers"
     ],
-    "alt": "Admin › Auth providers: GitHub and Google with their presets, enabled, the servers that require them (Google: 1 server) and the number of connections."
+    "alt": "Admin › Auth providers, as Morgan Lee: GitHub (GitHub preset, Enabled, \"Open to every team\", no servers, 0 connections) and Google (Google preset, Enabled, Restricted, required by 1 server, 1 connection), with Add auth provider."
   },
   "admin-auth-provider-create": {
     "files": [
       "admin-auth-provider-create"
     ],
-    "alt": "Add auth provider, Start from: the presets GitHub (selected), Google, Microsoft Entra ID, Atlassian, Slack and GitLab, each with its quirks, and Custom OAuth 2.0 provider."
+    "alt": "The Add auth provider page, as Morgan Lee, at Start from: the presets GitHub (selected), Google, Microsoft Entra ID, Atlassian, Slack and GitLab, each with its quirks."
   },
   "admin-limits": {
     "files": [
       "admin-limits"
     ],
-    "alt": "Admin › Limits: Requests per minute with defaults and ceilings for per person (600), per API key or connected app (300), per service account (1,200) and per gateway (2,000, ceiling 5,000; built-in default unlimited)."
+    "alt": "Admin › Limits, as Morgan Lee: requests per minute with defaults and ceilings for per person (600), per API key or connected app (300), per service account (1,200, no ceiling), per gateway (2,000, ceiling 5,000; built-in default unlimited) and per upstream server (unlimited, no ceiling)."
   },
   "admin-retention": {
     "files": [
       "admin-retention"
     ],
-    "alt": "Admin › Retention: periods for call records (90 days), recorded call contents (14), audit log (400) and usage totals (400), and the Last run: 6 call records and 31 recorded call contents deleted."
+    "alt": "Admin › Retention, as Morgan Lee: periods for call records (90 days), recorded call contents (14), audit log (400) and usage totals (400) with their allowed ranges, and the Last run: 6 call records and 25 recorded call contents deleted."
   },
   "admin-capture": {
     "files": [
       "admin-capture"
     ],
-    "alt": "Admin › Payload capture: Your patterns with EMP-[0-9]{6} (\"Employee numbers (HR system)\"), and Test redaction with a sample and the result as recorded, 3 values redacted (a bearer token, the pattern and a sensitive member name)."
+    "alt": "Admin › Payload capture, as Morgan Lee: Your patterns with EMP-[0-9]{6} (\"Employee numbers (HR system)\"), and Test redaction with a sample and the result as recorded, \"3 values redacted\" (a bearer token, the pattern and a sensitive member name)."
   },
   "admin-usage": {
     "files": [
       "admin-usage"
     ],
-    "alt": "Admin › Usage over the last 30 days, grouped by team: totals (calls, error rate, p50 and p95 latency, bytes sent and received), calls per day by outcome, and latency."
+    "alt": "Admin › Usage, as Morgan Lee, over the last 30 days grouped by team, for every team: 1,115 calls (147 not OK), a 13.2% error rate, p50 125 ms and p95 934 ms, bytes sent and received, calls per day by outcome, and latency."
   },
   "admin-calls": {
     "files": [
       "admin-calls"
     ],
-    "alt": "Admin › Calls, viewed as auditor: filters, and every call with time, caller (\"via Claude Code\", or an API key by name), called name, gateway, server, outcome (with \"Account: Code search\" where a person's own sign-in was used), a Recorded mark and time."
+    "alt": "Admin › Calls, viewed as platform auditor Taylor Brooks (Read-only): the filters, and recent calls with who (\"via Claude Code\", or an API key by name), the tool called, gateway, server, outcome (\"Account: Code search\" where a person's own sign-in was used), a Recorded mark and time."
   },
   "admin-audit": {
     "files": [
       "admin-audit"
     ],
-    "alt": "Admin › Audit log, viewed as auditor: recent changes such as mcp_server.refresh, mcp_call.payload_view, service_account_key.create, team.member_remove, a suspended user, retention.purge and gateway changes, with Hide sign-ins on and Export CSV."
+    "alt": "Admin › Audit log, viewed as platform auditor Taylor Brooks: Hide sign-ins on, Export CSV, and recent changes such as mcp_server.refresh, mcp_call.payload_view, service_account_key.create, oauth.client_register, team.member_remove, a suspended user, a gateway's new rate limit and retention.purge."
   },
   "admin-overview": {
     "files": [
       "admin-overview"
     ],
-    "alt": "Admin \u203a Overview for Example Corp, viewed as Morgan Lee: the Needs attention list grouped by severity: Critical (Status failing its health checks since yesterday), Warnings (two servers waiting for review, the oldest for 4 days; a notification destination failing; a capability change held back from the catalog) and For your information (a personal key, a publisher token and a service account key expiring within 14 days; calls refused by a rate limit in the last 24 hours), each with a button that opens where it is dealt with. The stat cards and the last-24-hours strip follow below the list."
+    "alt": "Admin › Overview, as Morgan Lee: the Needs attention list (8) grouped by severity: Critical (Status failing its health checks since yesterday), Warnings (2 servers waiting for review, the oldest for 4 days; a notification destination failing; a capability change on Status held back) and For your information (a personal API key, a publisher token and a service account key expiring within 14 days; 6 calls refused by a rate limit), most with a button that opens where it is dealt with."
   },
   "admin-notifications": {
     "files": [
       "admin-notifications"
     ],
-    "alt": "Admin \u203a Notifications, scrolled to the Email card: \"Email is set up\" with the From address, the server (smtp.corp.example.com:25), the encryption mode and the last 24 hours, a Send test email button, the Delivery card (when the dispatcher last ran, what waits, failed in 24 hours) and the start of the Platform webhooks table: the Slack destination IT alerts and the JSON destination Ops event relay, both healthy, showing only their host."
+    "alt": "Admin › Notifications, as Morgan Lee, scrolled to the Email card: \"Email is set up\" (From Open MCP Portal <portal@example.com>, smtp.corp.example.com:25, None (unencrypted), 28 sent and 0 failed in 24 hours) with Send test email, the Delivery card (3 waiting, 1 failed in 24 hours, 2 platform and 2 team destinations), and the Platform webhooks IT alerts (#it-alerts) and Ops event relay, both Healthy, each URL cut after its host."
   },
   "admin-automation-tokens": {
     "files": [
       "admin-automation-tokens"
     ],
-    "alt": "Admin \u203a Automation tokens: the platform-admin tokens with name, prefix (ompadm_ and eight characters, shown as fake values), kind, scope, created by, expiry, last used and status: provisioning (platform:write) marked Blocked because its creator is no longer a platform admin, inventory-sync revoked, and monitoring active; the Create token button and the note that tokens never work on the MCP endpoint."
+    "alt": "Admin › Automation tokens, as Morgan Lee: the platform-admin tokens with name, prefix (fake values ompadm_00000001 to …03), kind, scope, created, expiry, last used and status: provisioning (platform:write, made by Riley Chen) Blocked because its creator is no longer a platform admin, inventory-sync Revoked, and monitoring Active. Create token, the note that tokens work on the management API only, never on an MCP gateway, and the Team publisher tokens note."
   },
   "admin-automation-token-created": {
     "files": [
       "admin-automation-token-created"
     ],
-    "alt": "The \"Token created\" dialog after creating a platform token: the warning to copy it now because it won't be shown again, the secret as a fake value starting ompadm_0000 with a copy button, the line \"Starts with ompadm_\u2026\", and a curl example that reads the token from an environment variable, over the token table."
+    "alt": "The \"Token created\" dialog after creating a platform token, as Morgan Lee: \"Copy this token now\", the token as a fake value ompadm_0000… with Copy, \"Starts with ompadm_00000001\", and Using it in CI, a curl example that reads the token from $OMP_TOKEN, over the token table."
   },
   "team-attention": {
     "files": [
       "team-attention"
     ],
-    "alt": "The overview of Support Tools as Priya Shah, with the Needs attention card above the page's content, grouped by severity: Status failing its health checks since yesterday (Critical), a capability change held back from the catalog (Warning) and a publisher token expiring within 14 days (For your information), each with a button that opens it."
+    "alt": "The Support Tools overview, as owner Priya Shah: the Needs attention card (3) grouped by severity: Status failing its health checks since yesterday (Critical), a capability change on Status held back from the catalog (Warning) and a publisher token expiring within 14 days (For your information), each with a button that opens it; the Members, Owners and Admins and editors counts below."
   },
   "team-notifications": {
     "files": [
       "team-notifications"
     ],
-    "alt": "Team settings \u203a Notifications for Support Tools, as team owner: two webhook destinations, Service desk automation (JSON, signed) Healthy with its last delivery, and Support alerts (Slack) Failing, 3 in a row because the destination had an error (5xx); each shows only its host, its number of events, an on/off switch and an actions menu, with the Add destination button."
+    "alt": "Team settings › Notifications for Support Tools, as owner Priya Shah: two webhook destinations, Service desk automation (JSON, signed, 5 events) Healthy and delivered seconds ago, and Support alerts (#support-alerts) (Slack, 4 events) Failing, \"3 in a row: The destination had an error (5xx)\"; each URL is cut after its host, with an on/off switch, an actions menu and Add destination."
   },
   "team-automation-tokens": {
     "files": [
       "team-automation-tokens"
     ],
-    "alt": "Team settings \u203a Automation tokens for Support Tools, as team owner: publisher tokens with name, prefix (omppub_ and eight characters, shown as fake values), kind, scope servers:write, created by, expiry, last used and status: github-actions active and expiring in 10 days, and release-2026q3 expired 5 days ago; the Create token button, and the note that a token can publish but not approve or delete."
+    "alt": "Team settings › Automation tokens for Support Tools, as owner Priya Shah: publisher tokens with name, prefix (fake values omppub_00000001 and …02), kind Team publisher, scope servers:write, created, expiry, last used and status: github-actions Active, expiring in 10 days, and release-2026q3 Expired 5 days ago, never used; Create token and the note that a token can publish but not approve or delete."
   },
   "notifications-inbox": {
     "files": [
       "notifications-inbox"
     ],
-    "alt": "The Inbox of Sam Ortiz, admin of Support Tools: five notifications newest first, three unread (a blue dot; the bell shows 3): two decisions on the Runbooks server (approved, rejected, each with the note), \"Status\" is still unhealthy (failing for 26 hours), and two already read: Shared mailbox was approved and Capabilities changed on Status; with the Unread only switch and Mark all read."
+    "alt": "The Inbox of Sam Ortiz, admin of Support Tools: five notifications newest first, three unread (a blue dot; the bell shows 3): \"Runbooks\" was approved, Status is still unhealthy (failing for 26 hours) and \"Runbooks\" was rejected, each review with Morgan Lee's note, and two read: \"Shared mailbox\" was approved and Capabilities changed on \"Status\"; with Unread only, Mark all read (3) and Notification settings."
   },
   "notification-preferences": {
     "files": [
       "notification-preferences"
     ],
-    "alt": "Account \u203a Notifications: the seven events Sam Ortiz can receive as a team admin (a server is failing, recovered, capabilities changed, a review was decided, a connected account needs signing in again, a server's sign-in lapsed, a key or token expires soon), each with who it is sent to and an In the portal and an Email switch, all on by default; the note that email goes to his profile address."
+    "alt": "Account › Notifications for Sam Ortiz, admin of Support Tools: \"Email goes to sam.ortiz@example.com\", and the events with who each is sent to and an In the portal and an Email switch, all on: a server is failing, recovered, capabilities changed, a review was decided, a connected account needs signing in again, a server's sign-in lapsed and a key or token expires soon; more events follow below."
   },
   "connect-allow-server": {
     "files": [
       "connect-allow-server"
     ],
-    "alt": "The connect page asking Sam Ortiz to allow a server: \"Allow Shared mailbox (Support Tools) to use your Google account\", naming the server and its team, the request (the tool, the gateway, Google, his connected account sam.ortiz@example.com), the scope gmail.readonly marked Already granted, the note that nothing is sent to Google, and the buttons Cancel and Allow Shared mailbox."
+    "alt": "The connect page asking Sam Ortiz to allow a server: \"Allow Shared mailbox (Support Tools) to use your Google account\", because shared-mailbox__search_messages is served by a server he hasn't allowed yet; the request (gateway Shared mailbox, Google, connected now as sam.ortiz@example.com), gmail.readonly marked Already granted, \"Nothing is sent to Google\", and Cancel and Allow Shared mailbox."
   },
   "server-protocol": {
     "files": [
       "server-protocol"
     ],
-    "alt": "A server's Overview tab for Status in Support Tools, with a Published badge and a \"1 change waiting\" notice: the Connection card with the Upstream row \"Protocol 2026-07-28 (modern), negotiated 32 seconds ago\" above the Healthy badge in the Health row."
+    "alt": "The Status server's Overview in Support Tools, as Priya Shah: Published with \"1 change waiting\" and the warning that a capability changed since it was approved, the counts, and the Connection card with the Upstream row \"Protocol 2026-07-28 (modern), negotiated 27 seconds ago\" above authentication, timeout, Enabled and Healthy."
+  },
+  "approvals-queue": {
+    "files": [
+      "approvals-queue"
+    ],
+    "alt": "Approvals for Priya Shah, owner of Support Tools, on the Actionable tab: one pending request for status__create_ticket, class write, with when it expires and the requester shown as a user ID."
+  },
+  "approval-receipt": {
+    "files": [
+      "approval-receipt"
+    ],
+    "alt": "An approval's page as Priya Shah sees it: status__create_ticket and the Call receipt card with status pending, the requester (a user ID), tool, actual class write, gateway, server and its origin https://status.corp.example.com, rule revision, argument digest and capability fingerprint."
+  },
+  "approval-review": {
+    "files": [
+      "approval-review"
+    ],
+    "alt": "The same approval scrolled down, as Priya Shah: requested, pending expiry and no decision yet, the Redacted argument preview of a ticket (\"Printer on floor 3 shows offline after the firmware update\") with the note that the digest binds the exact call, and the Actions card with \"Approve exact call\", \"Deny\" and \"Reload receipt\"."
+  },
+  "approvals-requester": {
+    "files": [
+      "approvals-requester"
+    ],
+    "alt": "Approvals for Sam Ortiz on the Requested tab: his four requests for status__create_ticket, newest first: pending, \"cancelled · Stale\", \"denied · Stale\" and \"Authorization spent · Stale\", each with class write and when it expires."
+  },
+  "team-approval-rules": {
+    "files": [
+      "team-approval-rules"
+    ],
+    "alt": "Team › Approval rules for Support Tools, as owner Priya Shah: how rules are ordered, Reload rules, and the rule \"Ticket creation needs a lead\": enabled on a server, class write, pending 240 minutes and approved 15 minutes, two approvers (shown as user IDs), with Edit and Delete."
+  },
+  "admin-approval-rules": {
+    "files": [
+      "admin-approval-rules"
+    ],
+    "alt": "Admin › Approval rules, as Morgan Lee: the platform rule \"Destructive tools on Company tools\" (class destructive, pending 60 minutes, approved 10, decided by the SSO group platform-admins) with Edit and Delete, and below it Support Tools' team-owned rule \"Ticket creation needs a lead\", managed on the team's page."
+  },
+  "access-requests-discover": {
+    "files": [
+      "access-requests-discover"
+    ],
+    "alt": "Gateway access requests for Quinn Foster, member of Support Tools, on the Request access tab: the platform gateway Engineering tools (\"Code search and service status for engineers. Call contents are recorded.\"), which accepts requests, with Request access."
+  },
+  "access-requests-mine": {
+    "files": [
+      "access-requests-mine"
+    ],
+    "alt": "Gateway access requests for Quinn Foster, My requests tab: his pending request for Engineering tools, with when he asked."
+  },
+  "access-request-review": {
+    "files": [
+      "access-request-review"
+    ],
+    "alt": "A gateway access request as its steward Riley Chen sees it, scrolled to Quinn Foster's private reason (\"I handle the escalations queue on weekends…\") and the Actions card: a note that this decides gateway access, the optional Grant lifetime (days) and Decision note, and \"Approve gateway access\", \"Deny access\" and \"Reload request\"."
+  },
+  "gateway-access-requests": {
+    "files": [
+      "gateway-access-requests"
+    ],
+    "alt": "Admin › Gateways › Engineering tools › Requests, as Morgan Lee: the warning about what opting in exposes, \"Allow people to discover this gateway and request access\" checked, the gateway steward's user ID, Save request settings and Open access request queues."
+  },
+  "sessions": {
+    "files": [
+      "sessions"
+    ],
+    "alt": "Account › Sessions for Sam Ortiz: Sign out everywhere, and three browser sessions, Edge on macOS, Safari on iOS and Chrome on macOS (\"This session\"), each with its address, when it signed in, its last activity and its expiry."
+  },
+  "catalog-search": {
+    "files": [
+      "catalog-search"
+    ],
+    "alt": "The Catalog filtered by \"ticket\", as Sam Ortiz: one match, Status from Support Tools, Healthy, offering 2 tools, a resource, a resource template and a prompt."
+  },
+  "catalog-deprecated": {
+    "files": [
+      "catalog-deprecated"
+    ],
+    "alt": "The catalog page of Shared mailbox, as Sam Ortiz: Healthy and Confidential, from Support Tools, with the banner \"Shared mailbox is deprecated\": still served until 11/22/2026, use Mail instead; its three tools below, each needing Google."
+  },
+  "capability-classes": {
+    "files": [
+      "capability-classes"
+    ],
+    "alt": "Status › Capabilities, as Priya Shah, at the tools: check_outage with \"Class: read\" (suggested read, marked Changed), create_ticket with \"Class: write\", \"Suggested: destructive\" and \"Class differs from suggestion\", and search_tickets with \"Class: read\", each with a Classify… button."
+  },
+  "server-governance": {
+    "files": [
+      "server-governance"
+    ],
+    "alt": "Status › Overview scrolled to the Governance card, as Priya Shah: owner Priya Shah, on call #support-tools-oncall, sensitivity Internal, next review Nov 1, 2027, last reviewed and lifecycle Active, with Edit governance and Offer to another team; the Company catalog card below (Published, Approval required, the request and Morgan Lee's review)."
+  },
+  "server-deprecated": {
+    "files": [
+      "server-deprecated"
+    ],
+    "alt": "Shared mailbox › Overview in Support Tools, as Priya Shah: Published, with the banner \"Shared mailbox is deprecated\": it is still served, stops being served on 11/22/2026, use Mail instead; then the counts and the Connection card (Protocol 2026-07-28 (modern), Healthy)."
+  },
+  "server-protection": {
+    "files": [
+      "server-protection"
+    ],
+    "alt": "Status › Settings › Upstream protection, as Priya Shah: at most 600 forwarded attempts per minute and 20 concurrent forwarded operations (fail-fast, per server and replica); the Authentication section follows."
+  },
+  "server-endpoints": {
+    "files": [
+      "server-endpoints"
+    ],
+    "alt": "On-call › Settings › Additional endpoints, as Riley Chen (owner of IT Operations): the note that a fallback is not another approval, and Additional endpoint 1, https://oncall-dr.corp.example.com/mcp, enabled, with Add endpoint; Upstream protection (inherited, unlimited) below."
+  },
+  "server-transfer-incoming": {
+    "files": [
+      "server-transfer-incoming"
+    ],
+    "alt": "IT Operations › MCP servers, as owner Riley Chen: the Server transfers card with Wiki search offered by Data Platform (asked by Jordan Kim, with his note), Accept Wiki search and Decline, above the team's own server On-call, Waiting for review."
+  },
+  "service-connections": {
+    "files": [
+      "service-connections"
+    ],
+    "alt": "Support Tools › Service accounts › Connections, as owner Priya Shah: the shared Google connection \"Service desk mailbox\" (shared account sam.ortiz@example.com, active, its granted scopes, 0 allowed service accounts and 0 allowed servers) with Manage access, Reconnect and Revoke, and the form to connect another shared account."
+  },
+  "admin-auth-provider-access": {
+    "files": [
+      "admin-auth-provider-access"
+    ],
+    "alt": "Admin › Auth providers › Google › Access, as Morgan Lee: 2 servers and 1 connection; Access set to Restricted, so only servers of listed teams or listed servers may require it; Teams: Support Tools; no single servers listed."
+  },
+  "admin-governance": {
+    "files": [
+      "admin-governance"
+    ],
+    "alt": "Admin › Publishing, as Morgan Lee, with Server reviews: how often published servers are reviewed again per sensitivity (public 0, meaning never; internal 365; confidential 180; restricted 90 days) and \"Send overdue servers back to review\" off."
+  },
+  "admin-provisioning": {
+    "files": [
+      "admin-provisioning"
+    ],
+    "alt": "Admin › Provisioning, as Morgan Lee: the Directory bound to https://login.example.com, Enabled, the SCIM base URL https://mcp.example.com/scim/v2, enrollment of new people Optional, the note on how people are linked, and the start of Provisioning tokens."
+  },
+  "admin-provisioning-people": {
+    "files": [
+      "admin-provisioning-people"
+    ],
+    "alt": "Admin › Provisioning scrolled to Provisioned accounts, as Morgan Lee: six accounts the identity provider pushed, with their externalId: Sam Ortiz, Drew Park and Quinn Foster active in directory, Riley Chen not manageable as a team owner, the new hire Jamie Lane enrolling on first sign-in, and Alex Rivera waiting to be adopted; Directory-managed people below, with Unlink."
+  },
+  "oauth-consent-scope": {
+    "files": [
+      "oauth-consent-scope"
+    ],
+    "alt": "The same consent page scrolled to the end: what the app will be able to do, the Requested tool scope (Everything; \"You may narrow the requested classes, never add to them\"), the Tool scope choice Everything, Read only or Custom, the account Sam is signed in as, and Deny and Allow."
   }
 }
